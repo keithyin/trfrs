@@ -1,0 +1,20 @@
+[package]
+name = "trf"
+version = "4.10.0"
+edition = "2021"
+description = "Tandem Repeats Finder: Rust port of the reference C implementation"
+license = "AGPL-3.0-or-later"
+repository = "https://github.com/keithyin/trfrs"
+readme = "README.md"
+
+[[bin]]
+name = "trf"
+path = "src/main.rs"
+
+[dependencies]
+
+[profile.release]
+# The scan is one large, tight numeric loop; cross-crate/whole-program
+# optimisation keeps it close to the C reference.
+lto = "fat"
+codegen-units = 1

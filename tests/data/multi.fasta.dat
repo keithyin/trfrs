@@ -1,0 +1,38 @@
+Tandem Repeats Finder Program written by:
+
+Gary Benson
+Program in Bioinformatics
+Boston University
+Version 4.10.0
+
+
+Sequence: alpha short tandem repeat
+
+
+
+Parameters: 2 5 7 80 10 50 2000
+
+
+1 28 4 7.0 4 100 0 56 25 25 25 25 2.00 ACGT ACGTACGTACGTACGTACGTACGTACGT
+31 63 4 8.2 4 100 0 66 24 24 24 27 2.00 TCAG TCAGTCAGTCAGTCAGTCAGTCAGTCAGTCAGT
+64 90 9 3.0 9 100 0 54 33 33 33 0 1.58 GGGAAACCC GGGAAACCCGGGAAACCCGGGAAACCC
+
+
+Sequence: beta no repeats
+
+
+
+Parameters: 2 5 7 80 10 50 2000
+
+
+
+
+Sequence: gamma with ambiguous bases
+
+
+
+Parameters: 2 5 7 80 10 50 2000
+
+
+5 32 4 7.0 4 100 0 56 25 25 25 25 2.00 ACGT ACGTACGTACGTACGTACGTACGTACGT
+49 77 4 7.2 4 100 0 58 24 24 24 27 2.00 TCAG TCAGTCAGTCAGTCAGTCAGTCAGTCAGT
