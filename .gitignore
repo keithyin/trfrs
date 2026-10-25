@@ -1,1 +1,10 @@
 /target
+
+# TRF 运行产物
+*.1.html
+*.txt.html
+*.summary.html
+*.dat
+*.mask
+*[0-9].html
+
