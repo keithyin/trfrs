@@ -131,3 +131,111 @@ fn missing_maxlength_argument() {
     );
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// `true` when `haystack` contains `needle` (`strstr()` on bytes).
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    needle.is_empty() || haystack.windows(needle.len()).any(|w| w == needle)
+}
+
+/// The FASTA header is copied verbatim into every output file.  Header bytes
+/// that are not valid UTF-8 must reach the output unchanged: the reference
+/// program is byte oriented and `String::from_utf8_lossy` would replace them
+/// with U+FFFD.
+#[test]
+fn non_utf8_header_is_preserved() {
+    let dir = temp_dir("badutf8");
+    let mut fasta: Vec<u8> = b">bad\xff\xfe name".to_vec();
+    fasta.extend_from_slice(b"\nACCCCTCAGGGTACCCCTCAGGGTACCCCTCAGGGTACCCCTCAGGGT\n");
+    std::fs::write(dir.join("bad.fasta"), &fasta).expect("write fasta");
+
+    let output = Command::new(env!("CARGO_BIN_EXE_trf"))
+        .current_dir(&dir)
+        .arg("bad.fasta")
+        .args(PARAMS)
+        .args(["-d", "-m"])
+        .output()
+        .expect("run trf");
+    assert!(output.status.success(), "trf failed: {:?}", output.status);
+
+    let stem = "bad.fasta.2.5.7.80.10.50.2000";
+    let sequence_line: &[u8] = b"Sequence: bad\xff\xfe name";
+
+    let dat = std::fs::read(dir.join(format!("{stem}.dat"))).expect("read .dat");
+    assert!(contains(&dat, sequence_line), ".dat lost the header bytes");
+
+    let html = std::fs::read(dir.join(format!("{stem}.1.html"))).expect("read .html");
+    assert!(
+        contains(&html, sequence_line),
+        ".html lost the header bytes"
+    );
+
+    let txt = std::fs::read(dir.join(format!("{stem}.1.txt.html"))).expect("read .txt.html");
+    assert!(
+        contains(&txt, sequence_line),
+        ".txt.html lost the header bytes"
+    );
+
+    let mask = std::fs::read(dir.join(format!("{stem}.mask"))).expect("read .mask");
+    assert!(
+        mask.starts_with(b">bad\xff\xfe name\n"),
+        ".mask header was modified"
+    );
+
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// The reference program does not ignore `SIGPIPE`: a consumer that closes the
+/// pipe early terminates it (`-ngs` output is meant to be piped).  Ignoring the
+/// signal would turn the same situation into a panic and a bogus exit code.
+#[test]
+#[cfg(unix)]
+fn broken_pipe_terminates_by_signal() {
+    use std::os::unix::process::ExitStatusExt;
+    use std::process::Stdio;
+
+    let dir = temp_dir("sigpipe");
+
+    /* enough tandem arrays that the `-ngs` output exceeds the pipe buffer */
+    let mut state: u32 = 0x2545_f491;
+    let mut sequence = String::new();
+    for i in 0..800 {
+        let period = 21 + i % 40;
+        let mut unit = String::new();
+        for _ in 0..period {
+            state ^= state << 13;
+            state ^= state >> 17;
+            state ^= state << 5;
+            unit.push(b"ACGT"[(state % 4) as usize] as char);
+        }
+        for _ in 0..3 {
+            sequence.push_str(&unit);
+        }
+        sequence.push_str("ACGTACGTACGT");
+    }
+    std::fs::write(dir.join("big.fasta"), format!(">big\n{sequence}\n")).expect("write fasta");
+
+    let mut child = Command::new(env!("CARGO_BIN_EXE_trf"))
+        .current_dir(&dir)
+        .arg("big.fasta")
+        .args(PARAMS)
+        .arg("-ngs")
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .expect("spawn trf");
+
+    /* close the reading end of the pipe */
+    drop(child.stdout.take());
+
+    let output = child.wait_with_output().expect("wait for trf");
+    assert_eq!(
+        output.status.signal(),
+        Some(libc::SIGPIPE),
+        "expected death by SIGPIPE, got {:?}",
+        output.status
+    );
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(!stderr.contains("panicked"), "unexpected panic: {stderr}");
+
+    let _ = std::fs::remove_dir_all(&dir);
+}

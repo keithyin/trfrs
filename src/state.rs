@@ -311,8 +311,9 @@ pub struct Trf {
     /// `ready` flag of `SetProgressBar()`.
     pub progress_ready: bool,
 
-    /// Header lines used by the HTML/data/masked output.
-    pub hsequence: String,
+    /// Header lines used by the HTML/data/masked output.  `hsequence` holds
+    /// raw bytes because it contains the (possibly non UTF-8) sequence name.
+    pub hsequence: Vec<u8>,
     pub hparameters: String,
     pub hlength: String,
 
@@ -435,7 +436,7 @@ impl Trf {
             counter_in_seq: 0,
             print_flanking: false,
             progress_ready: false,
-            hsequence: String::new(),
+            hsequence: Vec::new(),
             hparameters: String::new(),
             hlength: String::new(),
             fptxt: None,
@@ -480,9 +481,14 @@ impl Trf {
 
     /// `trf_message()`: write to the alignment file unless HTML output is off.
     pub fn msg(&mut self, text: &str) {
+        self.msg_bytes(text.as_bytes());
+    }
+
+    /// `trf_message()` for text that is not valid UTF-8 (the sequence name).
+    pub fn msg_bytes(&mut self, text: &[u8]) {
         if !self.params.htmloff {
             if let Some(f) = self.fptxt.as_mut() {
-                let _ = f.write_all(text.as_bytes());
+                let _ = f.write_all(text);
             }
         }
     }

@@ -3,7 +3,7 @@
 `trf` 是 Tandem Repeats Finder (TRF) 参考 C 实现 4.10.0 的 Rust 移植版本。
 命令行接口、控制流程与输出文件均与 C 版本保持一致，输出逐字节相同。
 
-- 无第三方 crate 依赖，单个可执行文件
+- 依赖只有 `clap`（命令行解析）与 `libc`（Unix 下恢复 `SIGPIPE` 默认处理），产物为单个可执行文件
 - 支持 FASTA 单序列/多序列文件、标准输入管道
 - 保留上游全部选项与退出码（含 `getopt_long_only` 风格的长选项与短选项合并）
 
@@ -92,12 +92,17 @@ cargo run --release -- tests/data/small_test.fasta 2 5 7 80 10 50 2000 -ngs
 
 长选项同样可用且接受唯一前缀缩写：`--dat`、`--mask`、`--flank`、`--html-off`、`--redund-off`、`--ngs`、`--maxlength`、`--version`、`--help`。
 
-短选项可以合并，选项值可以紧邻或使用 `=`：
+短选项可以合并，选项值可以紧邻或使用 `=`；短选项字母不区分大小写（`-D` 与 `-d` 相同），
+单短横线的长选项写法（`-ngs`、`-maxlength 3`）也照旧可用：
 
 ```bash
 trf input.fasta 2 5 7 80 10 50 2000 -df      # 等价于 -d -f
 trf input.fasta 2 5 7 80 10 50 2000 -l3      # 等价于 -l 3 或 -l=3
+trf input.fasta 2 5 7 80 10 50 2000 -ngs     # 等价于 --ngs
 ```
+
+命令行解析由 `clap` 完成；选项写在 8 个位置参数之前或之后均可，
+未知选项按 `clap` 的格式报错并以状态码 2 退出。
 
 ## 输出文件
 
@@ -116,6 +121,9 @@ trf input.fasta 2 5 7 80 10 50 2000 -l3      # 等价于 -l 3 或 -l=3
 多序列输入：每个序列的 HTML 文件带 `.s<序号>`，并额外生成 `<prefix>.<参数串>.summary.html` 汇总表。
 
 `-ngs` 模式不写文件，只向 stdout 打印 `.dat` 内容；此时不会再输出其他提示信息。
+管道下游提前关闭时进程按 `SIGPIPE` 终止（shell 中退出状态 141），与 C 版本一致，不会产生 panic。
+
+序列描述按 FASTA 头中的原始字节写入输出（即使不是合法 UTF-8），与 C 版本逐字节相同。
 
 ## 测试
 
@@ -125,13 +133,14 @@ trf input.fasta 2 5 7 80 10 50 2000 -l3      # 等价于 -l 3 或 -l=3
 cargo test
 ```
 
-包含 6 个用例，覆盖 `-ngs` 输出、`.dat` 与 summary 输出、短选项合并、缺少 `-l` 参数等场景。
+包含 8 个用例，覆盖 `-ngs` 输出、`.dat` 与 summary 输出、短选项合并、缺少 `-l` 参数、
+非 UTF-8 序列描述的字节保留、管道提前关闭时的 `SIGPIPE` 行为等场景。
 
 ## 代码结构
 
 | 参考 C 源文件 | Rust 模块 |
 | --- | --- |
-| `trf.c` | `src/main.rs`（命令行接口） |
+| `trf.c` | `src/cli.rs`（命令行解析）、`src/main.rs`（入口与参数校验） |
 | `trfrun.h` | `src/control.rs`（控制流程） |
 | `tr30dat.h` / `tr30dat.c` | `src/state.rs`、`src/algo.rs`、`src/scan.rs` |
 | `trfclean.h` | `src/clean.rs`（冗余剔除、HTML 输出） |

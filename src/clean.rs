@@ -51,11 +51,16 @@ pub struct IlRecord {
     pub pattern: String,
 }
 
-fn write_file(path: &str, content: &str) {
+fn write_file(path: &str, content: &[u8]) {
     if let Err(e) = fs::write(path, content) {
         eprintln!("Error: unable to write {}: {}", path, e);
         std::process::exit(-1);
     }
+}
+
+/// `strstr()`: whether `haystack` contains `needle`.
+fn contains(haystack: &[u8], needle: &[u8]) -> bool {
+    needle.is_empty() || haystack.windows(needle.len()).any(|w| w == needle)
 }
 
 /// `MakeFileName()`: replace the number in front of the extension.
@@ -170,7 +175,7 @@ impl Trf {
 
     /// `CleanAlignments()`: drop the alignment blocks of removed repeats.
     fn clean_alignments(&mut self, alignmentfile: &str) {
-        let content = match fs::read_to_string(alignmentfile) {
+        let content = match fs::read(alignmentfile) {
             Ok(c) => c,
             Err(_) => {
                 self.print_error(
@@ -179,28 +184,30 @@ impl Trf {
                 std::process::exit(-1);
             }
         };
-        let lines: Vec<&str> = content.split_inclusive('\n').collect();
-        let mut out = String::new();
+        let lines: Vec<&[u8]> = content.split_inclusive(|&b| b == b'\n').collect();
+        let mut out: Vec<u8> = Vec::new();
         let mut moving = true;
         let mut curr = 0usize;
         let mut i = 0usize;
         while i < lines.len() {
             let line = lines[i];
-            if line.starts_with("Fo") {
-                let l2 = if i + 1 < lines.len() {
+            if line.starts_with(b"Fo") {
+                let l2: &[u8] = if i + 1 < lines.len() {
                     lines[i + 1]
                 } else {
-                    ""
+                    b""
                 };
-                let l3 = if i + 2 < lines.len() {
+                let l3: &[u8] = if i + 2 < lines.len() {
                     lines[i + 2]
                 } else {
-                    ""
+                    b""
                 };
-                if curr < self.records.len() && l3.contains(&self.records[curr].reference) {
-                    out.push_str(line);
-                    out.push_str(l2);
-                    out.push_str(l3);
+                if curr < self.records.len()
+                    && contains(l3, self.records[curr].reference.as_bytes())
+                {
+                    out.extend_from_slice(line);
+                    out.extend_from_slice(l2);
+                    out.extend_from_slice(l3);
                     curr += 1;
                     moving = true;
                     i += 3;
@@ -210,19 +217,19 @@ impl Trf {
                 i += 3;
                 continue;
             }
-            if line.starts_with("Do") {
-                let l2 = if i + 1 < lines.len() {
+            if line.starts_with(b"Do") {
+                let l2: &[u8] = if i + 1 < lines.len() {
                     lines[i + 1]
                 } else {
-                    ""
+                    b""
                 };
-                out.push_str(line);
-                out.push_str(l2);
-                out.push('\n');
+                out.extend_from_slice(line);
+                out.extend_from_slice(l2);
+                out.push(b'\n');
                 break;
             }
             if moving {
-                out.push_str(line);
+                out.extend_from_slice(line);
             }
             i += 1;
         }
@@ -251,7 +258,7 @@ impl Trf {
             return;
         }
 
-        let content = match fs::read_to_string(alignmentfile) {
+        let content = match fs::read(alignmentfile) {
             Ok(c) => c,
             Err(_) => {
                 self.print_error(
@@ -260,7 +267,7 @@ impl Trf {
                 std::process::exit(-1);
             }
         };
-        let lines: Vec<&str> = content.split_inclusive('\n').collect();
+        let lines: Vec<&[u8]> = content.split_inclusive(|&b| b == b'\n').collect();
 
         /* get heading lines */
         let mut headcnt = 0usize;
@@ -268,7 +275,7 @@ impl Trf {
             if i >= lines.len() {
                 break;
             }
-            if lines[i].starts_with('F') {
+            if lines[i].starts_with(b"F") {
                 break;
             }
             headcnt += 1;
@@ -277,26 +284,26 @@ impl Trf {
         let mut idx = headcnt;
         for file_no in 1..=nfiles {
             let outfile = make_file_name(alignmentfile, file_no as i32);
-            let mut out = String::new();
+            let mut out: Vec<u8> = Vec::new();
             for line in lines.iter().take(headcnt) {
-                out.push_str(line);
+                out.extend_from_slice(line);
             }
-            out.push_str(&format!("File {} of {}\n\n", file_no, nfiles));
+            out.extend_from_slice(format!("File {} of {}\n\n", file_no, nfiles).as_bytes());
 
             for _ in 0..EO_MAX_TBL {
                 if idx >= lines.len() {
                     break;
                 }
-                out.push_str(lines[idx]);
+                out.extend_from_slice(lines[idx]);
                 idx += 1;
                 let mut saw_done = false;
                 while idx < lines.len() {
                     let l = lines[idx];
-                    if l.starts_with('F') || l.starts_with('D') {
-                        saw_done = l.starts_with('D');
+                    if l.starts_with(b"F") || l.starts_with(b"D") {
+                        saw_done = l.starts_with(b"D");
                         break;
                     }
-                    out.push_str(l);
+                    out.extend_from_slice(l);
                     idx += 1;
                 }
                 if idx >= lines.len() || saw_done {
@@ -304,7 +311,7 @@ impl Trf {
                 }
             }
 
-            out.push_str("\nDone.\n</PRE></BODY></HTML>\n");
+            out.extend_from_slice(b"\nDone.\n</PRE></BODY></HTML>\n");
             write_file(&outfile, &out);
         }
 
@@ -312,17 +319,20 @@ impl Trf {
     }
 
     /// `OutputHeading()`.
-    fn output_heading(&self, tablefile: &str, alignmentfile: &str) -> String {
+    fn output_heading(&self, tablefile: &str, alignmentfile: &str) -> Vec<u8> {
         let mut out = String::new();
         out.push_str(&format!(
             "<HTML><HEAD><TITLE>{}</TITLE><BASE TARGET=\"{}\"></HEAD><BODY bgcolor=\"#FBF8BC\"><BR><PRE>Tandem Repeats Finder Program written by:</PRE><PRE><CENTER>Gary Benson<BR>Program in Bioinformatics<BR>Boston University<BR>Version {}<BR></CENTER>",
             tablefile, alignmentfile, VERSION
         ));
         out.push_str("\nPlease cite:\nG. Benson,\n\"Tandem repeats finder: a program to analyze DNA sequences\"\nNucleic Acid Research(1999)\nVol. 27, No. 2, pp. 573-580.\n");
-        out.push_str(&format!("\n{}", self.hsequence));
-        out.push_str(&self.hparameters);
-        out.push_str(&format!("{}</PRE>\n", self.hlength));
-        out
+        let mut bytes = out.into_bytes();
+        bytes.push(b'\n');
+        bytes.extend_from_slice(&self.hsequence);
+        bytes.extend_from_slice(self.hparameters.as_bytes());
+        bytes.extend_from_slice(self.hlength.as_bytes());
+        bytes.extend_from_slice(b"</PRE>\n");
+        bytes
     }
 
     /// `OutputHTML()`.
@@ -342,8 +352,10 @@ impl Trf {
         for i in 1..=nfiles {
             let outfile = make_file_name(tablefile, i as i32);
             let linkfile = make_file_name(alignmentfile, i as i32);
+            /* the heading contains the raw sequence name, so it is kept as
+            bytes and prepended to the (ASCII) body */
+            let heading = self.output_heading(&outfile, alignmentfile);
             let mut out = String::new();
-            out.push_str(&self.output_heading(&outfile, alignmentfile));
 
             out.push_str("\n<P><PRE>Tables:   ");
             for j in 1..=nfiles {
@@ -429,7 +441,10 @@ impl Trf {
             }
 
             out.push_str("\n</BODY></HTML>\n");
-            write_file(&outfile, &out);
+
+            let mut page = heading;
+            page.extend_from_slice(out.as_bytes());
+            write_file(&outfile, &page);
         }
     }
 
@@ -445,28 +460,29 @@ impl Trf {
             }
         }
 
-        let header = if self.hsequence.len() > 10 {
+        /* `&hsequence[10]` skips the "Sequence: " prefix */
+        let header: &[u8] = if self.hsequence.len() > 10 {
             &self.hsequence[10..]
         } else {
-            ""
+            b""
         };
-        let mut out = String::new();
-        out.push('>');
-        out.push_str(header);
+        let mut out: Vec<u8> = Vec::with_capacity(self.sequence.len() + 16);
+        out.push(b'>');
+        out.extend_from_slice(header);
 
         let mut printcr = 0;
         let mut count = 1usize;
         while self.sequence[count] != 0 {
-            out.push(self.sequence[count] as char);
+            out.push(self.sequence[count]);
             printcr += 1;
             if printcr >= 60 {
                 printcr = 0;
-                out.push('\n');
+                out.push(b'\n');
             }
             count += 1;
         }
-        out.push('\n');
-        out.push('\n');
+        out.push(b'\n');
+        out.push(b'\n');
 
         write_file(maskfile, &out);
     }

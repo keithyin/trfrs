@@ -39,7 +39,10 @@ pub struct FastaSequence {
     pub composition: [i32; 26],
     /// Number of A, C, G and T characters.
     pub nucleotides: i32,
-    pub name: String,
+    /// Description text of the header line.  The bytes are kept as they were
+    /// read: FASTA files are not guaranteed to be UTF-8 and the reference
+    /// implementation copies the header verbatim into its output.
+    pub name: Vec<u8>,
     /// Sequence characters, 0-based, upper case.
     pub sequence: Vec<u8>,
 }
@@ -122,7 +125,7 @@ pub fn load_sequence(rd: &mut ByteReader) -> Result<(FastaSequence, bool), LoadE
             c = rd.getc();
         }
     }
-    seq.name = String::from_utf8_lossy(&name).into_owned();
+    seq.name = name;
 
     // read sequence characters
     let mut next = -1;

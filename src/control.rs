@@ -54,30 +54,34 @@ impl Trf {
                     std::process::exit(-1);
                 }
             }
-            let mut head = String::new();
-            head.push_str("<HTML>");
-            head.push_str("<HEAD>");
-            head.push_str(&format!("<TITLE>{}</TITLE>", txtstring));
-            head.push_str("</HEAD>");
-            head.push_str("<BODY bgcolor=\"#FBF8BC\">");
-            head.push_str("<PRE>");
-            head.push_str("\nTandem Repeats Finder Program written by:");
-            head.push_str("\n\n                 Gary Benson");
-            head.push_str("\n      Program in Bioinformatics");
-            head.push_str("\n          Boston University");
-            head.push_str(&format!("\n\nVersion {}", VERSION));
-            head.push_str(&format!(
-                "\n\nSequence: {}\n\nParameters: {} {} {} {} {} {} {}\n",
-                self.fasta.name,
-                self.params.match_weight,
-                self.params.mismatch,
-                self.params.indel,
-                self.params.pm,
-                self.params.pi,
-                self.params.minscore,
-                self.params.maxperiod
-            ));
-            self.msg(&head);
+            let mut head: Vec<u8> = Vec::new();
+            head.extend_from_slice(b"<HTML>");
+            head.extend_from_slice(b"<HEAD>");
+            head.extend_from_slice(format!("<TITLE>{}</TITLE>", txtstring).as_bytes());
+            head.extend_from_slice(b"</HEAD>");
+            head.extend_from_slice(b"<BODY bgcolor=\"#FBF8BC\">");
+            head.extend_from_slice(b"<PRE>");
+            head.extend_from_slice(b"\nTandem Repeats Finder Program written by:");
+            head.extend_from_slice(b"\n\n                 Gary Benson");
+            head.extend_from_slice(b"\n      Program in Bioinformatics");
+            head.extend_from_slice(b"\n          Boston University");
+            head.extend_from_slice(format!("\n\nVersion {}", VERSION).as_bytes());
+            head.extend_from_slice(b"\n\nSequence: ");
+            head.extend_from_slice(&self.fasta.name);
+            head.extend_from_slice(
+                format!(
+                    "\n\nParameters: {} {} {} {} {} {} {}\n",
+                    self.params.match_weight,
+                    self.params.mismatch,
+                    self.params.indel,
+                    self.params.pm,
+                    self.params.pi,
+                    self.params.minscore,
+                    self.params.maxperiod
+                )
+                .as_bytes(),
+            );
+            self.msg_bytes(&head);
         }
 
         self.progress("Initializing data structures...");
@@ -249,23 +253,39 @@ fn summary_footer(foundsome: bool) -> String {
     footer
 }
 
-fn dat_sequence_header(params: &ParamSet, seq: &FastaSequence) -> String {
-    format!(
-        "\n\nSequence: {}\n\n\n\nParameters: {} {} {} {} {} {} {}\n\n\n",
-        seq.name,
-        params.match_weight,
-        params.mismatch,
-        params.indel,
-        params.pm,
-        params.pi,
-        params.minscore,
-        params.maxperiod
-    )
+/// `hsequence`: `"Sequence: %s\n"`, the header line shared by the HTML, data
+/// and masked output.  Kept as bytes: the name may not be valid UTF-8.
+fn sequence_header(seq: &FastaSequence) -> Vec<u8> {
+    let mut out = Vec::with_capacity(seq.name.len() + 11);
+    out.extend_from_slice(b"Sequence: ");
+    out.extend_from_slice(&seq.name);
+    out.push(b'\n');
+    out
+}
+
+fn dat_sequence_header(params: &ParamSet, seq: &FastaSequence) -> Vec<u8> {
+    let mut out: Vec<u8> = Vec::new();
+    out.extend_from_slice(b"\n\nSequence: ");
+    out.extend_from_slice(&seq.name);
+    out.extend_from_slice(
+        format!(
+            "\n\n\n\nParameters: {} {} {} {} {} {} {}\n\n\n",
+            params.match_weight,
+            params.mismatch,
+            params.indel,
+            params.pm,
+            params.pi,
+            params.minscore,
+            params.maxperiod
+        )
+        .as_bytes(),
+    );
+    out
 }
 
 /// Writes the data file. In `-ngs` mode the reference implementation writes to
 /// stdout and then closes it, which is modelled by `params.stdout_closed`.
-fn emit_dat(dest: Option<&str>, content: &str, params: &mut ParamSet) {
+fn emit_dat(dest: Option<&str>, content: &[u8], params: &mut ParamSet) {
     match dest {
         Some(path) => {
             if let Err(e) = std::fs::write(path, content) {
@@ -274,8 +294,9 @@ fn emit_dat(dest: Option<&str>, content: &str, params: &mut ParamSet) {
             }
         }
         None => {
-            print!("{}", content);
-            let _ = std::io::stdout().flush();
+            let mut stdout = std::io::stdout();
+            let _ = stdout.write_all(content);
+            let _ = stdout.flush();
             /* fclose(stdout): messages printed afterwards are lost */
             params.stdout_closed = true;
         }
@@ -341,7 +362,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
         params.sequenceordinal = 1;
 
         let mut trf = Trf::new(params.clone(), &seq);
-        trf.hsequence = format!("Sequence: {}\n", seq.name);
+        trf.hsequence = sequence_header(&seq);
         trf.hparameters = hparameters.clone();
         trf.hlength = format!("Length:  {}", seq.length);
         trf.run();
@@ -354,18 +375,20 @@ pub fn trf_control_routine(params: &mut ParamSet) {
         }
 
         if params.datafile {
-            let mut content = String::new();
+            let mut content: Vec<u8> = Vec::new();
             if !params.ngs {
-                content.push_str(&dat_program_header());
+                content.extend_from_slice(dat_program_header().as_bytes());
             }
             if params.ngs {
                 if !trf.records.is_empty() {
-                    content.push_str(&format!("@{}\n", seq.name));
+                    content.push(b'@');
+                    content.extend_from_slice(&seq.name);
+                    content.push(b'\n');
                 }
             } else {
-                content.push_str(&dat_sequence_header(params, &seq));
+                content.extend_from_slice(&dat_sequence_header(params, &seq));
             }
-            content.push_str(&format_dat_records(&trf));
+            content.extend_from_slice(format_dat_records(&trf).as_bytes());
             let dest = if params.ngs {
                 None
             } else {
@@ -448,7 +471,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
         params.outputprefix = input.clone();
 
         let mut trf = Trf::new(params.clone(), &seq);
-        trf.hsequence = format!("Sequence: {}\n", seq.name);
+        trf.hsequence = sequence_header(&seq);
         trf.hparameters = hparameters.clone();
         trf.hlength = format!("Length:  {}", seq.length);
         trf.run();
@@ -457,25 +480,28 @@ pub fn trf_control_routine(params: &mut ParamSet) {
         params.outputfilename = trf.params.outputfilename.clone();
 
         if params.datafile {
-            let mut content = String::new();
+            let mut content: Vec<u8> = Vec::new();
             if i == 1 && !params.ngs {
-                content.push_str(&dat_program_header());
+                content.extend_from_slice(dat_program_header().as_bytes());
             }
             if params.ngs {
                 if !trf.records.is_empty() {
-                    content.push_str(&format!("@{}\n", seq.name));
+                    content.push(b'@');
+                    content.extend_from_slice(&seq.name);
+                    content.push(b'\n');
                 }
             } else {
-                content.push_str(&dat_sequence_header(params, &seq));
+                content.extend_from_slice(&dat_sequence_header(params, &seq));
             }
-            content.push_str(&format_dat_records(&trf));
+            content.extend_from_slice(format_dat_records(&trf).as_bytes());
             match dat_fp.as_mut() {
                 Some(f) => {
-                    let _ = f.write_all(content.as_bytes());
+                    let _ = f.write_all(&content);
                 }
                 None => {
-                    print!("{}", content);
-                    let _ = std::io::stdout().flush();
+                    let mut stdout = std::io::stdout();
+                    let _ = stdout.write_all(&content);
+                    let _ = stdout.flush();
                 }
             }
         }
@@ -483,11 +509,23 @@ pub fn trf_control_routine(params: &mut ParamSet) {
         if let Some(f) = summary_fp.as_mut() {
             let outh = format!("{}.{}.1.html", input, paramstring);
             if params.outputcount > 0 {
-                let row = format!(
-                    "<TR><TD><CENTER>{}</CENTER></TD><TD><CENTER><A TARGET=\"{}\" HREF=\"{}\">{}</A></CENTER></TD><TD><CENTER>{}</CENTER></TD></TR>",
-                    i, outh, outh, seq.name, params.outputcount
+                let mut row: Vec<u8> = Vec::new();
+                row.extend_from_slice(
+                    format!(
+                        "<TR><TD><CENTER>{}</CENTER></TD><TD><CENTER><A TARGET=\"{}\" HREF=\"{}\">",
+                        i, outh, outh
+                    )
+                    .as_bytes(),
                 );
-                let _ = f.write_all(row.as_bytes());
+                row.extend_from_slice(&seq.name);
+                row.extend_from_slice(
+                    format!(
+                        "</A></CENTER></TD><TD><CENTER>{}</CENTER></TD></TR>",
+                        params.outputcount
+                    )
+                    .as_bytes(),
+                );
+                let _ = f.write_all(&row);
                 foundsome = true;
             } else {
                 /* remove html files that contain no output */
