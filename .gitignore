@@ -8,3 +8,7 @@
 *.mask
 *[0-9].html
 
+# tests/data 下的 .dat / summary.html 是 C 参考程序生成的测试金标准，需要入库
+!tests/data/*.dat
+!tests/data/*.summary.html
+
