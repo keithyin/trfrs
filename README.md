@@ -2,6 +2,7 @@
 
 [![CI](https://github.com/keithyin/trfrs/actions/workflows/ci.yml/badge.svg)](https://github.com/keithyin/trfrs/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/keithyin/trfrs)](https://github.com/keithyin/trfrs/releases)
+[![crates.io](https://img.shields.io/crates/v/trfrs)](https://crates.io/crates/trfrs)
 [![License](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue)](#许可证)
 [![Rust](https://img.shields.io/badge/rust-2021-dea584?logo=rust)](https://www.rust-lang.org/)
 [![Platforms](https://img.shields.io/badge/platforms-linux%20%7C%20macos%20%7C%20windows-blue)](#环境要求)
