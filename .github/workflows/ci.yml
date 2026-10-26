@@ -4,6 +4,9 @@ on:
   push:
     branches: [main, master]
   pull_request:
+  # 供 release.yml 通过 `uses: ./.github/workflows/ci.yml` 复用，
+  # 保证打 tag 时跑的是同一套 CI。
+  workflow_call:
 
 env:
   CARGO_TERM_COLOR: always
@@ -53,3 +56,7 @@ jobs:
       # 移植代码刻意保持与 C 参考实现一致的写法，clippy 警告不作为失败条件
       - name: Clippy
         run: cargo clippy --locked --all-targets
+
+      # 提前验证 crates.io 打包（元数据/文件列表/大小），避免打 tag 后才发现
+      - name: Check crates.io packaging
+        run: cargo package --locked
