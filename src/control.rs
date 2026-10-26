@@ -127,11 +127,13 @@ impl Trf {
             self.cell_total += self.cell_count[distance as usize];
             if distance <= SMALL_DISTANCE {
                 self.wasted_total += (self.criteria_count[distance as usize]
-                    + self.consensus_count[distance as usize]) as f64
+                    + self.consensus_count[distance as usize])
+                    as f64
                     * (distance * distance * 2) as f64;
             } else {
                 self.wasted_total += (self.criteria_count[distance as usize]
-                    + self.consensus_count[distance as usize]) as f64
+                    + self.consensus_count[distance as usize])
+                    as f64
                     * distance as f64
                     * (2 * self.indel_random_walk_range(distance) + 1) as f64
                     * 2.0;

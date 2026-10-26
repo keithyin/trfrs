@@ -130,7 +130,9 @@ impl Trf {
         if *cell_score > trace.max_row_score {
             trace.max_row_score = *cell_score;
             let set = match with_match {
-                Some((diag_val, match_score)) => *cell_score == diag_val && match_score == self.alpha,
+                Some((diag_val, match_score)) => {
+                    *cell_score == diag_val && match_score == self.alpha
+                }
                 None => false,
             };
             if set {
@@ -172,7 +174,9 @@ impl Trf {
         if *cell_score > trace.max_row_score {
             trace.max_row_score = *cell_score;
             let set = match with_match {
-                Some((diag_val, match_score)) => *cell_score == diag_val && match_score == self.alpha,
+                Some((diag_val, match_score)) => {
+                    *cell_score == diag_val && match_score == self.alpha
+                }
                 None => false,
             };
             if set {
@@ -427,7 +431,8 @@ impl Trf {
         let mut up_index = 2 * band_radius - band_shift;
         let mut col = 2 * band_radius;
         while col >= band_shift {
-            let match_score = self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
+            let match_score =
+                self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
             self.band_diag[diag_index as usize] += match_score;
             let diag_score = self.band_diag[diag_index as usize];
             let mut cell_score = max4(0, diag_score, self.band_up[up_index as usize], left_score);
@@ -451,7 +456,8 @@ impl Trf {
             pattern_col = (pattern_col - 1 + size) % size;
         }
         /* col == band_shift-1: diagonal and left only */
-        let match_score = self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
+        let match_score =
+            self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
         self.band_diag[0] += match_score;
         let diag_score = self.band_diag[0];
         let mut cell_score = max3(0, diag_score, left_score);
@@ -476,7 +482,16 @@ impl Trf {
             self.set_score(row as usize, col as usize, cell_score);
             left_score = cell_score + delta;
             self.backward_trace_cell(
-                &mut trace, real_row, start, size, row, col, pattern_col, &mut cell_score, &mut left_score, None,
+                &mut trace,
+                real_row,
+                start,
+                size,
+                row,
+                col,
+                pattern_col,
+                &mut cell_score,
+                &mut left_score,
+                None,
             );
             col -= 1;
             pattern_col = (pattern_col - 1 + size) % size;
@@ -509,7 +524,16 @@ impl Trf {
             self.set_score(row as usize, col as usize, cell_score);
             left_score = cell_score + delta;
             self.backward_trace_cell(
-                &mut trace, real_row, start, size, row, col, pattern_col, &mut cell_score, &mut left_score, None,
+                &mut trace,
+                real_row,
+                start,
+                size,
+                row,
+                col,
+                pattern_col,
+                &mut cell_score,
+                &mut left_score,
+                None,
             );
             col -= 1;
             pattern_col = (pattern_col - 1 + size) % size;
@@ -519,13 +543,23 @@ impl Trf {
         self.set_score(row as usize, col as usize, cell_score);
         left_score = cell_score + delta;
         self.backward_trace_cell(
-            &mut trace, real_row, start, size, row, col, pattern_col, &mut cell_score, &mut left_score, None,
+            &mut trace,
+            real_row,
+            start,
+            size,
+            row,
+            col,
+            pattern_col,
+            &mut cell_score,
+            &mut left_score,
+            None,
         );
         up_index -= 1;
         col -= 1;
         pattern_col = (pattern_col - 1 + size) % size;
         while col >= 0 {
-            let match_score = self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
+            let match_score =
+                self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
             self.band_diag[diag_index as usize] += match_score;
             let diag_score = self.band_diag[diag_index as usize];
             let mut cell_score = max4(0, diag_score, self.band_up[up_index as usize], left_score);
@@ -640,7 +674,8 @@ impl Trf {
         let mut up_index = band_shift;
         let mut col = 0;
         while col <= 2 * band_radius - band_shift {
-            let match_score = self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
+            let match_score =
+                self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
             self.band_diag[diag_index as usize] += match_score;
             let diag_score = self.band_diag[diag_index as usize];
             let mut cell_score = max4(0, diag_score, self.band_up[up_index as usize], left_score);
@@ -663,7 +698,8 @@ impl Trf {
             pattern_col = (pattern_col + 1) % size;
         }
         /* col == 2*band_radius-band_shift+1: diagonal and left only */
-        let match_score = self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
+        let match_score =
+            self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
         self.band_diag[diag_index as usize] += match_score;
         let diag_score = self.band_diag[diag_index as usize];
         let mut cell_score = max3(0, diag_score, left_score);
@@ -687,7 +723,15 @@ impl Trf {
             self.set_score(row as usize, col as usize, cell_score);
             left_score = cell_score + delta;
             self.forward_trace_cell(
-                &mut trace, real_row, start, row, col, pattern_col, &mut cell_score, &mut left_score, None,
+                &mut trace,
+                real_row,
+                start,
+                row,
+                col,
+                pattern_col,
+                &mut cell_score,
+                &mut left_score,
+                None,
             );
             col += 1;
             pattern_col = (pattern_col + 1) % size;
@@ -720,7 +764,15 @@ impl Trf {
             self.set_score(row as usize, col as usize, cell_score);
             left_score = cell_score + delta;
             self.forward_trace_cell(
-                &mut trace, real_row, start, row, col, pattern_col, &mut cell_score, &mut left_score, None,
+                &mut trace,
+                real_row,
+                start,
+                row,
+                col,
+                pattern_col,
+                &mut cell_score,
+                &mut left_score,
+                None,
             );
             col += 1;
             pattern_col = (pattern_col + 1) % size;
@@ -729,12 +781,23 @@ impl Trf {
         let mut cell_score = max3(0, self.band_up[up_index as usize], left_score);
         self.set_score(row as usize, col as usize, cell_score);
         left_score = cell_score + delta;
-        self.forward_trace_cell(&mut trace, real_row, start, row, col, pattern_col, &mut cell_score, &mut left_score, None);
+        self.forward_trace_cell(
+            &mut trace,
+            real_row,
+            start,
+            row,
+            col,
+            pattern_col,
+            &mut cell_score,
+            &mut left_score,
+            None,
+        );
         col += 1;
         up_index += 1;
         pattern_col = (pattern_col + 1) % size;
         while col <= 2 * band_radius {
-            let match_score = self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
+            let match_score =
+                self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
             self.band_diag[diag_index as usize] += match_score;
             let diag_score = self.band_diag[diag_index as usize];
             let mut cell_score = max4(0, diag_score, self.band_up[up_index as usize], left_score);
@@ -793,8 +856,14 @@ impl Trf {
             let mut left_score = delta;
             let mut pattern_col = size_minus_one;
             while pattern_col >= 0 {
-                self.band_diag[pattern_col as usize] += self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
-                let cell_score = max4(0, self.band_diag[pattern_col as usize], self.band_up[pattern_col as usize], left_score);
+                self.band_diag[pattern_col as usize] +=
+                    self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
+                let cell_score = max4(
+                    0,
+                    self.band_diag[pattern_col as usize],
+                    self.band_up[pattern_col as usize],
+                    left_score,
+                );
                 self.set_score(row as usize, pattern_col as usize, cell_score);
                 left_score = cell_score + delta;
                 pattern_col -= 1;
@@ -804,7 +873,12 @@ impl Trf {
             // second pass
             let mut pattern_col = size_minus_one;
             while pattern_col >= 0 {
-                let mut cell_score = max4(0, self.band_diag[pattern_col as usize], self.band_up[pattern_col as usize], left_score);
+                let mut cell_score = max4(
+                    0,
+                    self.band_diag[pattern_col as usize],
+                    self.band_up[pattern_col as usize],
+                    left_score,
+                );
                 left_score = cell_score + delta;
                 self.set_score(row as usize, pattern_col as usize, cell_score);
                 self.band_up[pattern_col as usize] = left_score;
@@ -825,7 +899,8 @@ impl Trf {
 
             let mut pattern_col = size_minus_two;
             while pattern_col >= 0 {
-                self.band_diag[pattern_col as usize] = self.score(row as usize, (pattern_col + 1) as usize);
+                self.band_diag[pattern_col as usize] =
+                    self.score(row as usize, (pattern_col + 1) as usize);
                 pattern_col -= 1;
             }
             self.band_diag[size_minus_one as usize] = self.score(row as usize, 0);
@@ -852,8 +927,14 @@ impl Trf {
             let mut left_score = delta;
             let mut pattern_col = 0;
             while pattern_col < size {
-                self.band_diag[pattern_col as usize] += self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
-                let cell_score = max4(0, self.band_diag[pattern_col as usize], self.band_up[pattern_col as usize], left_score);
+                self.band_diag[pattern_col as usize] +=
+                    self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
+                let cell_score = max4(
+                    0,
+                    self.band_diag[pattern_col as usize],
+                    self.band_up[pattern_col as usize],
+                    left_score,
+                );
                 self.set_score(row as usize, pattern_col as usize, cell_score);
                 left_score = cell_score + delta;
                 pattern_col += 1;
@@ -863,7 +944,12 @@ impl Trf {
             // second pass
             let mut pattern_col = 0;
             while pattern_col < size {
-                let mut cell_score = max4(0, self.band_diag[pattern_col as usize], self.band_up[pattern_col as usize], left_score);
+                let mut cell_score = max4(
+                    0,
+                    self.band_diag[pattern_col as usize],
+                    self.band_up[pattern_col as usize],
+                    left_score,
+                );
                 left_score = cell_score + delta;
                 self.set_score(row as usize, pattern_col as usize, cell_score);
                 self.band_up[pattern_col as usize] = left_score;
@@ -884,7 +970,8 @@ impl Trf {
 
             let mut pattern_col = 0;
             while pattern_col < size {
-                self.band_diag[(pattern_col + 1) as usize] = self.score(row as usize, pattern_col as usize);
+                self.band_diag[(pattern_col + 1) as usize] =
+                    self.score(row as usize, pattern_col as usize);
                 pattern_col += 1;
             }
             self.band_diag[0] = self.band_diag[size as usize];
@@ -920,8 +1007,14 @@ impl Trf {
                 let mut left_score = delta;
                 let mut pattern_col = 0;
                 while pattern_col < size {
-                    self.band_diag[pattern_col as usize] += self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
-                    let cell_score = max4(0, self.band_diag[pattern_col as usize], self.band_up[pattern_col as usize], left_score);
+                    self.band_diag[pattern_col as usize] += self
+                        .similarity_score(current_base, self.current_pattern[pattern_col as usize]);
+                    let cell_score = max4(
+                        0,
+                        self.band_diag[pattern_col as usize],
+                        self.band_up[pattern_col as usize],
+                        left_score,
+                    );
                     self.set_score(row as usize, pattern_col as usize, cell_score);
                     left_score = cell_score + delta;
                     pattern_col += 1;
@@ -930,7 +1023,12 @@ impl Trf {
                 end_of_trace = true;
                 let mut pattern_col = 0;
                 while pattern_col < size {
-                    let mut cell_score = max4(0, self.band_diag[pattern_col as usize], self.band_up[pattern_col as usize], left_score);
+                    let mut cell_score = max4(
+                        0,
+                        self.band_diag[pattern_col as usize],
+                        self.band_up[pattern_col as usize],
+                        left_score,
+                    );
                     left_score = cell_score + delta;
                     self.set_score(row as usize, pattern_col as usize, cell_score);
                     self.band_up[pattern_col as usize] = left_score;
@@ -953,7 +1051,8 @@ impl Trf {
 
                 let mut pattern_col = 0;
                 while pattern_col < size {
-                    self.band_diag[(pattern_col + 1) as usize] = self.score(row as usize, pattern_col as usize);
+                    self.band_diag[(pattern_col + 1) as usize] =
+                        self.score(row as usize, pattern_col as usize);
                     pattern_col += 1;
                 }
                 self.band_diag[0] = self.band_diag[size as usize];
@@ -995,30 +1094,55 @@ impl Trf {
                 done = true;
             } else if cell_score
                 == self.score_at(row - 1, (pattern_col + size_minus_one) % size)
-                    + self.similarity_score(self.sequence[real_row as usize], self.current_pattern[pattern_col as usize])
+                    + self.similarity_score(
+                        self.sequence[real_row as usize],
+                        self.current_pattern[pattern_col as usize],
+                    )
             {
                 length += 1;
                 if pattern_col == fullcopy {
                     self.copynumber += 1.0;
                 }
-                self.fill_align_pair(self.sequence[real_row as usize], self.current_pattern[pattern_col as usize], length, real_row, pattern_col);
+                self.fill_align_pair(
+                    self.sequence[real_row as usize],
+                    self.current_pattern[pattern_col as usize],
+                    length,
+                    real_row,
+                    pattern_col,
+                );
                 real_row -= 1;
                 row -= 1;
                 pattern_col = (pattern_col + size_minus_one) % size;
             } else if cell_score == self.score_at(row - 1, pattern_col) + self.delta {
                 length += 1;
-                self.fill_align_pair(self.sequence[real_row as usize], DASH, length, real_row, (pattern_col + 1) % size);
+                self.fill_align_pair(
+                    self.sequence[real_row as usize],
+                    DASH,
+                    length,
+                    real_row,
+                    (pattern_col + 1) % size,
+                );
                 real_row -= 1;
                 row -= 1;
-            } else if cell_score == self.score_at(row, (pattern_col + size_minus_one) % size) + self.delta {
+            } else if cell_score
+                == self.score_at(row, (pattern_col + size_minus_one) % size) + self.delta
+            {
                 length += 1;
                 if pattern_col == fullcopy {
                     self.copynumber += 1.0;
                 }
-                self.fill_align_pair(DASH, self.current_pattern[pattern_col as usize], length, real_row + 1, pattern_col);
+                self.fill_align_pair(
+                    DASH,
+                    self.current_pattern[pattern_col as usize],
+                    length,
+                    real_row + 1,
+                    pattern_col,
+                );
                 pattern_col = (pattern_col + size_minus_one) % size;
             } else {
-                self.write_to_alignment_file("\nget_pair_alignment_with_copynumber: error in trace back");
+                self.write_to_alignment_file(
+                    "\nget_pair_alignment_with_copynumber: error in trace back",
+                );
                 let text = format!("\nrow={}  column={}", real_row, pattern_col);
                 self.write_to_alignment_file(&text);
                 let text = format!(
@@ -1027,7 +1151,10 @@ impl Trf {
                     self.score_at(row, (pattern_col + size_minus_one) % size),
                     self.score_at(row - 1, pattern_col),
                     self.score_at(row - 1, (pattern_col + size_minus_one) % size),
-                    self.similarity_score(self.sequence[real_row as usize], self.current_pattern[pattern_col as usize])
+                    self.similarity_score(
+                        self.sequence[real_row as usize],
+                        self.current_pattern[pattern_col as usize]
+                    )
                 );
                 self.write_to_alignment_file(&text);
                 done = true;
@@ -1073,18 +1200,22 @@ impl Trf {
             let mut cell_score = self.score_at(row, col);
             if option == LOCAL && cell_score == 0 && row != 0 {
                 /* check to see if the LOCAL zero score is a legitimate zero */
-                let mut column_shift = (pattern_col - self.band_center[(row - 1) as usize] + size) % size;
+                let mut column_shift =
+                    (pattern_col - self.band_center[(row - 1) as usize] + size) % size;
                 if size - column_shift <= column_shift {
                     column_shift = -(size - column_shift);
                 }
                 let up_col = band_radius + column_shift;
-                let mut center_shift = (self.band_center[row as usize] - self.band_center[(row - 1) as usize]
-                    + size)
-                    % size;
+                let mut center_shift =
+                    (self.band_center[row as usize] - self.band_center[(row - 1) as usize] + size)
+                        % size;
                 if size - center_shift <= center_shift {
                     center_shift = -(size - center_shift);
                 }
-                let match_score = self.similarity_score(self.sequence[real_row as usize], self.current_pattern[pattern_col as usize]);
+                let match_score = self.similarity_score(
+                    self.sequence[real_row as usize],
+                    self.current_pattern[pattern_col as usize],
+                );
                 if center_shift >= 1 {
                     /* band shifts right */
                     if col <= 2 * band_radius - center_shift {
@@ -1139,7 +1270,8 @@ impl Trf {
                 return;
             }
 
-            let mut column_shift = (pattern_col - self.band_center[(row - 1) as usize] + size) % size;
+            let mut column_shift =
+                (pattern_col - self.band_center[(row - 1) as usize] + size) % size;
             if size - column_shift <= column_shift {
                 column_shift = -(size - column_shift);
             }
@@ -1148,17 +1280,22 @@ impl Trf {
             /* try the three predecessors: diagonal, up, left */
             let mut advanced = false;
             if !(option == GLOBAL && pattern_col == -1) {
-                let mut center_shift = (self.band_center[row as usize] - self.band_center[(row - 1) as usize]
-                    + size)
-                    % size;
+                let mut center_shift =
+                    (self.band_center[row as usize] - self.band_center[(row - 1) as usize] + size)
+                        % size;
                 if size - center_shift <= center_shift {
                     center_shift = -(size - center_shift);
                 }
                 let shifts_right = center_shift >= 1;
-                let shift_magnitude = if shifts_right { center_shift } else { -center_shift };
+                let shift_magnitude = if shifts_right {
+                    center_shift
+                } else {
+                    -center_shift
+                };
 
                 let try_diag = if shifts_right {
-                    col <= 2 * band_radius - shift_magnitude || col == 2 * band_radius - shift_magnitude + 1
+                    col <= 2 * band_radius - shift_magnitude
+                        || col == 2 * band_radius - shift_magnitude + 1
                 } else {
                     col > shift_magnitude
                 };
@@ -1174,7 +1311,10 @@ impl Trf {
                 if try_diag
                     && cell_score
                         == self.score_at(row - 1, up_col - 1)
-                            + self.similarity_score(self.sequence[real_row as usize], self.current_pattern[pattern_col as usize])
+                            + self.similarity_score(
+                                self.sequence[real_row as usize],
+                                self.current_pattern[pattern_col as usize],
+                            )
                 {
                     length += 1;
                     if pattern_col == fullcopy {
@@ -1205,7 +1345,8 @@ impl Trf {
                     advanced = true;
                 }
 
-                if !advanced && try_up && cell_score == self.score_at(row - 1, up_col) + self.delta {
+                if !advanced && try_up && cell_score == self.score_at(row - 1, up_col) + self.delta
+                {
                     length += 1;
                     if option == LOCAL {
                         self.fill_align_pair(
@@ -1232,8 +1373,12 @@ impl Trf {
 
                 if !advanced && try_left {
                     if col == 0 {
-                        self.write_to_alignment_file("\nget_pair_alignment_with_copynumber: error in trace back");
-                        self.write_to_alignment_file("\nattempted to compute left branch when i==0");
+                        self.write_to_alignment_file(
+                            "\nget_pair_alignment_with_copynumber: error in trace back",
+                        );
+                        self.write_to_alignment_file(
+                            "\nattempted to compute left branch when i==0",
+                        );
                         let text = format!("\nS[{}][{}]={}", row, col, cell_score);
                         self.write_to_alignment_file(&text);
                         break;
@@ -1243,7 +1388,13 @@ impl Trf {
                             self.copynumber += 1.0;
                         }
                         if option == LOCAL {
-                            self.fill_align_pair(DASH, self.current_pattern[pattern_col as usize], length, real_row + 1, pattern_col);
+                            self.fill_align_pair(
+                                DASH,
+                                self.current_pattern[pattern_col as usize],
+                                length,
+                                real_row + 1,
+                                pattern_col,
+                            );
                             pattern_col = (pattern_col - 1 + size) % size;
                         } else {
                             self.fill_align_pair(
@@ -1279,7 +1430,9 @@ impl Trf {
             }
 
             if !advanced {
-                self.write_to_alignment_file("\nget_pair_alignment_with_copynumber: error in trace back");
+                self.write_to_alignment_file(
+                    "\nget_pair_alignment_with_copynumber: error in trace back",
+                );
                 let text = format!(
                     "\nS: row={}  column={}  upi={}  Sequence: realrow={}  EC: realcol={}",
                     row, col, up_col, real_row, pattern_col
@@ -1296,10 +1449,18 @@ impl Trf {
         let mut front = 1;
         while front <= length / 2 {
             let back = length - front + 1;
-            self.align_pair.sequence_text.swap(front as usize, back as usize);
-            self.align_pair.pattern_text.swap(front as usize, back as usize);
-            self.align_pair.sequence_index.swap(front as usize, back as usize);
-            self.align_pair.pattern_index.swap(front as usize, back as usize);
+            self.align_pair
+                .sequence_text
+                .swap(front as usize, back as usize);
+            self.align_pair
+                .pattern_text
+                .swap(front as usize, back as usize);
+            self.align_pair
+                .sequence_index
+                .swap(front as usize, back as usize);
+            self.align_pair
+                .pattern_index
+                .swap(front as usize, back as usize);
             front += 1;
         }
     }
@@ -1368,7 +1529,8 @@ impl Trf {
                     segment_count += 1;
                 }
                 first = false;
-                if self.align_pair.sequence_text[col as usize] != self.align_pair.pattern_text[col as usize]
+                if self.align_pair.sequence_text[col as usize]
+                    != self.align_pair.pattern_text[col as usize]
                     && self.align_pair.sequence_text[col as usize] != b'-'
                     && self.align_pair.pattern_text[col as usize] != b'-'
                 {
@@ -1382,7 +1544,10 @@ impl Trf {
             out.push('\n');
 
             col = block_start;
-            out.push_str(&format!("  {:9} ", self.align_pair.sequence_index[col as usize]));
+            out.push_str(&format!(
+                "  {:9} ",
+                self.align_pair.sequence_index[col as usize]
+            ));
             first = true;
             segment_count = 0;
             for _ in 0..print_width - 10 {
@@ -1440,8 +1605,10 @@ impl Trf {
         }
 
         if self.align_pair.sequence_index[align_length as usize] != self.length {
-            let display_end =
-                std::cmp::min(self.align_pair.sequence_index[align_length as usize] + 10, self.length);
+            let display_end = std::cmp::min(
+                self.align_pair.sequence_index[align_length as usize] + 10,
+                self.length,
+            );
             let mut col = self.align_pair.sequence_index[align_length as usize] + 1;
             out.push_str(&format!("  {:9} ", col));
             for _ in 1..=10 {
@@ -1633,7 +1800,8 @@ impl Trf {
                 while align_col <= self.align_pair.length
                     && self.align_pair.pattern_index[align_col as usize] == previous_pattern_pos
                 {
-                    let pattern_position = self.align_pair.pattern_index[align_col as usize] as usize;
+                    let pattern_position =
+                        self.align_pair.pattern_index[align_col as usize] as usize;
                     match self.align_pair.sequence_text[align_col as usize] {
                         b'A' => self.consensus.a[2 * pattern_position] += 1,
                         b'C' => self.consensus.c[2 * pattern_position] += 1,
@@ -1695,7 +1863,8 @@ impl Trf {
         let mut write_index: i32 = 0;
         for pattern_pos in 0..=2 * pattern_length {
             if self.consensus.pattern[pattern_pos as usize] != DASH {
-                self.consensus.pattern[write_index as usize] = self.consensus.pattern[pattern_pos as usize];
+                self.consensus.pattern[write_index as usize] =
+                    self.consensus.pattern[pattern_pos as usize];
                 write_index += 1;
             }
         }
