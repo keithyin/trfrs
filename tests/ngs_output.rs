@@ -54,8 +54,16 @@ fn run_fixture(fasta: &str, args: &[&str], tag: &str) -> (PathBuf, Output) {
     (dir, output)
 }
 
+/// Reads a golden output file with LF line endings.
+///
+/// `.gitattributes` pins `tests/data` to `eol=lf`, but a working tree created
+/// before that file existed (or with `core.autocrlf=true`) may still hold CRLF;
+/// normalise so the comparison is about content, not checkout settings.  The
+/// program itself always writes `\n`, so the produced output is not normalised.
 fn golden(name: &str) -> String {
-    std::fs::read_to_string(data_dir().join(name)).expect("read golden output")
+    std::fs::read_to_string(data_dir().join(name))
+        .expect("read golden output")
+        .replace("\r\n", "\n")
 }
 
 fn assert_ngs(fasta: &str, golden_file: &str, tag: &str) {

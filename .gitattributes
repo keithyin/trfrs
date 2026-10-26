@@ -1,0 +1,10 @@
+# Normalise text files to LF in the repository and in every working tree.
+#
+# The regression tests compare the program's output byte for byte against the
+# fixtures in `tests/data`, and the port always writes `\n` (Rust does not
+# translate newlines, unlike C's text mode streams).  With the Git for Windows
+# default `core.autocrlf=true` these fixtures would be checked out with CRLF,
+# making the comparisons fail on the `windows-latest` CI runner.
+* text=auto
+
+tests/data/** text eol=lf
