@@ -28,13 +28,13 @@ License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 //! * short options may be clustered (`-df`) and take attached values (`-l3`),
 //! * short option letters are matched case insensitively (`-D`).
 //!
-//! `clap` provides the clustering, the abbreviations and the attached values;
-//! a small pre-pass spells single dash long options with `--` before the
-//! vector is handed to `clap`.  The eight positional parameters are kept as
-//! strings: validating them is the job of the caller, which reproduces the
-//! error messages of the reference program.
+//! `clap` (Derive API) provides the clustering, the abbreviations and the
+//! attached values; a small pre-pass spells single dash long options with
+//! `--` before the vector is handed to clap.  The eight positional
+//! parameters are kept as strings: validating them is the job of the caller,
+//! which reproduces the error messages of the reference program.
 
-use clap::{Arg, ArgAction, Command};
+use clap::Parser;
 
 use crate::print_banner;
 
@@ -104,18 +104,6 @@ const LONG_OPTIONS: &[(&str, &str)] = &[
     ("maxlength", "maxlength"),
 ];
 
-/// Positional parameter names, in the order `av[1]` .. `av[8]`.
-const POSITIONALS: [&str; 8] = [
-    "file",
-    "match",
-    "mismatch",
-    "delta",
-    "pm",
-    "pi",
-    "minscore",
-    "maxperiod",
-];
-
 /// `getopt_long_only()` lookup: an exact match wins, otherwise a unique
 /// prefix is accepted (long option names are case sensitive).
 fn long_option(name: &str) -> Option<&'static str> {
@@ -152,88 +140,67 @@ fn rewrite_long_option(arg: &str) -> Option<String> {
     })
 }
 
-/// The `clap` definition of the command line.
-fn command() -> Command {
-    Command::new("trf")
-        .disable_help_flag(true) /* -h is "suppress html output" */
-        .disable_version_flag(true) /* -v and -V both print the banner */
-        .infer_long_args(true) /* unique prefixes, as getopt_long_only() */
-        .args_override_self(true) /* repeated options are accepted */
-        .arg(Arg::new("file").value_name("File").index(1))
-        .arg(Arg::new("match").value_name("Match").index(2))
-        .arg(Arg::new("mismatch").value_name("Mismatch").index(3))
-        .arg(Arg::new("delta").value_name("Delta").index(4))
-        .arg(Arg::new("pm").value_name("PM").index(5))
-        .arg(Arg::new("pi").value_name("PI").index(6))
-        .arg(Arg::new("minscore").value_name("Minscore").index(7))
-        .arg(Arg::new("maxperiod").value_name("MaxPeriod").index(8))
-        .arg(
-            Arg::new("dat")
-                .short('d')
-                .visible_short_alias('D')
-                .long("dat")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("mask")
-                .short('m')
-                .visible_short_alias('M')
-                .long("mask")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("flank")
-                .short('f')
-                .visible_short_alias('F')
-                .long("flank")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("html-off")
-                .short('h')
-                .visible_short_alias('H')
-                .long("html-off")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("redund-off")
-                .short('r')
-                .visible_short_alias('R')
-                .long("redund-off")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("ngs")
-                .long("ngs")
-                .alias("Ngs")
-                .alias("NGS")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("maxlength")
-                .short('l')
-                .visible_short_alias('L')
-                .long("maxlength")
-                .value_name("n")
-                /* getopt reports a missing value but carries on */
-                .num_args(0..=1)
-                .default_missing_value("")
-                .action(ArgAction::Set),
-        )
-        .arg(
-            Arg::new("help")
-                .short('u')
-                .visible_short_alias('U')
-                .long("help")
-                .action(ArgAction::SetTrue),
-        )
-        .arg(
-            Arg::new("version")
-                .short('v')
-                .visible_short_alias('V')
-                .long("version")
-                .action(ArgAction::SetTrue),
-        )
+/// The `clap` definition of the command line (Derive API).
+///
+/// The first eight fields are the positional parameters `av[1]` .. `av[8]`
+/// in order; they are kept as strings, validating them is the job of the
+/// caller, which reproduces the error messages of the reference program.
+/// Every other behaviour mirrors `getopt_long_only()`: `-h` means
+/// "suppress html output" while help lives on `-u`, `-v` prints the banner,
+/// short option letters are matched case insensitively and the three
+/// spellings of `-ngs` select one option.
+#[derive(Parser)]
+#[command(
+    name = "trf",
+    disable_help_flag = true, /* -h is "suppress html output" */
+    disable_version_flag = true, /* -v and -V both print the banner */
+    infer_long_args = true,   /* unique prefixes, as getopt_long_only() */
+    args_override_self = true /* repeated options are accepted */
+)]
+struct Args {
+    #[arg(value_name = "File")]
+    file: String,
+    #[arg(value_name = "Match")]
+    match_weight: String,
+    #[arg(value_name = "Mismatch")]
+    mismatch: String,
+    #[arg(value_name = "Delta")]
+    indel: String,
+    #[arg(value_name = "PM")]
+    pm: String,
+    #[arg(value_name = "PI")]
+    pi: String,
+    #[arg(value_name = "Minscore")]
+    minscore: String,
+    #[arg(value_name = "MaxPeriod")]
+    maxperiod: String,
+
+    #[arg(short = 'd', visible_short_alias = 'D', long = "dat")]
+    dat: bool,
+    #[arg(short = 'm', visible_short_alias = 'M', long = "mask")]
+    mask: bool,
+    #[arg(short = 'f', visible_short_alias = 'F', long = "flank")]
+    flank: bool,
+    #[arg(short = 'h', visible_short_alias = 'H', long = "html-off")]
+    html_off: bool,
+    #[arg(short = 'r', visible_short_alias = 'R', long = "redund-off")]
+    redund_off: bool,
+    #[arg(long = "ngs", alias = "Ngs", alias = "NGS")]
+    ngs: bool,
+    #[arg(
+        short = 'l',
+        visible_short_alias = 'L',
+        long = "maxlength",
+        value_name = "n",
+        /* getopt reports a missing value but carries on */
+        num_args = 0..=1,
+        default_missing_value = ""
+    )]
+    maxlength: Option<String>,
+    #[arg(short = 'u', visible_short_alias = 'U', long = "help")]
+    help: bool,
+    #[arg(short = 'v', visible_short_alias = 'V', long = "version")]
+    version: bool,
 }
 
 /// The value of the `-l` / `--maxlength` option.
@@ -258,11 +225,11 @@ pub struct Cli {
     pub minscore: String,
     pub maxperiod: String,
 
-    pub datafile: bool,
-    pub maskedfile: bool,
-    pub flankingsequence: bool,
-    pub htmloff: bool,
-    pub redundoff: bool,
+    pub data_file: bool,
+    pub masked_file: bool,
+    pub flanking_sequence: bool,
+    pub html_output_off: bool,
+    pub redundancy_removal_off: bool,
     pub ngs: bool,
     pub maxlength: MaxLength,
 }
@@ -299,59 +266,44 @@ pub fn parse() -> Result<Cli, i32> {
         })
         .collect();
 
-    let matches = match command().try_get_matches_from(args) {
-        Ok(matches) => matches,
+    let args = match Args::try_parse_from(args) {
+        Ok(args) => args,
         Err(error) => {
             let _ = error.print();
             return Err(error.exit_code());
         }
     };
 
-    if matches.get_flag("help") {
+    if args.help {
         print!("{}", usage(&argv[0]));
         return Err(0);
     }
-    if matches.get_flag("version") {
+    if args.version {
         print_banner();
         return Err(0);
     }
 
-    let mut positional = Vec::with_capacity(POSITIONALS.len());
-    for name in POSITIONALS {
-        match matches.get_one::<String>(name) {
-            Some(value) => positional.push(value.clone()),
-            None => {
-                eprint!("{}", usage(&argv[0]));
-                return Err(1);
-            }
-        }
-    }
-    let [file, match_weight, mismatch, indel, pm, pi, minscore, maxperiod] =
-        <[String; POSITIONALS.len()]>::try_from(positional).expect("eight positional values");
-
-    let maxlength = match matches.value_source("maxlength") {
-        Some(_) => match matches.get_one::<String>("maxlength") {
-            Some(value) if !value.is_empty() => MaxLength::Value(value.clone()),
-            _ => MaxLength::MissingValue,
-        },
+    let maxlength = match args.maxlength {
+        Some(value) if !value.is_empty() => MaxLength::Value(value),
+        Some(_) => MaxLength::MissingValue,
         None => MaxLength::Absent,
     };
 
     Ok(Cli {
-        file,
-        match_weight,
-        mismatch,
-        indel,
-        pm,
-        pi,
-        minscore,
-        maxperiod,
-        datafile: matches.get_flag("dat"),
-        maskedfile: matches.get_flag("mask"),
-        flankingsequence: matches.get_flag("flank"),
-        htmloff: matches.get_flag("html-off"),
-        redundoff: matches.get_flag("redund-off"),
-        ngs: matches.get_flag("ngs"),
+        file: args.file,
+        match_weight: args.match_weight,
+        mismatch: args.mismatch,
+        indel: args.indel,
+        pm: args.pm,
+        pi: args.pi,
+        minscore: args.minscore,
+        maxperiod: args.maxperiod,
+        data_file: args.dat,
+        masked_file: args.mask,
+        flanking_sequence: args.flank,
+        html_output_off: args.html_off,
+        redundancy_removal_off: args.redund_off,
+        ngs: args.ngs,
         maxlength,
     })
 }

@@ -95,34 +95,34 @@ const EOF: i32 = -1;
 /// The boolean in the returned tuple is `true` when another sequence header was
 /// encountered (the reference implementation returns 1 in that case, 0 at end of
 /// file).
-pub fn load_sequence(rd: &mut ByteReader) -> Result<(FastaSequence, bool), LoadError> {
+pub fn load_sequence(reader: &mut ByteReader) -> Result<(FastaSequence, bool), LoadError> {
     let mut seq = FastaSequence::default();
 
     // read the FASTA '>' symbol
-    let mut c = rd.getc();
-    if c < 0 || (c as u8) != b'>' {
+    let mut char_code = reader.getc();
+    if char_code < 0 || (char_code as u8) != b'>' {
         return Err(LoadError::Silent);
     }
 
     // read name and description text
     let mut name = Vec::with_capacity(MAX_SEQ_NAME_LEN);
     while name.len() < MAX_SEQ_NAME_LEN - 1 {
-        c = rd.getc();
-        if c == LF || c == CR {
+        char_code = reader.getc();
+        if char_code == LF || char_code == CR {
             break;
-        } else if c == EOF {
+        } else if char_code == EOF {
             return Err(LoadError::Message(
                 "FASTA input terminated too early".into(),
             ));
         } else {
-            name.push(c as u8);
+            name.push(char_code as u8);
         }
     }
     // if the line was not read completely, flush the rest
     if name.len() == MAX_SEQ_NAME_LEN - 1 {
-        c = 0;
-        while c != CR && c != LF && c != EOF {
-            c = rd.getc();
+        char_code = 0;
+        while char_code != CR && char_code != LF && char_code != EOF {
+            char_code = reader.getc();
         }
     }
     seq.name = name;
@@ -131,19 +131,19 @@ pub fn load_sequence(rd: &mut ByteReader) -> Result<(FastaSequence, bool), LoadE
     let mut next = -1;
     let mut sequence: Vec<u8> = Vec::new();
     let mut composition = [0i32; 26];
-    while c != EOF && (c as u8) != b'>' {
-        c = rd.getc();
-        let b = c as u8;
-        if (b'A'..=b'Z').contains(&b) {
-            composition[(b - b'A') as usize] += 1;
-            sequence.push(b);
-        } else if b.is_ascii_lowercase() {
-            composition[(b - b'a') as usize] += 1;
-            sequence.push(b.to_ascii_uppercase());
-        } else if b == b'>' {
+    while char_code != EOF && (char_code as u8) != b'>' {
+        char_code = reader.getc();
+        let byte = char_code as u8;
+        if (b'A'..=b'Z').contains(&byte) {
+            composition[(byte - b'A') as usize] += 1;
+            sequence.push(byte);
+        } else if byte.is_ascii_lowercase() {
+            composition[(byte - b'a') as usize] += 1;
+            sequence.push(byte.to_ascii_uppercase());
+        } else if byte == b'>' {
             next = 1;
-            rd.ungetc(b'>');
-        } else if c == EOF {
+            reader.ungetc(b'>');
+        } else if char_code == EOF {
             next = 0;
         }
     }

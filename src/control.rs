@@ -26,29 +26,29 @@ use std::io::{BufReader, BufWriter, Write};
 use crate::clean::make_file_name;
 use crate::fasta::{load_sequence, ByteReader, FastaSequence, LoadError};
 use crate::params::{ParamSet, VERSION};
-use crate::state::{cfloat, Trf, SMALLDISTANCE};
+use crate::state::{format_c_float, Trf, SMALL_DISTANCE};
 
 impl Trf {
     /// `TRF()`: runs the algorithm on a single sequence and writes the output.
     pub fn run(&mut self) {
         let paramstring = self.param_string();
-        let htmlstring = format!("{}.{}.html", self.params.outputprefix, paramstring);
-        let txtstring = format!("{}.{}.txt.html", self.params.outputprefix, paramstring);
-        let _datstring = format!("{}.{}.dat", self.params.outputprefix, paramstring);
-        let _maskstring = format!("{}.{}.mask", self.params.outputprefix, paramstring);
+        let htmlstring = format!("{}.{}.html", self.params.output_prefix, paramstring);
+        let txtstring = format!("{}.{}.txt.html", self.params.output_prefix, paramstring);
+        let _datstring = format!("{}.{}.dat", self.params.output_prefix, paramstring);
+        let _maskstring = format!("{}.{}.mask", self.params.output_prefix, paramstring);
 
-        self.init_bestperiodlist();
-        self.print_flanking = self.params.flankingsequence;
+        self.init_best_period_list();
+        self.print_flanking = self.params.flanking_sequence;
         self.progress("Allocating Memory...");
 
-        self.reportmin = 0;
+        self.report_min = 0;
         self.rows = 0.0;
-        self.totalcharacters = 0.0;
+        self.total_characters = 0.0;
 
         /* start the alignment (txt) file */
-        if !self.params.htmloff {
+        if !self.params.html_output_off {
             match File::create(&txtstring) {
-                Ok(f) => self.fptxt = Some(BufWriter::new(f)),
+                Ok(f) => self.alignment_file = Some(BufWriter::new(f)),
                 Err(_) => {
                     self.print_error("Unable to open alignment file for writing in TRF() routine!");
                     std::process::exit(-1);
@@ -74,78 +74,78 @@ impl Trf {
                     self.params.match_weight,
                     self.params.mismatch,
                     self.params.indel,
-                    self.params.pm,
-                    self.params.pi,
+                    self.params.match_probability_percent,
+                    self.params.indel_probability_percent,
                     self.params.minscore,
                     self.params.maxperiod
                 )
                 .as_bytes(),
             );
-            self.msg_bytes(&head);
+            self.write_bytes_to_alignment_file(&head);
         }
 
         self.progress("Initializing data structures...");
 
         self.progress("Computing TR Model Statistics...");
-        self.init_and_fill_coin_toss_stats();
+        self.init_criteria_tables();
 
-        if !self.params.htmloff {
+        if !self.params.html_output_off {
             let text = format!("\n\nLength: {}", self.length);
-            self.msg(&text);
+            self.write_to_alignment_file(&text);
             let text = format!(
                 "\nACGTcount: A:{}, C:{}, G:{}, T:{}\n\n",
-                cfloat(self.fasta.composition[0] as f64 / self.length as f64, 3, 2),
-                cfloat(self.fasta.composition[2] as f64 / self.length as f64, 3, 2),
-                cfloat(self.fasta.composition[6] as f64 / self.length as f64, 3, 2),
-                cfloat(self.fasta.composition[19] as f64 / self.length as f64, 3, 2)
+                format_c_float(self.fasta.composition[0] as f64 / self.length as f64, 3, 2),
+                format_c_float(self.fasta.composition[2] as f64 / self.length as f64, 3, 2),
+                format_c_float(self.fasta.composition[6] as f64 / self.length as f64, 3, 2),
+                format_c_float(self.fasta.composition[19] as f64 / self.length as f64, 3, 2)
             );
-            self.msg(&text);
+            self.write_to_alignment_file(&text);
             if self.fasta.length as i32 - self.fasta.nucleotides > 0 {
                 let text = format!(
                     "Warning! {} characters in sequence are not A, C, G, or T\n\n",
                     self.fasta.length as i32 - self.fasta.nucleotides
                 );
-                self.msg(&text);
+                self.write_to_alignment_file(&text);
             }
         }
 
-        self.totalcharacters += self.length as f64;
-        self.wdp_count = 0.0;
+        self.total_characters += self.length as f64;
+        self.wraparound_dp_count = 0.0;
 
-        if self.params.multisequencefile {
-            let text = format!("Scanning Sequence {}...", self.params.sequenceordinal);
+        if self.params.multi_sequence_file {
+            let text = format!("Scanning Sequence {}...", self.params.sequence_ordinal);
             self.progress(&text);
         } else {
             self.progress("Scanning...");
         }
 
-        self.newtupbo();
+        self.scan_sequence();
 
         self.cell_total = 0.0;
-        let mut i = self.maxdistance;
-        while i >= 1 {
-            self.cell_total += self.cell_count[i as usize];
-            if i <= SMALLDISTANCE {
-                self.wasted_total += (self.criteria_count[i as usize]
-                    + self.consensus_count[i as usize]) as f64
-                    * (i * i * 2) as f64;
+        let mut distance = self.max_distance;
+        while distance >= 1 {
+            self.cell_total += self.cell_count[distance as usize];
+            if distance <= SMALL_DISTANCE {
+                self.wasted_total += (self.criteria_count[distance as usize]
+                    + self.consensus_count[distance as usize]) as f64
+                    * (distance * distance * 2) as f64;
             } else {
-                self.wasted_total += (self.criteria_count[i as usize]
-                    + self.consensus_count[i as usize]) as f64
-                    * i as f64
-                    * (2 * self.d_range(i) + 1) as f64
+                self.wasted_total += (self.criteria_count[distance as usize]
+                    + self.consensus_count[distance as usize]) as f64
+                    * distance as f64
+                    * (2 * self.indel_random_walk_range(distance) + 1) as f64
                     * 2.0;
             }
-            i -= 1;
+            distance -= 1;
         }
 
-        if !self.params.htmloff {
-            self.msg("Done.\n");
-            self.msg("</PRE>");
-            self.msg("</BODY>");
-            self.msg("</HTML>");
+        if !self.params.html_output_off {
+            self.write_to_alignment_file("Done.\n");
+            self.write_to_alignment_file("</PRE>");
+            self.write_to_alignment_file("</BODY>");
+            self.write_to_alignment_file("</HTML>");
         }
-        self.fptxt = None;
+        self.alignment_file = None;
 
         self.progress("Freeing Memory...");
         self.progress("Resolving output...");
@@ -153,7 +153,7 @@ impl Trf {
         let maxperiod = self.maxperiod;
         self.trf_clean(&htmlstring, &txtstring, maxperiod);
 
-        self.params.outputfilename = make_file_name(&htmlstring, 1);
+        self.params.output_file_name = make_file_name(&htmlstring, 1);
 
         self.progress("Done.");
     }
@@ -162,46 +162,46 @@ impl Trf {
 /// Formats the `.dat` records of the current sequence.
 fn format_dat_records(trf: &Trf) -> String {
     let mut out = String::new();
-    for r in &trf.records {
+    for record in &trf.records {
         out.push_str(&format!(
             "{} {} {} {:.1} {} {} {} {} {} {} {} {} {:.2} {} ",
-            r.first,
-            r.last,
-            r.period,
-            r.copies,
-            r.size,
-            r.matches,
-            r.indels,
-            r.score,
-            r.acount,
-            r.ccount,
-            r.gcount,
-            r.tcount,
-            r.entropy,
-            r.pattern
+            record.first,
+            record.last,
+            record.period,
+            record.copies,
+            record.size,
+            record.matches,
+            record.indels,
+            record.score,
+            record.a_count,
+            record.c_count,
+            record.g_count,
+            record.t_count,
+            record.entropy,
+            record.pattern
         ));
-        for c in r.first..=r.last {
-            out.push(trf.sequence[c as usize] as char);
+        for position in record.first..=record.last {
+            out.push(trf.sequence[position as usize] as char);
         }
 
         /* short flanks are appended in -ngs mode */
         if trf.params.ngs {
-            let flankstart = std::cmp::max(1, r.first - 50);
-            let flankend = std::cmp::min(trf.length, r.last + 50);
+            let flank_start = std::cmp::max(1, record.first - 50);
+            let flank_end = std::cmp::min(trf.length, record.last + 50);
             out.push(' ');
-            if r.first == 1 {
+            if record.first == 1 {
                 out.push('.');
             } else {
-                for c in flankstart..r.first {
-                    out.push(trf.sequence[c as usize] as char);
+                for position in flank_start..record.first {
+                    out.push(trf.sequence[position as usize] as char);
                 }
             }
             out.push(' ');
-            if r.last == trf.length {
+            if record.last == trf.length {
                 out.push('.');
             } else {
-                for c in (r.last + 1)..=flankend {
-                    out.push(trf.sequence[c as usize] as char);
+                for position in (record.last + 1)..=flank_end {
+                    out.push(trf.sequence[position as usize] as char);
                 }
             }
         }
@@ -253,7 +253,7 @@ fn summary_footer(foundsome: bool) -> String {
     footer
 }
 
-/// `hsequence`: `"Sequence: %s\n"`, the header line shared by the HTML, data
+/// `header_sequence`: `"Sequence: %s\n"`, the header line shared by the HTML, data
 /// and masked output.  Kept as bytes: the name may not be valid UTF-8.
 fn sequence_header(seq: &FastaSequence) -> Vec<u8> {
     let mut out = Vec::with_capacity(seq.name.len() + 11);
@@ -273,8 +273,8 @@ fn dat_sequence_header(params: &ParamSet, seq: &FastaSequence) -> Vec<u8> {
             params.match_weight,
             params.mismatch,
             params.indel,
-            params.pm,
-            params.pi,
+            params.match_probability_percent,
+            params.indel_probability_percent,
             params.minscore,
             params.maxperiod
         )
@@ -314,8 +314,8 @@ fn os_error_message(e: &std::io::Error) -> String {
 
 /// `TRFControlRoutine()`: handles single and multiple sequence files.
 pub fn trf_control_routine(params: &mut ParamSet) {
-    let source = params.inputfilename.clone();
-    let prefix = params.outputprefix.clone();
+    let source = params.input_file_name.clone();
+    let prefix = params.output_prefix.clone();
 
     let mut reader = if params.use_stdin {
         ByteReader::new(Box::new(BufReader::new(std::io::stdin())))
@@ -328,7 +328,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
                     source,
                     os_error_message(&e)
                 );
-                params.endstatus = Some("Bad filename".into());
+                params.end_status = Some("Bad filename".into());
                 params.running = false;
                 return;
             }
@@ -346,7 +346,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
                 eprintln!("Error: {}", m);
             }
             eprintln!("Error: Could not load sequence. Empty file or bad format.");
-            params.endstatus = Some("Bad format.".into());
+            params.end_status = Some("Bad format.".into());
             params.running = false;
             return;
         }
@@ -354,27 +354,27 @@ pub fn trf_control_routine(params: &mut ParamSet) {
     let (mut seq, mut more) = loaded;
 
     let paramstring = params.param_string();
-    let hparameters = params.parameters_header();
+    let header_parameters = params.parameters_header();
 
     if !more {
         /* only one sequence in the file */
-        params.multisequencefile = false;
-        params.sequenceordinal = 1;
+        params.multi_sequence_file = false;
+        params.sequence_ordinal = 1;
 
         let mut trf = Trf::new(params.clone(), &seq);
-        trf.hsequence = sequence_header(&seq);
-        trf.hparameters = hparameters.clone();
-        trf.hlength = format!("Length:  {}", seq.length);
+        trf.header_sequence = sequence_header(&seq);
+        trf.header_parameters = header_parameters.clone();
+        trf.header_length = format!("Length:  {}", seq.length);
         trf.run();
 
-        params.outputcount = trf.params.outputcount;
-        params.outputfilename = trf.params.outputfilename.clone();
+        params.output_count = trf.params.output_count;
+        params.output_file_name = trf.params.output_file_name.clone();
 
-        if params.endstatus.is_some() {
+        if params.end_status.is_some() {
             return;
         }
 
-        if params.datafile {
+        if params.data_file {
             let mut content: Vec<u8> = Vec::new();
             if !params.ngs {
                 content.extend_from_slice(dat_program_header().as_bytes());
@@ -399,16 +399,16 @@ pub fn trf_control_routine(params: &mut ParamSet) {
 
         /* masked file is written after the .dat output so that the sequence is
         not "ruined" by Ns beforehand */
-        let maskstring = format!("{}.{}.mask", params.outputprefix, paramstring);
-        trf.make_masked_file(params.maskedfile, &maskstring);
+        let maskstring = format!("{}.{}.mask", params.output_prefix, paramstring);
+        trf.make_masked_file(params.masked_file, &maskstring);
 
-        params.endstatus = None;
+        params.end_status = None;
         params.running = false;
         return;
     }
 
-    params.multisequencefile = true;
-    params.sequenceordinal = 1;
+    params.multi_sequence_file = true;
+    params.sequence_ordinal = 1;
 
     /*********************************************************
      * more than one sequence: produce summary-style output
@@ -420,7 +420,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
     Doing the same keeps those files present (and partially filled) if the
     process terminates early. */
     let mut summary_fp: Option<File> = None;
-    if !params.htmloff {
+    if !params.html_output_off {
         match File::create(&desth) {
             Ok(mut f) => {
                 let _ = f.write_all(summary_header().as_bytes());
@@ -436,7 +436,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
     }
 
     let mut mask_fp: Option<File> = None;
-    if params.maskedfile {
+    if params.masked_file {
         match File::create(format!("{}.{}.mask", prefix, paramstring)) {
             Ok(f) => mask_fp = Some(f),
             Err(_) => {
@@ -449,7 +449,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
     }
 
     let mut dat_fp: Option<File> = None;
-    if params.datafile && !params.ngs {
+    if params.data_file && !params.ngs {
         match File::create(format!("{}.{}.dat", prefix, paramstring)) {
             Ok(f) => dat_fp = Some(f),
             Err(_) => {
@@ -462,26 +462,26 @@ pub fn trf_control_routine(params: &mut ParamSet) {
     }
 
     let mut foundsome = false;
-    let mut i = 1i32;
+    let mut ordinal = 1i32;
 
     loop {
         /* prefix used for the output files of this sequence */
-        let input = format!("{}.s{}", prefix, i);
-        params.inputfilename = input.clone();
-        params.outputprefix = input.clone();
+        let input = format!("{}.s{}", prefix, ordinal);
+        params.input_file_name = input.clone();
+        params.output_prefix = input.clone();
 
         let mut trf = Trf::new(params.clone(), &seq);
-        trf.hsequence = sequence_header(&seq);
-        trf.hparameters = hparameters.clone();
-        trf.hlength = format!("Length:  {}", seq.length);
+        trf.header_sequence = sequence_header(&seq);
+        trf.header_parameters = header_parameters.clone();
+        trf.header_length = format!("Length:  {}", seq.length);
         trf.run();
 
-        params.outputcount = trf.params.outputcount;
-        params.outputfilename = trf.params.outputfilename.clone();
+        params.output_count = trf.params.output_count;
+        params.output_file_name = trf.params.output_file_name.clone();
 
-        if params.datafile {
+        if params.data_file {
             let mut content: Vec<u8> = Vec::new();
-            if i == 1 && !params.ngs {
+            if ordinal == 1 && !params.ngs {
                 content.extend_from_slice(dat_program_header().as_bytes());
             }
             if params.ngs {
@@ -508,12 +508,12 @@ pub fn trf_control_routine(params: &mut ParamSet) {
 
         if let Some(f) = summary_fp.as_mut() {
             let outh = format!("{}.{}.1.html", input, paramstring);
-            if params.outputcount > 0 {
+            if params.output_count > 0 {
                 let mut row: Vec<u8> = Vec::new();
                 row.extend_from_slice(
                     format!(
                         "<TR><TD><CENTER>{}</CENTER></TD><TD><CENTER><A TARGET=\"{}\" HREF=\"{}\">",
-                        i, outh, outh
+                        ordinal, outh, outh
                     )
                     .as_bytes(),
                 );
@@ -521,7 +521,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
                 row.extend_from_slice(
                     format!(
                         "</A></CENTER></TD><TD><CENTER>{}</CENTER></TD></TR>",
-                        params.outputcount
+                        params.output_count
                     )
                     .as_bytes(),
                 );
@@ -535,10 +535,10 @@ pub fn trf_control_routine(params: &mut ParamSet) {
             }
         }
 
-        let maskstring = format!("{}.s{}.{}.mask", prefix, i, paramstring);
-        trf.make_masked_file(params.maskedfile, &maskstring);
+        let maskstring = format!("{}.s{}.{}.mask", prefix, ordinal, paramstring);
+        trf.make_masked_file(params.masked_file, &maskstring);
 
-        if params.maskedfile {
+        if params.masked_file {
             match std::fs::read(&maskstring) {
                 Ok(bytes) => {
                     if let Some(f) = mask_fp.as_mut() {
@@ -564,13 +564,13 @@ pub fn trf_control_routine(params: &mut ParamSet) {
                 }
                 Err(_) => {
                     eprintln!("Error: Could not load sequence. Empty file or bad format.");
-                    params.endstatus = Some("Bad format.".into());
+                    params.end_status = Some("Bad format.".into());
                     params.running = false;
                     return;
                 }
             }
-            params.sequenceordinal += 1;
-            i += 1;
+            params.sequence_ordinal += 1;
+            ordinal += 1;
         } else {
             break;
         }
@@ -586,12 +586,12 @@ pub fn trf_control_routine(params: &mut ParamSet) {
     if let Some(mut f) = mask_fp {
         let _ = f.flush();
     }
-    if params.datafile && params.ngs {
+    if params.data_file && params.ngs {
         /* the reference implementation closes stdout here */
         params.stdout_closed = true;
     }
 
-    params.outputfilename = desth;
-    params.endstatus = None;
+    params.output_file_name = desth;
+    params.end_status = None;
     params.running = false;
 }

@@ -26,11 +26,11 @@ use crate::params::VERSION;
 use crate::state::Trf;
 
 /// Maximum number of repeats listed in one table / alignment file.
-pub const EO_MAX_TBL: usize = 120;
+pub const MAX_REPEATS_PER_TABLE: usize = 120;
 
 /// One reported tandem repeat (`struct index_list` / `IL`).
 #[derive(Clone, Debug)]
-pub struct IlRecord {
+pub struct RepeatRecord {
     /// Order in which the repeat was found.
     pub count: i32,
     /// Anchor used to link the summary table with the alignment file.
@@ -43,10 +43,10 @@ pub struct IlRecord {
     pub matches: i32,
     pub indels: i32,
     pub score: i32,
-    pub acount: i32,
-    pub ccount: i32,
-    pub gcount: i32,
-    pub tcount: i32,
+    pub a_count: i32,
+    pub c_count: i32,
+    pub g_count: i32,
+    pub t_count: i32,
     pub entropy: f32,
     pub pattern: String,
 }
@@ -84,7 +84,7 @@ pub fn make_file_name(oldname: &str, tag: i32) -> String {
 }
 
 /// `IntervalOverlap()`.
-fn interval_overlap(i: &IlRecord, j: &IlRecord) -> i32 {
+fn interval_overlap(i: &RepeatRecord, j: &RepeatRecord) -> i32 {
     let beg = if i.first > j.first { i.first } else { j.first };
     let end = if i.last < j.last { i.last } else { j.last };
     let overlap = end - beg + 1;
@@ -96,7 +96,7 @@ fn interval_overlap(i: &IlRecord, j: &IlRecord) -> i32 {
 }
 
 /// `IsRedundant()`: returns true if `i` is redundant with respect to `j`.
-fn is_redundant(i: &IlRecord, j: &IlRecord) -> bool {
+fn is_redundant(i: &RepeatRecord, j: &RepeatRecord) -> bool {
     if i.period > j.period && i.period % j.period == 0 && (i.score as f64) <= 1.1 * j.score as f64 {
         return true;
     }
@@ -131,41 +131,41 @@ impl Trf {
         if self.records.len() < 2 {
             return;
         }
-        let mut i = 0usize;
-        while i < self.records.len() {
-            let mut j = i + 1;
+        let mut record_index = 0usize;
+        while record_index < self.records.len() {
+            let mut other_index = record_index + 1;
             loop {
-                if j >= self.records.len() {
+                if other_index >= self.records.len() {
                     break;
                 }
-                let iinterval = self.records[i].last - self.records[i].first + 1;
-                let jinterval = self.records[j].last - self.records[j].first + 1;
-                let overlap = interval_overlap(&self.records[i], &self.records[j]);
+                let iinterval = self.records[record_index].last - self.records[record_index].first + 1;
+                let jinterval = self.records[other_index].last - self.records[other_index].first + 1;
+                let overlap = interval_overlap(&self.records[record_index], &self.records[other_index]);
                 if overlap == 0 {
                     break;
                 }
 
                 if !(overlap as f64 / (iinterval as f64) < 0.9)
-                    && is_redundant(&self.records[i], &self.records[j])
+                    && is_redundant(&self.records[record_index], &self.records[other_index])
                 {
-                    self.records.remove(i);
-                    if i >= self.records.len() {
+                    self.records.remove(record_index);
+                    if record_index >= self.records.len() {
                         break;
                     }
-                    j = i + 1;
+                    other_index = record_index + 1;
                     continue;
                 }
 
                 if !(overlap as f64 / (jinterval as f64) < 0.9)
-                    && is_redundant(&self.records[j], &self.records[i])
+                    && is_redundant(&self.records[other_index], &self.records[record_index])
                 {
-                    self.records.remove(j);
+                    self.records.remove(other_index);
                     continue;
                 }
 
-                j += 1;
+                other_index += 1;
             }
-            i += 1;
+            record_index += 1;
         }
     }
 
@@ -188,50 +188,50 @@ impl Trf {
         let mut out: Vec<u8> = Vec::new();
         let mut moving = true;
         let mut curr = 0usize;
-        let mut i = 0usize;
-        while i < lines.len() {
-            let line = lines[i];
+        let mut line_index = 0usize;
+        while line_index < lines.len() {
+            let line = lines[line_index];
             if line.starts_with(b"Fo") {
-                let l2: &[u8] = if i + 1 < lines.len() {
-                    lines[i + 1]
+                let second_line: &[u8] = if line_index + 1 < lines.len() {
+                    lines[line_index + 1]
                 } else {
                     b""
                 };
-                let l3: &[u8] = if i + 2 < lines.len() {
-                    lines[i + 2]
+                let third_line: &[u8] = if line_index + 2 < lines.len() {
+                    lines[line_index + 2]
                 } else {
                     b""
                 };
                 if curr < self.records.len()
-                    && contains(l3, self.records[curr].reference.as_bytes())
+                    && contains(third_line, self.records[curr].reference.as_bytes())
                 {
                     out.extend_from_slice(line);
-                    out.extend_from_slice(l2);
-                    out.extend_from_slice(l3);
+                    out.extend_from_slice(second_line);
+                    out.extend_from_slice(third_line);
                     curr += 1;
                     moving = true;
-                    i += 3;
+                    line_index += 3;
                     continue;
                 }
                 moving = false;
-                i += 3;
+                line_index += 3;
                 continue;
             }
             if line.starts_with(b"Do") {
-                let l2: &[u8] = if i + 1 < lines.len() {
-                    lines[i + 1]
+                let second_line: &[u8] = if line_index + 1 < lines.len() {
+                    lines[line_index + 1]
                 } else {
                     b""
                 };
                 out.extend_from_slice(line);
-                out.extend_from_slice(l2);
+                out.extend_from_slice(second_line);
                 out.push(b'\n');
                 break;
             }
             if moving {
                 out.extend_from_slice(line);
             }
-            i += 1;
+            line_index += 1;
         }
 
         write_file(alignmentfile, &out);
@@ -240,8 +240,8 @@ impl Trf {
     /// `BreakAlignments()`: split the alignment file into pages.
     fn break_alignments(&mut self, alignmentfile: &str) {
         let alignments = self.records.len();
-        let mut nfiles = alignments / EO_MAX_TBL;
-        if alignments % EO_MAX_TBL > 0 {
+        let mut nfiles = alignments / MAX_REPEATS_PER_TABLE;
+        if alignments % MAX_REPEATS_PER_TABLE > 0 {
             nfiles += 1;
         }
         if nfiles == 0 {
@@ -271,11 +271,11 @@ impl Trf {
 
         /* get heading lines */
         let mut headcnt = 0usize;
-        for i in 0..30 {
-            if i >= lines.len() {
+        for line_index in 0..30 {
+            if line_index >= lines.len() {
                 break;
             }
-            if lines[i].starts_with(b"F") {
+            if lines[line_index].starts_with(b"F") {
                 break;
             }
             headcnt += 1;
@@ -290,7 +290,7 @@ impl Trf {
             }
             out.extend_from_slice(format!("File {} of {}\n\n", file_no, nfiles).as_bytes());
 
-            for _ in 0..EO_MAX_TBL {
+            for _ in 0..MAX_REPEATS_PER_TABLE {
                 if idx >= lines.len() {
                     break;
                 }
@@ -298,12 +298,12 @@ impl Trf {
                 idx += 1;
                 let mut saw_done = false;
                 while idx < lines.len() {
-                    let l = lines[idx];
-                    if l.starts_with(b"F") || l.starts_with(b"D") {
-                        saw_done = l.starts_with(b"D");
+                    let line = lines[idx];
+                    if line.starts_with(b"F") || line.starts_with(b"D") {
+                        saw_done = line.starts_with(b"D");
                         break;
                     }
-                    out.extend_from_slice(l);
+                    out.extend_from_slice(line);
                     idx += 1;
                 }
                 if idx >= lines.len() || saw_done {
@@ -328,9 +328,9 @@ impl Trf {
         out.push_str("\nPlease cite:\nG. Benson,\n\"Tandem repeats finder: a program to analyze DNA sequences\"\nNucleic Acid Research(1999)\nVol. 27, No. 2, pp. 573-580.\n");
         let mut bytes = out.into_bytes();
         bytes.push(b'\n');
-        bytes.extend_from_slice(&self.hsequence);
-        bytes.extend_from_slice(self.hparameters.as_bytes());
-        bytes.extend_from_slice(self.hlength.as_bytes());
+        bytes.extend_from_slice(&self.header_sequence);
+        bytes.extend_from_slice(self.header_parameters.as_bytes());
+        bytes.extend_from_slice(self.header_length.as_bytes());
         bytes.extend_from_slice(b"</PRE>\n");
         bytes
     }
@@ -338,8 +338,8 @@ impl Trf {
     /// `OutputHTML()`.
     fn output_html(&self, tablefile: &str, alignmentfile: &str) {
         let alignments = self.records.len();
-        let mut nfiles = alignments / EO_MAX_TBL;
-        if alignments % EO_MAX_TBL > 0 {
+        let mut nfiles = alignments / MAX_REPEATS_PER_TABLE;
+        if alignments % MAX_REPEATS_PER_TABLE > 0 {
             nfiles += 1;
         }
         if nfiles == 0 {
@@ -349,64 +349,64 @@ impl Trf {
         const HEADER_ROW: &str = "<TR><TD WIDTH=140><CENTER>Indices</CENTER></TD><TD WIDTH=80><CENTER>Period<BR>Size </CENTER></TD><TD WIDTH=70><CENTER>Copy<BR>Number</CENTER></TD><TD WIDTH=70><CENTER>Consensus<BR>Size</CENTER></TD><TD WIDTH=70><CENTER>Percent<BR>Matches</CENTER></TD><TD WIDTH=70><CENTER>Percent<BR>Indels</CENTER></TD><TD WIDTH=60><CENTER>Score</CENTER></TD><TD WIDTH=40><CENTER>A</CENTER></TD><TD WIDTH=40><CENTER>C</CENTER></TD><TD WIDTH=40><CENTER>G</CENTER></TD><TD WIDTH=40><CENTER>T</CENTER></TD><TD WIDTH=70><CENTER>Entropy<BR>(0-2)</CENTER></TD></TR>\n";
 
         let mut curr = 0usize;
-        for i in 1..=nfiles {
-            let outfile = make_file_name(tablefile, i as i32);
-            let linkfile = make_file_name(alignmentfile, i as i32);
+        for page_number in 1..=nfiles {
+            let outfile = make_file_name(tablefile, page_number as i32);
+            let linkfile = make_file_name(alignmentfile, page_number as i32);
             /* the heading contains the raw sequence name, so it is kept as
             bytes and prepended to the (ASCII) body */
             let heading = self.output_heading(&outfile, alignmentfile);
             let mut out = String::new();
 
             out.push_str("\n<P><PRE>Tables:   ");
-            for j in 1..=nfiles {
-                if j != i {
-                    let namebuffer = make_file_name(tablefile, j as i32);
+            for page_number in 1..=nfiles {
+                if page_number != page_number {
+                    let namebuffer = make_file_name(tablefile, page_number as i32);
                     out.push_str(&format!(
                         "<A HREF=\"{}\" target=\"_self\">{}</A>   ",
-                        namebuffer, j
+                        namebuffer, page_number
                     ));
                 } else {
-                    out.push_str(&format!("{}   ", j));
+                    out.push_str(&format!("{}   ", page_number));
                 }
-                if j % 16 == 0 && j < nfiles {
+                if page_number % 16 == 0 && page_number < nfiles {
                     out.push_str("\n          ");
                 }
             }
 
             out.push_str(&format!(
                 "\n\nThis is table  {}  of  {}  ( {} repeats found )\n</PRE>",
-                i, nfiles, alignments
+                page_number, nfiles, alignments
             ));
             out.push_str("<PRE>\nClick on indices to view alignment\n");
             out.push_str("</PRE><A HREF=\"http://tandem.bu.edu/trf/trf.definitions.html#table\" target = \"explanation\">Table Explanation</A><BR><BR>\n");
             out.push_str("<TABLE BORDER=1 CELLSPACING=0 CELLPADDING=0>\n");
 
-            let mut j = 0usize;
-            while j < EO_MAX_TBL && curr < self.records.len() {
-                if j % 22 == 0 {
+            let mut record_in_page = 0usize;
+            while record_in_page < MAX_REPEATS_PER_TABLE && curr < self.records.len() {
+                if record_in_page % 22 == 0 {
                     out.push_str(HEADER_ROW);
                 }
-                let r = &self.records[curr];
+                let record = &self.records[curr];
                 out.push_str(&format!(
                     "<TR><TD><CENTER><A HREF=\"{}#{}\">{}--{}</A></CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{:1.1}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{:1.2}</CENTER></TD></TR>\n",
                     linkfile,
-                    r.reference,
-                    r.first,
-                    r.last,
-                    r.period,
-                    r.copies,
-                    r.size,
-                    r.matches,
-                    r.indels,
-                    r.score,
-                    r.acount,
-                    r.ccount,
-                    r.gcount,
-                    r.tcount,
-                    r.entropy
+                    record.reference,
+                    record.first,
+                    record.last,
+                    record.period,
+                    record.copies,
+                    record.size,
+                    record.matches,
+                    record.indels,
+                    record.score,
+                    record.a_count,
+                    record.c_count,
+                    record.g_count,
+                    record.t_count,
+                    record.entropy
                 ));
                 curr += 1;
-                j += 1;
+                record_in_page += 1;
             }
 
             if self.records.is_empty() {
@@ -420,23 +420,23 @@ impl Trf {
             }
 
             out.push_str("\n<P><PRE>Tables:   ");
-            for j in 1..=nfiles {
-                if j != i {
-                    let namebuffer = make_file_name(tablefile, j as i32);
+            for page_number in 1..=nfiles {
+                if page_number != page_number {
+                    let namebuffer = make_file_name(tablefile, page_number as i32);
                     out.push_str(&format!(
                         "<A HREF=\"{}\" target=\"_self\">{}</A>   ",
-                        namebuffer, j
+                        namebuffer, page_number
                     ));
                 } else {
-                    out.push_str(&format!("{}   ", j));
+                    out.push_str(&format!("{}   ", page_number));
                 }
-                if j % 16 == 0 && j < nfiles {
+                if page_number % 16 == 0 && page_number < nfiles {
                     out.push_str("\n          ");
                 }
             }
             out.push_str("\n</PRE>");
 
-            if i == nfiles {
+            if page_number == nfiles {
                 out.push_str("<P>The End!\n");
             }
 
@@ -454,15 +454,15 @@ impl Trf {
             return;
         }
 
-        for r in &self.records {
-            for m in r.first..=r.last {
-                self.sequence[m as usize] = b'N';
+        for record in &self.records {
+            for position in record.first..=record.last {
+                self.sequence[position as usize] = b'N';
             }
         }
 
-        /* `&hsequence[10]` skips the "Sequence: " prefix */
-        let header: &[u8] = if self.hsequence.len() > 10 {
-            &self.hsequence[10..]
+        /* `&header_sequence[10]` skips the "Sequence: " prefix */
+        let header: &[u8] = if self.header_sequence.len() > 10 {
+            &self.header_sequence[10..]
         } else {
             b""
         };
@@ -491,17 +491,17 @@ impl Trf {
     pub fn trf_clean(&mut self, tablefile: &str, alignmentfile: &str, maxsize: i32) {
         self.remove_by_size(maxsize);
         self.sort_by_index();
-        if !self.params.redundoff {
+        if !self.params.redundancy_removal_off {
             self.remove_redundancy();
         }
         self.sort_by_count();
 
-        if !self.params.htmloff {
+        if !self.params.html_output_off {
             self.clean_alignments(alignmentfile);
             self.break_alignments(alignmentfile);
             self.output_html(tablefile, alignmentfile);
         }
 
-        self.params.outputcount = self.records.len() as i32;
+        self.params.output_count = self.records.len() as i32;
     }
 }

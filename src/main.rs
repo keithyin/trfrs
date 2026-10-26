@@ -67,16 +67,16 @@ fn name_part(name: &str) -> String {
 
 /// `ParseInt()`: `strtol(str, &temp, 0)` plus a full consumption check.
 fn parse_int(s: &str) -> Option<i64> {
-    let t = s.trim_start();
-    if t.is_empty() {
+    let trimmed = s.trim_start();
+    if trimmed.is_empty() {
         return None;
     }
-    let (neg, rest) = if let Some(r) = t.strip_prefix('-') {
+    let (neg, rest) = if let Some(r) = trimmed.strip_prefix('-') {
         (true, r)
-    } else if let Some(r) = t.strip_prefix('+') {
+    } else if let Some(r) = trimmed.strip_prefix('+') {
         (false, r)
     } else {
-        (false, t)
+        (false, trimmed)
     };
     let (radix, digits) =
         if let Some(r) = rest.strip_prefix("0x").or_else(|| rest.strip_prefix("0X")) {
@@ -95,17 +95,17 @@ fn parse_int(s: &str) -> Option<i64> {
     if !digits.chars().all(|c| c.is_digit(radix)) {
         return None;
     }
-    let v = i64::from_str_radix(digits, radix).ok()?;
-    Some(if neg { -v } else { v })
+    let value = i64::from_str_radix(digits, radix).ok()?;
+    Some(if neg { -value } else { value })
 }
 
 /// `ParseUInt()`: successful conversion and a non negative value.
 fn parse_uint(s: &str, dest: &mut u32) -> bool {
     match parse_int(s) {
         Some(v) => {
-            let v = v as i32; /* the reference implementation truncates to int */
-            if v >= 0 {
-                *dest = v as u32;
+            let value = v as i32; /* the reference implementation truncates to int */
+            if value >= 0 {
+                *dest = value as u32;
                 true
             } else {
                 false
@@ -126,12 +126,12 @@ fn set_max_length(optarg: &str, maxperiod: &str, paramset: &mut ParamSet) -> Opt
     /* Note: the reference implementation (4.10.0) reads the value from av[8]
     here, i.e. the MaxPeriod argument, instead of optarg.  This behaviour is
     reproduced so that both programs allocate the same amount of memory. */
-    if !parse_uint(maxperiod, &mut paramset.maxwraplength) {
+    if !parse_uint(maxperiod, &mut paramset.max_wrap_length) {
         eprintln!("Error while parsing max TR length (option '-L') value");
         print_banner();
         return Some(1);
     }
-    paramset.maxwraplength = (paramset.maxwraplength as f64 * 1e6) as u32;
+    paramset.max_wrap_length = (paramset.max_wrap_length as f64 * 1e6) as u32;
     None
 }
 
@@ -155,11 +155,11 @@ fn real_main() -> i32 {
     };
 
     let mut paramset = ParamSet::default();
-    paramset.datafile = cli.datafile;
-    paramset.maskedfile = cli.maskedfile;
-    paramset.flankingsequence = cli.flankingsequence;
-    paramset.htmloff = cli.htmloff;
-    paramset.redundoff = cli.redundoff;
+    paramset.data_file = cli.data_file;
+    paramset.masked_file = cli.masked_file;
+    paramset.flanking_sequence = cli.flanking_sequence;
+    paramset.html_output_off = cli.html_output_off;
+    paramset.redundancy_removal_off = cli.redundancy_removal_off;
     paramset.ngs = cli.ngs;
 
     match cli.maxlength {
@@ -177,40 +177,40 @@ fn real_main() -> i32 {
     }
 
     /* get input parameters */
-    paramset.inputfilename = cli.file.clone();
-    paramset.outputprefix = name_part(&cli.file);
+    paramset.input_file_name = cli.file.clone();
+    paramset.output_prefix = name_part(&cli.file);
 
     /* validate these parameters */
     if !parse_uint(&cli.match_weight, &mut paramset.match_weight) {
-        paramset.endstatus =
+        paramset.end_status =
             Some("Error parsing match parameter. Value must be a positive integer.".into());
     } else if !parse_uint(&cli.mismatch, &mut paramset.mismatch) {
-        paramset.endstatus =
+        paramset.end_status =
             Some("Error parsing mismatch parameter. Value must be a positive integer.".into());
     } else if !parse_uint(&cli.indel, &mut paramset.indel) {
-        paramset.endstatus =
+        paramset.end_status =
             Some("Error parsing indel parameter. Value must be a positive integer.".into());
-    } else if !parse_uint(&cli.pm, &mut paramset.pm) {
-        paramset.endstatus =
+    } else if !parse_uint(&cli.pm, &mut paramset.match_probability_percent) {
+        paramset.end_status =
             Some("Error parsing PM parameter. Value must be a positive integer.".into());
-    } else if !parse_uint(&cli.pi, &mut paramset.pi) {
-        paramset.endstatus =
+    } else if !parse_uint(&cli.pi, &mut paramset.indel_probability_percent) {
+        paramset.end_status =
             Some("Error parsing PI parameter. Value must be a positive integer.".into());
     } else if !parse_uint(&cli.minscore, &mut paramset.minscore) {
-        paramset.endstatus =
+        paramset.end_status =
             Some("Error parsing Minscore parameter. Value must be a positive integer.".into());
     } else if !parse_uint(&cli.maxperiod, &mut paramset.maxperiod)
         || paramset.maxperiod > 2000
         || paramset.maxperiod == 0
     {
-        paramset.endstatus = Some(
+        paramset.end_status = Some(
             "Error parsing MaxPeriod parameter. Value must be between 1 and 2000, inclusive."
                 .into(),
         );
     }
 
     /* error if any validation failed */
-    if let Some(status) = paramset.endstatus.clone() {
+    if let Some(status) = paramset.end_status.clone() {
         println!("{}\n", status);
         println!(
             "Please run with -h for help, or visit https://tandem.bu.edu/trf/trf.unix.help.html"
@@ -218,11 +218,11 @@ fn real_main() -> i32 {
         return 1;
     }
 
-    /* paramset.datafile must be set if HTMLoff is set */
-    paramset.datafile |= paramset.htmloff;
+    /* paramset.data_file must be set if HTMLoff is set */
+    paramset.data_file |= paramset.html_output_off;
 
     if paramset.ngs {
-        paramset.datafile = true;
+        paramset.data_file = true;
     } else {
         print_banner();
     }
@@ -230,7 +230,7 @@ fn real_main() -> i32 {
     if cli.file == "-" {
         if paramset.ngs {
             paramset.use_stdin = true;
-            paramset.htmloff = true;
+            paramset.html_output_off = true;
         } else {
             eprint!("\n\nPlease use -ngs flag if piping input into TRF");
             eprintln!();
@@ -241,12 +241,12 @@ fn real_main() -> i32 {
     /* call the function that controls execution */
     control::trf_control_routine(&mut paramset);
 
-    if paramset.outputcount == 0 && paramset.endstatus.is_none() {
+    if paramset.output_count == 0 && paramset.end_status.is_none() {
         if !paramset.stdout_closed {
             println!("No TRs found. Exiting...");
         }
         return 0;
-    } else if let Some(status) = paramset.endstatus.clone() {
+    } else if let Some(status) = paramset.end_status.clone() {
         if !paramset.stdout_closed {
             println!("Error processing input: {}", status);
         }
