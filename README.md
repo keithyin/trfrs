@@ -13,7 +13,7 @@
 - 支持 FASTA 单序列/多序列文件、标准输入管道
 - 保留上游全部选项与退出码（含 `getopt_long_only` 风格的长选项与短选项合并）
 
-原始 C 程序作者：Gary Benson（1999–2020），详见 <https://tandem.bu.edu/trf/trf.unix.help.html>。
+原始 C 程序作者：Gary Benson（1999 年首发，2020 年最后更新），详见 <https://tandem.bu.edu/trf/trf.unix.help.html>。
 
 ## 环境要求
 
