@@ -138,9 +138,12 @@ impl Trf {
                 if other_index >= self.records.len() {
                     break;
                 }
-                let iinterval = self.records[record_index].last - self.records[record_index].first + 1;
-                let jinterval = self.records[other_index].last - self.records[other_index].first + 1;
-                let overlap = interval_overlap(&self.records[record_index], &self.records[other_index]);
+                let iinterval =
+                    self.records[record_index].last - self.records[record_index].first + 1;
+                let jinterval =
+                    self.records[other_index].last - self.records[other_index].first + 1;
+                let overlap =
+                    interval_overlap(&self.records[record_index], &self.records[other_index]);
                 if overlap == 0 {
                     break;
                 }
@@ -358,17 +361,17 @@ impl Trf {
             let mut out = String::new();
 
             out.push_str("\n<P><PRE>Tables:   ");
-            for page_number in 1..=nfiles {
-                if page_number != page_number {
-                    let namebuffer = make_file_name(tablefile, page_number as i32);
+            for link_page in 1..=nfiles {
+                if link_page != page_number {
+                    let namebuffer = make_file_name(tablefile, link_page as i32);
                     out.push_str(&format!(
                         "<A HREF=\"{}\" target=\"_self\">{}</A>   ",
-                        namebuffer, page_number
+                        namebuffer, link_page
                     ));
                 } else {
-                    out.push_str(&format!("{}   ", page_number));
+                    out.push_str(&format!("{}   ", link_page));
                 }
-                if page_number % 16 == 0 && page_number < nfiles {
+                if link_page % 16 == 0 && link_page < nfiles {
                     out.push_str("\n          ");
                 }
             }
@@ -420,17 +423,17 @@ impl Trf {
             }
 
             out.push_str("\n<P><PRE>Tables:   ");
-            for page_number in 1..=nfiles {
-                if page_number != page_number {
-                    let namebuffer = make_file_name(tablefile, page_number as i32);
+            for link_page in 1..=nfiles {
+                if link_page != page_number {
+                    let namebuffer = make_file_name(tablefile, link_page as i32);
                     out.push_str(&format!(
                         "<A HREF=\"{}\" target=\"_self\">{}</A>   ",
-                        namebuffer, page_number
+                        namebuffer, link_page
                     ));
                 } else {
-                    out.push_str(&format!("{}   ", page_number));
+                    out.push_str(&format!("{}   ", link_page));
                 }
-                if page_number % 16 == 0 && page_number < nfiles {
+                if link_page % 16 == 0 && link_page < nfiles {
                     out.push_str("\n          ");
                 }
             }
