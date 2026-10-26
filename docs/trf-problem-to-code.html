@@ -1,0 +1,1580 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>从问题到代码 · TRF 串联重复检测算法读本</title>
+<style>
+:root{
+  --paper:#f6f7f5;
+  --card:#ffffff;
+  --ink:#1a2220;
+  --muted:#5d6b68;
+  --line:#d8dedb;
+  --line-soft:#e8ecea;
+  --teal:#0d6b63;
+  --teal-soft:#e5f1ee;
+  --amber:#8f5d10;
+  --amber-soft:#fbf2de;
+  --red:#9a3b2c;
+  --red-soft:#fbeae6;
+  --code-bg:#f1f3f1;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --serif:"Noto Serif SC","Source Han Serif SC","Songti SC",Georgia,serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font:16px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","Source Han Sans SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.rail{position:sticky;top:0;z-index:20;background:rgba(246,247,245,.95);border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}
+.rail-in{max-width:960px;margin:0 auto;padding:9px 26px;display:flex;gap:16px;align-items:center;overflow-x:auto;font-size:12.5px;white-space:nowrap}
+.rail-in b{font-family:var(--serif);font-size:13px;letter-spacing:.02em;color:var(--teal)}
+.rail-in a{color:var(--muted);text-decoration:none;padding:2px 0;border-bottom:1px solid transparent}
+.rail-in a:hover{color:var(--ink);border-bottom-color:var(--teal)}
+.page{max-width:960px;margin:0 auto;padding:0 26px 140px}
+
+/* cover */
+.hero{padding:66px 0 34px;border-bottom:3px double var(--line)}
+.kicker{font-size:11.5px;letter-spacing:.22em;color:var(--teal);margin:0 0 14px;font-weight:600}
+h1{font-family:var(--serif);font-size:42px;line-height:1.28;margin:0 0 14px;letter-spacing:-.01em;font-weight:700}
+.lede{font-size:17.5px;line-height:1.7;color:#3c4a47;max-width:44em;margin:0 0 22px}
+.hero-meta{display:flex;flex-wrap:wrap;gap:10px 26px;font-size:12.5px;color:var(--muted)}
+.hero-meta code{background:var(--code-bg)}
+
+/* headings */
+h2{font-family:var(--serif);font-size:27px;line-height:1.4;margin:64px 0 12px;padding-top:14px;border-top:1px solid var(--line);letter-spacing:-.01em}
+h2 .badge{display:inline-block;font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;color:#fff;background:var(--teal);border-radius:5px;padding:3px 8px;vertical-align:4px;margin-right:12px;font-weight:600}
+h3{font-family:var(--serif);font-size:19px;margin:34px 0 10px;letter-spacing:0}
+h4{font-size:15px;margin:22px 0 8px;color:#33403d;font-weight:700}
+p{margin:0 0 14px}
+ul,ol{margin:0 0 16px;padding-left:24px}
+li{margin:5px 0}
+li::marker{color:var(--teal)}
+strong{font-weight:700}
+em{font-style:normal;background:linear-gradient(transparent 62%,#d7ece6 62%);padding:0 1px}
+a{color:var(--teal)}
+code{font-family:var(--mono);font-size:.875em;background:var(--code-bg);border:1px solid var(--line-soft);border-radius:4px;padding:.06em .32em}
+
+/* components */
+.trio{display:grid;grid-template-columns:1fr 1fr 1fr;margin:20px 0 26px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)}
+.trio>div{padding:15px 17px 13px;border-right:1px solid var(--line);font-size:14.5px;line-height:1.72}
+.trio>div:last-child{border-right:0}
+.trio h4{margin:0 0 8px;font-size:11.5px;letter-spacing:.16em;color:var(--muted);font-weight:700}
+.trio p{margin:0 0 8px}
+.trio p:last-child{margin:0}
+.trio .t-problem{background:var(--teal-soft)}
+.trio .t-method{background:var(--card)}
+.trio .t-why{background:var(--amber-soft)}
+
+.key{border-left:3px solid var(--teal);background:var(--card);padding:13px 18px;margin:20px 0;border-radius:0 10px 10px 0}
+.key p:last-child{margin:0}
+.key .lbl{font-size:11.5px;letter-spacing:.16em;color:var(--teal);font-weight:700;display:block;margin-bottom:4px}
+.warn{border-left:3px solid var(--red);background:var(--red-soft);padding:13px 18px;margin:20px 0;border-radius:0 10px 10px 0;font-size:14.8px}
+.warn p:last-child{margin:0}
+.warn .lbl{font-size:11.5px;letter-spacing:.16em;color:var(--red);font-weight:700;display:block;margin-bottom:4px}
+.note{font-size:14px;color:var(--muted);border-top:1px dashed var(--line);padding-top:10px;margin:18px 0}
+
+pre{margin:0 0 18px;background:var(--code-bg);border:1px solid var(--line);border-radius:9px;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.62}
+pre b{color:var(--teal);font-weight:600}
+pre i{color:var(--muted);font-style:normal}
+.file{font-family:var(--mono);font-size:11.5px;color:var(--muted);letter-spacing:.03em;margin:0 0 6px;display:block}
+.anchor{display:inline-block;font-family:var(--mono);font-size:11.5px;color:var(--teal);background:var(--teal-soft);border:1px solid #cfe4df;border-radius:4px;padding:0 5px;white-space:nowrap}
+
+.math{font-family:var(--mono);font-size:14px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:14px 18px;margin:16px 0;line-height:1.9;overflow-x:auto}
+.math .c{color:var(--muted)}
+
+table{border-collapse:collapse;width:100%;margin:16px 0 22px;font-size:14px;background:var(--card)}
+th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+th{background:#eef1ef;font-weight:700;font-size:13px}
+td code{white-space:nowrap}
+.tbl-cap{font-size:12.5px;color:var(--muted);margin:-14px 0 22px}
+
+details{border:1px solid var(--line);border-radius:9px;background:var(--card);padding:12px 16px;margin:12px 0}
+details summary{cursor:pointer;font-weight:600;font-size:14.5px}
+details[open] summary{margin-bottom:10px;color:var(--teal)}
+details p:last-child{margin-bottom:0}
+
+figure{margin:22px 0 26px}
+figure svg{display:block;width:100%;height:auto;background:var(--card);border:1px solid var(--line);border-radius:10px}
+figcaption{font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.65}
+svg text{font-family:-apple-system,"Noto Sans SC",sans-serif;font-size:12px;fill:#33403d}
+svg .mono{font-family:var(--mono);font-size:11px}
+svg .box{fill:#fff;stroke:#c9d3cf;stroke-width:1.2}
+svg .box-a{fill:var(--teal-soft);stroke:#9dc9c0;stroke-width:1.2}
+svg .box-b{fill:var(--amber-soft);stroke:#dfc38c;stroke-width:1.2}
+svg .ln{stroke:#9aa8a4;stroke-width:1.2;fill:none}
+svg .dash{stroke:#9aa8a4;stroke-width:1.2;fill:none;stroke-dasharray:5 4}
+svg .hot{stroke:var(--teal);stroke-width:2;fill:none}
+svg .band{fill:#e8f2ef;stroke:none}
+svg .lbl{font-size:10.5px;fill:#6b7875}
+
+.split{display:grid;grid-template-columns:1fr 1fr;gap:22px;margin:18px 0}
+.split>div{min-width:0}
+
+.qa{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:16px 18px;margin:16px 0}
+.qa .qno{font-family:var(--mono);font-size:11.5px;color:var(--teal);letter-spacing:.1em}
+
+footer{margin-top:80px;border-top:1px solid var(--line);padding-top:24px;font-size:13px;color:var(--muted)}
+
+@media (max-width:800px){
+  h1{font-size:32px}
+  h2{font-size:23px}
+  .trio{grid-template-columns:1fr}
+  .trio>div{border-right:0;border-bottom:1px solid var(--line)}
+  .split{grid-template-columns:1fr}
+  .page{padding:0 18px 100px}
+  .rail-in{padding:8px 18px}
+}
+@media print{
+  .rail{display:none}
+  body{background:#fff}
+  h2{break-after:avoid}
+  .trio,.qa,pre,table,figure{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+
+<nav class="rail"><div class="rail-in">
+  <b>从问题到代码</b>
+  <a href="#ch1">1 问题的形状</a>
+  <a href="#ch2">2 结构决定</a>
+  <a href="#q1">Q1 候选</a>
+  <a href="#q2">Q2 记账</a>
+  <a href="#q3">Q3 判据</a>
+  <a href="#q4">Q4 比对</a>
+  <a href="#q5">Q5 带宽</a>
+  <a href="#q6">Q6 回溯</a>
+  <a href="#q7">Q7 周期</a>
+  <a href="#q8">Q8 冗余</a>
+  <a href="#ch3">3 实现</a>
+  <a href="#cheat">速查</a>
+</div></nav>
+
+<div class="page">
+
+<header class="hero">
+  <p class="kicker">TRF 4.10.0 · RUST 移植版 · 算法读本</p>
+  <h1>从问题到代码<br>串联重复检测的八个决定</h1>
+  <p class="lede">本书不按代码顺序讲解。本书先问：要解决什么问题。再问：用了什么手段。最后问：这个手段为什么成立。只有把这三问答完，才看代码落在哪里。</p>
+  <div class="hero-meta">
+    <span>对象：<code>src/scan.rs</code> <code>src/algo.rs</code> <code>src/clean.rs</code></span>
+    <span>读者：有基础算法知识，读过或没读过原程序</span>
+    <span>篇幅：8 个问题 + 2 章实现</span>
+  </div>
+</header>
+
+<h2 id="ch0"><span class="badge">§0</span>读法</h2>
+
+<p>串联重复检测有一个共同的困难：你事先不知道要找的东西有多长、从哪里开始、允许多少错误。任何"先假设再验证"的方法都要面对这个循环。TRF 的做法是把循环拆开，让便宜的手段先跑，让昂贵的手段后跑。</p>
+
+<p>因此本书的组织单位不是模块，而是<strong>决定</strong>。每个决定都写成一张三问卡：</p>
+
+<div class="trio">
+  <div class="t-problem"><h4>问题</h4><p>如果不解决，会卡在哪里。问题只用现象描述，不涉及代码。</p></div>
+  <div class="t-method"><h4>手段</h4><p>选择的做法。先给抽象形式，再给参数与边界。</p></div>
+  <div class="t-why"><h4>理由</h4><p>这个手段为什么成立。给论证、给量级、给失效条件。</p></div>
+</div>
+
+<p>三问之后才是<em>落点</em>：哪一段代码实现了它，关键变量叫什么。这样读，代码是结论的注脚，不是起点。</p>
+
+<h3>三条阅读路线</h3>
+<table>
+<tr><th style="width:16%">目的</th><th>路线</th></tr>
+<tr><td>只想懂原理</td><td>§1 → §2 → Q1 到 Q8 的三问卡。跳过所有代码块。</td></tr>
+<tr><td>要改动程序</td><td>全部。重点看每章末尾的"落点"和 §3 的内存布局。</td></tr>
+<tr><td>要核对输出</td><td>§2.5 → Q6 → Q7 → Q8 → §4 的真实例子走查 → §5 速查表。</td></tr>
+</table>
+
+<h3>记号</h3>
+<table>
+<tr><th style="width:14%">记号</th><th style="width:40%">含义</th><th>典型值</th></tr>
+<tr><td><code>n</code></td><td>序列长度，单位 bp</td><td>测试用例 35 到 1225</td></tr>
+<tr><td><code>d</code></td><td>距离。两个相同片段之间的间隔。候选周期</td><td>1 到 <code>maxdistance</code></td></tr>
+<tr><td><code>s</code></td><td>模式长度。比对时使用的模式串长度</td><td>等于 <code>d</code>，之后被共识长度替换</td></tr>
+<tr><td><code>k</code></td><td>元组长度。指纹用的短串长度</td><td>4、5、7</td></tr>
+<tr><td><code>α β δ</code></td><td>匹配得分、错配得分、空位得分</td><td>+2、−5、−7</td></tr>
+<tr><td><code>w</code></td><td>带半径。比对时只算中心线两侧各 <code>w</code> 列</td><td>6 到 74</td></tr>
+<tr><td><code>p</code></td><td>空位概率，等于 <code>PI/100</code></td><td>0.10</td></tr>
+</table>
+
+<h3>写作约定</h3>
+<p>本书按 ASD-STE100 的简化原则写作。大约 80% 的句子遵守全部规则。其余句子用于推导和例外说明，但仍保持一词一义。</p>
+<ul>
+  <li>一句一事。长句拆开。技术说明句不超过 30 字，推导句不超过 45 字。</li>
+  <li>用主动语态。主语明确。不省略主语。</li>
+  <li>术语首次出现给出英文，之后只用中文。同一概念只有一个名字。</li>
+  <li>先定义，后使用。定义句用"称……为……"。</li>
+  <li>数字给单位。比例给分母。</li>
+  <li>不用反问，不用排比，不用情绪词。比喻只在必要时用一次，用完立即给定义。</li>
+</ul>
+
+<h2 id="ch1"><span class="badge">§1</span>问题的形状</h2>
+
+<p>先把生物学问题翻译成字符串问题。翻译之后，才能谈算法。</p>
+
+<h3>1.1 目标输出</h3>
+
+<p>输入是一条 DNA 序列 <code>S</code>。字母表是 {A, C, G, T}，另外可能有 N 等未知字符。程序输出一组记录。每条记录有四个核心字段：</p>
+
+<table>
+<tr><th style="width:18%">字段</th><th style="width:26%">含义</th><th>例子</th></tr>
+<tr><td><code>first</code>–<code>last</code></td><td>重复区间的起止位置，1 起算，闭区间</td><td><code>1--35</code></td></tr>
+<tr><td><code>period</code></td><td>周期，即重复单元的间距</td><td><code>7</code></td></tr>
+<tr><td><code>copies</code></td><td>拷贝数，可以有小数</td><td><code>5.0</code></td></tr>
+<tr><td><code>size</code></td><td>共识序列长度，通常等于周期</td><td><code>7</code></td></tr>
+</table>
+
+<p>另有匹配率、空位率、分数、碱基比例、熵和共识模式串。这些字段用于筛选和解释，不参与定位。</p>
+
+<h3>1.2 四个未知</h3>
+
+<p>称区间 <code>[a, b]</code> 为周期 <code>d</code> 的串联重复，当且仅当：把 <code>[a, b]</code> 切成若干段长为 <code>d</code> 的块，相邻块彼此高度相似。</p>
+
+<p>"高度相似"不能停留在文字上。它必须能算出一个数，并且能和一个门槛比较。本书后面用局部比对分数承担这个角色。</p>
+
+<p>定义里藏着四个未知：</p>
+<ol>
+  <li><strong>起点</strong> <code>a</code>。重复可能从任意位置开始。</li>
+  <li><strong>终点</strong> <code>b</code>。重复可能在任意位置结束，末端常常不完整。</li>
+  <li><strong>周期</strong> <code>d</code>。范围是 1 到 2000。</li>
+  <li><strong>容忍度</strong>。真实重复有错配和插入缺失，相似不是相等。</li>
+</ol>
+
+<p>四个未知相乘，就是搜索空间。下一节说明它有多大。</p>
+
+<h3>1.3 为什么不能直接枚举</h3>
+
+<p>最直接的做法是：枚举起点 <code>a</code> 和周期 <code>d</code>，对每一对做一次比对，看分数是否够高。</p>
+
+<div class="math">
+对数 = n × D <span class="c">（n 个起点，D 个周期）</span><br>
+单次代价 ≈ L × d <span class="c">（L 是比对的长度）</span><br>
+总计 ≈ n × D × L × d
+</div>
+
+<p>代入一个不算大的例子。取 <code>n = 10⁶</code>（一条细菌基因组），<code>D = 2000</code>，<code>L = 100</code>，<code>d = 100</code>。总计约 2 × 10¹³ 次单元格计算。每次计算要做三次加法和三次比较。这个量级在现代 CPU 上需要数小时到数天。人类基因组的单条染色体是 2.5 × 10⁸ bp，还要再放大 250 倍。</p>
+
+<p>结论很硬：不能对每个位置都做比对。绝大多数位置根本没有重复。必须先有一个<em>廉价手段</em>，把候选缩小到千分之一以下。</p>
+
+<h3>1.4 判别标准要满足三条</h3>
+
+<ol>
+  <li><strong>可计算</strong>。给定区间和周期，能在常数或近常数时间内算出。</li>
+  <li><strong>可比较</strong>。不同候选之间能排序，能定门槛。</li>
+  <li><strong>可解释</strong>。门槛有概率含义。否则参数无法迁移到新物种。</li>
+</ol>
+
+<p>这三条要求指向同一个结构：先算分数，再用随机模型给分数定门槛。§2 说明如何把这个结构铺开。</p>
+
+<h2 id="ch2"><span class="badge">§2</span>四个结构性决定</h2>
+
+<p>把问题拆成两级，是整本书的主线。第一级便宜，负责筛。第二级昂贵，负责定。两级之间用一条窄通道连接。通道越窄，总成本越低。</p>
+
+<figure>
+<svg viewBox="0 0 900 360" role="img" aria-label="两级流水线示意图">
+  <defs>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#9aa8a4"/></marker>
+    <marker id="ar2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0 0 L10 5 L0 10 z" fill="#0d6b63"/></marker>
+  </defs>
+
+  <text x="20" y="18" class="lbl">第一级：宽进，只产生候选</text>
+  <text x="880" y="18" text-anchor="end" class="lbl">第二级：严出，只做判定</text>
+
+  <rect class="box" x="20" y="28" width="190" height="86" rx="9"/>
+  <text x="115" y="56" text-anchor="middle" style="font-size:13px;font-weight:600">元组扫描</text>
+  <text x="115" y="76" text-anchor="middle" class="lbl">滚动编码 + 哈希链</text>
+  <text x="115" y="94" text-anchor="middle" class="lbl">成本 O(n × 候选数)</text>
+
+  <rect class="box" x="240" y="28" width="190" height="86" rx="9"/>
+  <text x="335" y="56" text-anchor="middle" style="font-size:13px;font-weight:600">距离记账</text>
+  <text x="335" y="76" text-anchor="middle" class="lbl">每个 d 一张滑窗表</text>
+  <text x="335" y="94" text-anchor="middle" class="lbl">成本 摊销 O(1)</text>
+
+  <rect class="box-b" x="460" y="28" width="190" height="86" rx="9"/>
+  <text x="555" y="56" text-anchor="middle" style="font-size:13px;font-weight:600">统计判据</text>
+  <text x="555" y="76" text-anchor="middle" class="lbl">等待时间 / 证据和 / 竞争</text>
+  <text x="555" y="94" text-anchor="middle" class="lbl">成本 O(活跃距离数)</text>
+
+  <rect class="box-a" x="680" y="28" width="190" height="86" rx="9"/>
+  <text x="775" y="56" text-anchor="middle" style="font-size:13px;font-weight:600">环绕 DP</text>
+  <text x="775" y="76" text-anchor="middle" class="lbl">带状 + 重新居中</text>
+  <text x="775" y="94" text-anchor="middle" class="lbl">成本 O(L × w)</text>
+
+  <line class="ln" x1="212" y1="71" x2="236" y2="71" marker-end="url(#ar)"/>
+  <line class="ln" x1="432" y1="71" x2="456" y2="71" marker-end="url(#ar)"/>
+  <line class="ln" x1="652" y1="71" x2="676" y2="71" marker-end="url(#ar)"/>
+
+  <path class="dash" d="M666 104 C 650 154, 588 154, 574 104" marker-end="url(#ar2)"/>
+  <text x="620" y="172" text-anchor="middle" class="lbl">回写：已报告区间、已知最佳周期</text>
+
+  <line class="ln" x1="775" y1="116" x2="775" y2="234" marker-end="url(#ar)"/>
+
+  <rect class="box-a" x="680" y="240" width="190" height="78" rx="9"/>
+  <text x="775" y="268" text-anchor="middle" style="font-size:13px;font-weight:600">共识 + 重对齐</text>
+  <text x="775" y="288" text-anchor="middle" class="lbl">投票得共识</text>
+  <text x="775" y="304" text-anchor="middle" class="lbl">再跑一次 DP</text>
+
+  <rect class="box" x="460" y="240" width="190" height="78" rx="9"/>
+  <text x="555" y="268" text-anchor="middle" style="font-size:13px;font-weight:600">统计与记录</text>
+  <text x="555" y="288" text-anchor="middle" class="lbl">双指针 + 距离直方图</text>
+  <text x="555" y="304" text-anchor="middle" class="lbl">周期取众数</text>
+
+  <rect class="box" x="240" y="240" width="190" height="78" rx="9"/>
+  <text x="335" y="268" text-anchor="middle" style="font-size:13px;font-weight:600">去冗余</text>
+  <text x="335" y="288" text-anchor="middle" class="lbl">重叠 ≥ 90% 且分数不优</text>
+  <text x="335" y="304" text-anchor="middle" class="lbl">同步重写明细</text>
+
+  <rect class="box" x="20" y="240" width="190" height="78" rx="9"/>
+  <text x="115" y="268" text-anchor="middle" style="font-size:13px;font-weight:600">输出</text>
+  <text x="115" y="288" text-anchor="middle" class="lbl">.dat / .html / .mask</text>
+  <text x="115" y="304" text-anchor="middle" class="lbl">-ngs 只写标准输出</text>
+
+  <line class="ln" x1="678" y1="279" x2="654" y2="279" marker-end="url(#ar)"/>
+  <line class="ln" x1="458" y1="279" x2="434" y2="279" marker-end="url(#ar)"/>
+  <line class="ln" x1="238" y1="279" x2="214" y2="279" marker-end="url(#ar)"/>
+
+  <text x="20" y="346" class="lbl">实线 = 数据流　　虚线 = 反馈　　第二级只处理第一级放行的候选</text>
+</svg>
+<figcaption>图 1。两级流水线。第一级只产生候选，不做判定。第二级才做比对。虚线是反馈：已经报告过的区间和已知的最佳周期会回到判据，避免重复劳动。</figcaption>
+</figure>
+
+<h3>2.1 决定一：先证据，后比对</h3>
+
+<div class="trio">
+  <div class="t-problem"><h4>问题</h4><p>对每个位置都做比对，成本是 n × D × L。算不完。</p></div>
+  <div class="t-method"><h4>手段</h4><p>用短串精确匹配产生"这里可能有周期 d"的证据。只有拿到证据的距离才进入比对。</p></div>
+  <div class="t-why"><h4>理由</h4><p>真重复几乎必然留下精确的短串匹配。随机序列很少留下长串匹配。短串匹配的次数和 4<sup>−k</sup> 成正比。</p></div>
+</div>
+
+<div class="key"><span class="lbl">示例</span>
+<p>先交代数据。<code>tests/data/small_test.fasta</code> 的第一条记录（<code>&gt;0</code>）长 35 bp，是 7 bp 单元 <code>TCATCGG</code> 首尾相接重复 5 次：</p>
+
+<pre>位置 1     7 8     14 15     21 22     28 29     35
+     TCATCGG TCATCGG TCATCGG TCATCGG TCATCGG
+     └──7──┘ └──7──┘ └──7──┘ └──7──┘ └──7──┘</pre>
+
+<p>接下来解释"证据登记"数的是什么。扫描到位置 i 时，程序取以 i 结尾的 4 元组（默认参数下第一档元组尺寸是 4），在历史链表里查找同样的 4 元组上次出现在哪。每找到一个旧位置 j，就记一笔：距离 d = i − j 的户头加一次登记。这条路径是 <code>process_candidate()</code> → <code>add_tuple_match_to_distance_entry()</code>，只记账，不做任何判断。本序列的重复距离 7、14、21、28 都不超过元组尺寸 4 的管辖上限 29，所以每一次登记都来自 4 元组，5 元组和 7 元组在这里一次也没有插手。</p>
+
+<p>登记次数可以手工核对。完整的 4 元组最早结束于位置 4，最晚结束于位置 35。对距离 d，能配上对的两个 4 元组，前一端最早在 4、最晚在 35 − d，所以登记次数 = (35 − d) − 4 + 1 = 32 − d。比如 d = 7：结束于位置 4 的 <code>TCAT</code> 配结束于位置 11 的，结束于位置 5 的 <code>CATC</code> 配结束于位置 12 的……结束于位置 28 的 <code>TCGG</code> 配结束于位置 35 的，恰好 25 对。</p>
+
+<p>再对程序做插桩统计，实测数字与上式完全一致：</p>
+<table>
+<tr><th style="width:20%">距离 d</th><th style="width:22%">登记次数<br><span style="font-weight:400;font-size:12px">手工 = 32 − d</span></th><th style="width:22%">进入比对的次数</th><th>说明</th></tr>
+<tr><td>7</td><td>25</td><td>1（位置 12）</td><td>位置 12 时攒够判据，开出第一张矩阵</td></tr>
+<tr><td>14</td><td>18</td><td>1（位置 19）</td><td>同样只开一张矩阵</td></tr>
+<tr><td>21</td><td>11</td><td>1（位置 27）</td><td>同样只开一张矩阵</td></tr>
+<tr><td>28</td><td>4</td><td>0</td><td>序列太短，判据始终没攒够</td></tr>
+</table>
+<p>"进入比对"指的是通过全部统计判据、真正启动环绕 DP 的次数，对应 <code>criteria_count[d]</code>。同一距离开过一次矩阵后，其覆盖区间内的后续命中会被 <code>distance_seen</code> 表挡住，不再重复比对，所以每个 d 至多 1 次。58 次登记换 3 张矩阵，约 19 比 1。没有第一级，每个位置、每个周期都要开一张矩阵。放到基因组上，差距就是 1.3 节算出的那笔账。</p>
+
+<details>
+<summary>插桩是怎么做的（可复现）</summary>
+<p>临时改 <code>src/scan.rs</code> 的 <code>process_candidate()</code>，在两处加打印：函数开头打登记，通过判据、即将开比对的地方打比对。然后单独构造一条序列编译运行，用 awk 汇总。</p>
+<pre><span class="file">src/scan.rs（临时改动，测完还原）</span>fn process_candidate(&amp;mut self, position: i32, distance: i32, tuple_size: i32) {
+    eprintln!("REG {} {}", position, distance);   <i>// 插桩 1：每次证据登记</i>
+    self.add_tuple_match_to_distance_entry(position, tuple_size, distance);
+    ...
+    <i>// 通过全部判据之后、启动环绕 DP 之前：</i>
+    eprintln!("ALIGN {} {}", position, distance); <i>// 插桩 2：进入比对</i></pre>
+<pre><span class="file">shell</span>printf '&gt;0\nTCATCGGTCATCGGTCATCGGTCATCGGTCATCGG\n' &gt; seq0.fasta
+cargo build --release
+./target/release/trfrs seq0.fasta 2 7 7 80 10 50 200 -h -m -d 2&gt; probe.txt
+awk '$2=="REG"   {c[$3]++}
+     $2=="ALIGN" {a[$3]++}
+     END {for (d in c) print d, c[d], a[d]+0}' probe.txt | sort -n</pre>
+<p>打印格式是 <code>REG 位置 距离</code> 和 <code>ALIGN 位置 距离</code>，awk 里 <code>c[$3]</code> 取第三列（距离）计数。实测输出为 <code>7 25 1</code>、<code>14 18 1</code>、<code>21 11 1</code>、<code>28 4 0</code>，与上面的表格一致。注意插桩的打印走标准错误，运行时用 <code>2&gt;</code> 单独收走，不污染正常输出。</p>
+</details>
+</div>
+
+<p>这个决定有一个代价。短串匹配是必要条件，不是充分条件。证据会带来误报。误报必须由第二级和统计判据清掉。整本书的其余部分，都在处理这个代价。</p>
+
+<h3>2.2 决定二：把周期变成距离</h3>
+
+<div class="trio">
+  <div class="t-problem"><h4>问题</h4><p>周期是待求量。如果把它当未知数，比对就要对每个 d 重做。</p></div>
+  <div class="t-method"><h4>手段</h4><p>不先求周期。先记录"位置 i 与位置 i−d 有相同短串"这个事实。d 就是距离。周期从距离里长出来。</p></div>
+  <div class="t-why"><h4>理由</h4><p>周期是距离的一种。反过来不成立，距离不一定是周期。这个不对称让"记账"成为可能：按 d 建表，只增加计数，不做判断。</p></div>
+</div>
+
+<div class="key"><span class="lbl">示例</span>
+<p>还是这条 35 bp 序列。位置 4 的 <code>TCAT</code> 在位置 11、18、25、32 再次出现。程序记下四个距离：7、14、21、28，各立一个户头，不做任何判断。</p>
+<p>四本账走向不同。7 的账先攒够，触发比对。14 和 21 的账后攒够，也各触发一次。28 的账始终没攒够，窗口滑过之后清零。周期这个词要到直方图阶段才出现，而且最后写进报告的周期由比对结果决定，不由任何一笔账决定。</p>
+</div>
+
+<p>这一步把"搜索参数"换成了"索引键"。表按 d 建，共 <code>maxdistance</code> 张。每张表只装落在滑动窗口内的证据。这个结构在 Q2 展开。</p>
+
+<h3>2.3 决定三：门槛来自随机模型</h3>
+
+<div class="trio">
+  <div class="t-problem"><h4>问题</h4><p>证据数量多少算多？门槛不能靠人工试错。</p></div>
+  <div class="t-method"><h4>手段</h4><p>建一个随机序列模型：每个位置以 <code>PM/100</code> 的概率与配对位置相同，以 <code>PI/100</code> 的概率发生插入缺失。用模拟求分位数，存成表。</p></div>
+  <div class="t-why"><h4>理由</h4><p>门槛要有概率含义，才能迁移到新数据。表比分位数公式更容易实现，也更容易复现原程序。</p></div>
+</div>
+
+<div class="key"><span class="lbl">示例</span>
+<p>d = 7 的门槛是：等待 18，证据和 5。看一个真候选怎么过线。</p>
+<ul>
+<li>位置 11，第一条证据到账：4 个匹配碱基，差 1 个，不过线。</li>
+<li>位置 12，相邻命中合并成 5 个碱基，过线。</li>
+</ul>
+<p>换成一条随机序列：两个指定位置共享一个 4 元组的概率是 1/256。一次孤立命中只记 4 个碱基，多数直接卡在证据和上。就算偶然凑够，第一条证据也未必落在窗口打开后的 18 个位置之内。两道锁都要过，随机命中很难连续通过。</p>
+</div>
+
+<p>这两个参数只出现在门槛里，不出现在分数里。这一点在 2.4 说明。</p>
+
+<h3>2.4 决定四：报告口径统一</h3>
+
+<div class="trio">
+  <div class="t-problem"><h4>问题</h4><p>同一段重复会被多个 d 触发。报告的周期、区间、拷贝数可能互相矛盾。</p></div>
+  <div class="t-method"><h4>手段</h4><p>固定一条后处理链：按周期上限裁剪，按起点排序，按规则去冗余，按发现顺序编号。周期取比对直方图的众数，不取候选 d。</p></div>
+  <div class="t-why"><h4>理由</h4><p>候选 d 只是线索。最终周期必须由比对结果决定。重叠记录必须合并，否则输出不可用。</p></div>
+</div>
+
+<div class="key"><span class="lbl">示例</span>
+<p>这条 35 bp 序列进入第二级两次：一次以 d = 7，一次以 d = 14。两次都达标，区间都是 1 到 35，分数都是 70。用 <code>-r</code> 关掉去冗余，输出里能看到两条记录。</p>
+<p>后处理链把它们合成一条：区间重叠 100%，满足 90%；14 是 7 的整数倍；14 的分数 70 不高于 1.1 × 70。三条都满足，删除周期 14 的记录，保留周期 7。剩下的记录按发现顺序重新编号。</p>
+<p>报告字段也有固定来源。period 取直方图众数，size 取共识长度，copies 取回溯计数。三个数来自三条路，后处理保证口径一致。</p>
+</div>
+
+<h3>2.5 打分模型</h3>
+
+<p>第二级需要一把尺子。TRF 用局部比对分数。分数由三部分组成：</p>
+
+<div class="math">
+α = +2 <span class="c"> 匹配</span><br>
+β = −5 <span class="c"> 错配</span><br>
+δ = −7 <span class="c"> 插入或缺失（一个空位）</span><br><br>
+分数 = α × 匹配数 + β × 错配数 + δ × 空位数
+</div>
+
+<p>三个数不是随便选的。看比值：</p>
+
+<ul>
+  <li>一个错配要用 2.5 个匹配补偿。<code>5 / 2 = 2.5</code>。</li>
+  <li>一个空位要用 3.5 个匹配补偿。<code>7 / 2 = 3.5</code>。</li>
+</ul>
+
+<p>比值决定容忍度。绝对值为 2、5、7 还是 4、10、14，不影响判定，只影响门槛的换算。这也是为什么默认分数门槛 50 对应"至少 25 个匹配碱基"。</p>
+
+<h4>为什么用局部比对</h4>
+
+<p>重复的两侧是普通序列。全局比对会把两侧的错配算进分数。分数被侧翼拖低，好重复也会被漏掉。</p>
+
+<p>局部比对给每个单元格加一个下界 0：</p>
+
+<div class="math">
+S(i, j) = max( 0, S(i−1, j−1) + 相似度, S(i−1, j) + δ, S(i, j−1) + δ )
+</div>
+
+<p>这个 0 有两个作用。第一，比对可以在任意位置重新开始。第二，负分不会传染。代价是：只有 0 下界还不够，比对会到处重新开始。Q4 用一个"屏障"补上这个漏洞。</p>
+
+<h4>为什么 PM 与 PI 不进分数</h4>
+
+<p>因为分数的单位是"碱基"，概率的单位是"事件"。两者不能相加。PM 与 PI 只决定用哪张门槛表：</p>
+
+<table>
+<tr><th style="width:14%">PM</th><th style="width:22%">元组长度</th><th style="width:26%">元组最大距离</th><th>表</th></tr>
+<tr><td>80</td><td>4, 5, 7</td><td>29, 159, maxdistance</td><td><code>WAITDATA80</code> / <code>SUMDATA80</code></td></tr>
+<tr><td>75</td><td>3, 4, 5, 7</td><td>29, 43, 159, maxdistance</td><td><code>WAITDATA75</code> / <code>SUMDATA75</code></td></tr>
+</table>
+
+<p>其他 PM 值没有表。程序直接报错退出，退出码 −13。这是原程序的行为，Rust 版保留。</p>
+
+<h4>派生量：maxdistance</h4>
+
+<p>候选距离的上限不总等于 <code>MaxPeriod</code>。计算顺序如下：</p>
+
+<pre><i>// src/state.rs</i>
+maxdistance = maxperiod;
+if maxdistance &lt; 500 { maxdistance = 500 }
+maxdistance = min(maxdistance, 0.6 × n)
+maxdistance = max(maxdistance, 200)</pre>
+
+<p>取 <code>n = 1000</code>、<code>MaxPeriod = 2000</code>：先得 2000，再取 <code>min(2000, 600) = 600</code>，最后得 600。含义是：短序列不搜索超过 0.6 n 的周期。一个周期超过序列长度六成的重复，最多只有一份半拷贝，证据不足。</p>
+
+<div class="warn"><span class="lbl">易错点</span><p><code>MaxPeriod</code> 是报告的周期上限，<code>maxdistance</code> 是搜索的距离上限。两者可能不同。调参时不要混用。</p></div>
+
+<h3>2.6 谁负责什么</h3>
+
+<table>
+<tr><th style="width:20%">模块</th><th style="width:34%">职责</th><th>对应问题</th></tr>
+<tr><td><code>src/fasta.rs</code></td><td>读 FASTA，转大写，保留原始描述字节</td><td>输入</td></tr>
+<tr><td><code>src/state.rs</code></td><td>一条序列的全部状态、相似矩阵、派生常量</td><td>§3</td></tr>
+<tr><td><code>src/scan.rs</code></td><td>元组扫描、距离记账、统计判据、主循环</td><td>Q1 Q2 Q3</td></tr>
+<tr><td><code>src/algo.rs</code></td><td>环绕 DP、回溯、共识、比对打印</td><td>Q4 Q5 Q6 Q7</td></tr>
+<tr><td><code>src/clean.rs</code></td><td>去冗余、分页、HTML 与掩码输出</td><td>Q8</td></tr>
+<tr><td><code>src/control.rs</code></td><td>单条序列的驱动流程与输出文件命名</td><td>§3.4</td></tr>
+</table>
+
+<h2 id="q1"><span class="badge">Q1</span>怎样避免对每个周期都做比对</h2>
+
+<p>第一级只需要回答一个问题：在这个位置，哪些 <code>d</code> 值得进入第二级。回答必须便宜。比一次比对还贵的筛选没有意义。所以第一级不许做近似匹配，只许做精确匹配。</p>
+
+<div class="trio">
+  <div class="t-problem"><h4>问题</h4><p>候选空间是 n × D。逐对做比对算不完。需要一个不比对也能产生线索的手段。</p></div>
+  <div class="t-method"><h4>手段</h4><p>取长度 k 的精确短串，称元组。用哈希表记录它最近出现的位置。新位置与旧位置的距离 <code>d</code> 就是线索。</p></div>
+  <div class="t-why"><h4>理由</h4><p>真重复的相邻副本共享大量元组。随机序列共享元组的概率是 4<sup>−k</sup>。两个概率差三个数量级以上。</p></div>
+</div>
+
+<h3>Q1.1 元组与编码</h3>
+
+<p>称长度 <code>k</code> 的短串为<strong>元组</strong>（tuple）。长度 <code>k</code> 的元组有 <code>4<sup>k</sup></code> 种。把 A、C、G、T 分别编码为 0、1、2、3。一个元组就是一个 4 进制整数：</p>
+
+<div class="math">
+code = b<sub>1</sub> · 4<sup>k−1</sup> + b<sub>2</sub> · 4<sup>k−2</sup> + … + b<sub>k</sub>
+</div>
+
+<p><code>k = 7</code> 时，码值范围是 0 到 16383。一张 16384 项的整数表就能做"最近位置"索引。这个规模可以放进缓存。</p>
+
+<p>滑动一位时不必重算整个元组。丢掉最高位，补上最低位：</p>
+
+<pre><i>// src/scan.rs:767</i>
+code = (code % FOUR_TO_THE[k − 1]) × 4 + index[sequence[i]]</pre>
+
+<p>程序只维护 <code>k = 7</code> 的码。短元组是它的后缀。<code>4<sup>k</sup></code> 取模就得到末 <code>k</code> 位：</p>
+
+<pre><i>// src/scan.rs:771</i>
+tuple_code[3] = code
+tuple_code[2] = code % 4<sup>5</sup>
+tuple_code[1] = code % 4<sup>4</sup></pre>
+
+<p>一次滚动，三个尺寸同时更新。没有额外成本。</p>
+
+<h3>Q1.2 历史链</h3>
+
+<p>每个元组码一个入口，指向"最近一次出现"的历史槽。每个历史槽存三个字段：位置、同码的上一次位置、码值。槽放在环形数组里，写满就覆盖最旧的槽。</p>
+
+<pre><i>// 抽象形式</i>
+head[code]  →  history[h]  →  history[h.previous]  →  …  →  0
+
+history[h] = { location, previous, code }</pre>
+
+<p>在位置 <code>i</code> 得到码 <code>c</code> 之后，程序做三步：</p>
+
+<ol>
+  <li>写入新槽 <code>h</code>，<code>previous</code> 指向原来的 <code>head[c]</code>。</li>
+  <li><code>head[c]</code> 改为 <code>h</code>。</li>
+  <li>沿 <code>previous</code> 走链。每到一个槽 <code>y</code>，算 <code>d = i − y.location</code>。</li>
+</ol>
+
+<p>走链时有两个截断条件：</p>
+
+<ul>
+  <li><code>d &gt; tuple_max_distance[g]</code>：太远。把链在此断开，后面的更远，不必再看。</li>
+  <li><code>d ≤ tuple_max_distance[g]</code> 但 <code>d ≤ tuple_max_distance[g−1]</code>：这个距离归更短的元组管。跳过，不记账。</li>
+</ul>
+
+<p>这里 <code>g</code> 是元组尺寸的序号，取值 1 到 3，不是元组长度本身。<code>tuple_max_distance[0] = 0</code>，所以序号 1 负责从 1 开始的距离。</p>
+
+<p>第二个条件保证<strong>一个距离只由一个元组尺寸负责</strong>。PM = 80 时的分工：</p>
+
+<table>
+<tr><th style="width:18%">元组长度 k</th><th style="width:26%">负责的距离区间</th><th>理由</th></tr>
+<tr><td>4</td><td>1 到 29</td><td>副本短，容不下长精确串。窗口也短，机会少。</td></tr>
+<tr><td>5</td><td>30 到 159</td><td>居中。误报率降到 1/1024。</td></tr>
+<tr><td>7</td><td>160 到 maxdistance</td><td>长副本能提供长精确串。窗口最长，必须用最稀有的指纹。</td></tr>
+</table>
+
+<h3>Q1.3 为什么这个手段成立</h3>
+
+<p><strong>不漏。</strong>设区间是周期 <code>d</code> 的重复。只要某一份副本里有连续 <code>k</code> 个碱基没有错误，这个元组就会在下一份副本的对应位置再次出现。两者相隔 <code>d</code>，程序一定记账。真实重复的错配率通常低于 20%。此时 4 连无错的概率是 <code>0.8⁴ ≈ 0.41</code>。一条几百 bp 的重复几乎不可能一个 4 连都没有。</p>
+
+<p><strong>不滥。</strong>设序列是随机的。两个指定位置共享一个元组的概率是 <code>4<sup>−k</sup></code>。取 <code>k = 4</code> 得 1/256。取 <code>k = 7</code> 得 1/16384。</p>
+
+<p>证据的期望数量约为：</p>
+
+<div class="math">
+E[证据数] ≈ n × W × 4<sup>−k</sup> <span class="c">（W 是链长，即窗口内的位置数）</span>
+</div>
+
+<p><code>W</code> 随 <code>d</code> 增长。保持 <code>E</code> 不变，就要让 <code>4<sup>−k</sup></code> 同步下降。这就是元组长度分级的原因：距离越大，指纹越长。原程序的 <code>WAITDATA</code> 与 <code>SUMDATA</code> 表在 <code>d = 30</code> 和 <code>d = 160</code> 处出现台阶，正好对应两次切换。</p>
+
+<h3>Q1.4 边界与代价</h3>
+
+<p><strong>非 ACGT 字符。</strong>N 之类的字符不能进入元组。程序遇到它就重置编码，并从下一个好字符开始重建。重建要等累计 7 个好字符才结束，因为滚动码需要完整的 7 位。</p>
+
+<pre><i>// src/scan.rs:737</i>
+if i == 0 || !is_acgt(sequence[i]) {
+    badcharindex = i; build_entire_code = true;
+    <i>// 向前找连续 mintuplesize 个好字符</i>
+}</pre>
+
+<p>这一步同时解释了另一个现象：跨过 N 的重复会被切成两段。程序不会把 N 两侧的片段接起来。</p>
+
+<p><strong>链长上限。</strong>历史槽总数是 <code>2 × tuple_max_distance + 4</code>。超出后旧槽被覆盖。这不会漏掉近处的证据。因为被覆盖的槽位置更旧，距离已经超过上限。</p>
+
+<p><strong>成本。</strong>编码是每次一位的常数操作。走链的成本等于链上落在区间内的槽数。区间内证据越密，成本越高。这个成本由数据的重复程度决定，不由 <code>n</code> 单独决定。</p>
+
+<div class="key"><span class="lbl">一句话</span><p>用"精确短串的重复出现"换取"候选列表"。精确匹配让成本落在编码上，不落在比对矩阵上。</p></div>
+
+<p><span class="file">落点</span>主循环 <span class="anchor">src/scan.rs:692</span>，编码与链遍历 <span class="anchor">src/scan.rs:756</span>，候选处理入口 <span class="anchor">src/scan.rs:597</span>。</p>
+
+<h2 id="q2"><span class="badge">Q2</span>距离表会膨胀，怎样控制</h2>
+
+<p>Q1 每发现一条线索就写一张表。表按 <code>d</code> 建，最多 2000 张。若不加控制，表会无限增长，遍历也会失控。</p>
+
+<div class="trio">
+  <div class="t-problem"><h4>问题</h4><p>每个 d 一张表，条目随时间累积。判断"哪些 d 还值得跟踪"不能靠扫描 2000 个表。</p></div>
+  <div class="t-method"><h4>手段</h4><p>表只保留滑动窗口内的条目。相邻条目合并。活跃的 d 串成双向链表，再加一层 50 间距的标签桶。</p></div>
+  <div class="t-why"><h4>理由</h4><p>证据有时效。太旧的匹配说明重复已经中断。链表把"遍历全部距离"变成"遍历活跃距离"。</p></div>
+</div>
+
+<h3>Q2.1 窗口：证据的保质期</h3>
+
+<p>表项是一个二元组 <code>(location, size)</code>。<code>location</code> 是匹配段的最右位置，<code>size</code> 是这段连续匹配的长度。窗口左端这样算：</p>
+
+<pre><i>// src/scan.rs:138</i>
+windowleftend = min(location − d, location − 20) + 1</pre>
+
+<p><code>d ≥ 20</code> 时窗口长度是 <code>d + 1</code>。<code>d &lt; 20</code> 时窗口长度是 21。含义是：至少要覆盖一份完整拷贝，短周期再给 20 个位置的余量。</p>
+
+<p>插入新证据之前，程序从窗口左端丢弃过期条目。丢弃时不能只减条目数，还要减匹配碱基数：</p>
+
+<pre><i>// src/scan.rs:144</i>
+nummatches −= entry[lowindex].size;
+numentries −= 1;</pre>
+
+<div class="key"><span class="lbl">关键细节</span><p><code>nummatches</code> 数的是<strong>匹配碱基</strong>，不是命中次数。一次 4 元组命中贡献 4。两个相邻命中合并且只加 1，因为新命中的 4 个碱基里有 3 个已经数过。</p></div>
+
+<p>这个细节决定了门槛的量纲。判据说"匹配碱基至少 5 个"，不说"至少命中 5 次"。</p>
+
+<h3>Q2.2 合并：把连续命中压成一段</h3>
+
+<pre><i>// src/scan.rs:157</i>
+if numentries != 0 && entry[highindex].location == location − 1 {
+    entry[highindex].location += 1;
+    entry[highindex].size += 1;
+    nummatches += 1;
+}</pre>
+
+<p>一段 100 bp 的精确匹配会产生 97 个连续命中。合并后只剩 1 个条目，<code>size = 100</code>。条目数从 <code>O(L)</code> 降到 <code>O(1)</code>。这是摊销 <code>O(1)</code> 的来源。</p>
+
+<h3>Q2.3 活跃清单：双向链表</h3>
+
+<p>只有"非空"的距离才需要参与判据。程序把这些距离串成一条按数值排序的双向链表：<code>linkdown</code> 指向更小的活跃距离，<code>linkup</code> 指向更大的。</p>
+
+<p>判据要在 <code>[lo, hi]</code> 区间内求和。从 <code>d</code> 出发沿 <code>linkdown</code> 走就是降序，沿 <code>linkup</code> 走就是升序。走出区间就停。成本是 <code>O(区间内的活跃距离数)</code>，不是 <code>O(maxdistance)</code>。</p>
+
+<p>新增距离时要把它插进有序链表。若每次都从链表头找位置，插入会退化成 <code>O(D)</code>。程序用一个标签数组做插入游标：</p>
+
+<pre><i>// src/scan.rs:379</i>
+top_tag = maxdistance / 50
+tag[t] = 第 t 组的插入游标（每 50 个距离一组）</pre>
+
+<p>插入 <code>d</code> 时先看 <code>tag[d / 50]</code>。游标比 <code>d</code> 小，就从游标处接上；游标比 <code>d</code> 大，就沿 <code>linkdown</code> 往下找第一个小于 <code>d</code> 的活跃距离。插入后再抬高受影响的游标。</p>
+
+<p>游标把"从链表头扫描"换成"从附近的锚点扫描"。插入的平均成本接近常数。判据的遍历成本不变，仍是活跃距离数。</p>
+
+<h3>Q2.4 摘链：不再活跃就退出</h3>
+
+<pre><i>// src/scan.rs:248</i>
+if distance[d].numentries == 0 {
+    从链表摘除 d;
+    untag_distance_window(d, linkdown);
+    return 1;
+}</pre>
+
+<p>摘链发生在判据遍历邻居时。遍历到一个距离，先清掉它的过期条目。条目清空就地摘链。摘链保证"死掉的距离"不再产生任何成本。这也是为什么活跃距离数通常只有几十，远小于 2000。</p>
+
+<h3>Q2.5 内存代价</h3>
+
+<p>表在初始化时一次性分配。每个 <code>d</code> 的容量是 <code>max(d, 20) + 1</code>。总条目数约 <code>maxdistance² / 2</code>。取 <code>maxdistance = 2000</code> 得 200 万条，每条 8 字节，约 16 MB。这是可以接受的固定成本。它也解释了为什么 <code>MaxPeriod</code> 设成 2000 而不是 100000。</p>
+
+<p><span class="file">落点</span>记账 <span class="anchor">src/scan.rs:133</span>，链接 <span class="anchor">src/scan.rs:174</span>，摘链 <span class="anchor">src/scan.rs:225</span>，初始化 <span class="anchor">src/state.rs:362</span>。</p>
+
+<h2 id="q3"><span class="badge">Q3</span>什么时候相信证据</h2>
+
+<p>证据只说明"这两个位置共享一段短串"。它不说明这里存在重复。随机序列也会产生证据。判定需要一个可计算的显著性判断。</p>
+
+<div class="trio">
+  <div class="t-problem"><h4>问题</h4><p>证据数量本身没有尺度。1 条算多还是 100 条算多，取决于 <code>d</code>、窗口长度和随机模型。</p></div>
+  <div class="t-method"><h4>手段</h4><p>三条判据：等待时间、区间证据和、区域竞争。阈值来自模拟表，按 <code>d</code> 查。</p></div>
+  <div class="t-why"><h4>理由</h4><p>真重复有三个特征：证据来得早、总量大、且在邻域内最强。三条判据各抓一个特征。</p></div>
+</div>
+
+<h3>Q3.1 判据一：等待时间</h3>
+
+<p>把当前位置 <code>i</code> 的窗口左端记为 <code>left = max(0, i − max(d, 20))</code>。窗口内的第一段证据必须出现在 <code>left + wait[d]</code> 之前。</p>
+
+<div class="math">
+first_location ≤ max(0, i − max(d, 20)) + wait[d]<br>
+<span class="c">first_location = 最老一段证据的起点 = entry[lowindex].location − size + k</span>
+</div>
+
+<p>为什么这条判据有效：如果重复真实存在，从窗口打开到第一条证据之间的间隔应当很短。随机命中则没有这个规律，它可能在窗口的任何位置出现。</p>
+
+<h3>Q3.2 判据二：区间证据和</h3>
+
+<p>只看 <code>d</code> 一个距离会漏。插入和缺失会让证据漂到 <code>d ± 1</code>、<code>d ± 2</code>。这些距离描述的是同一个重复。</p>
+
+<p>所以程序在区间内求和：</p>
+
+<div class="math">
+Δ(d) = ⌊ 2.3 · √(p · d) ⌋ <span class="c">（p = PI/100，d &gt; 20）</span><br>
+lo = max(1, d − Δ) <span class="c">，hi = min(maxdistance, d + Δ)</span><br><br>
+Σ<sub>t ∈ [lo, hi]</sub> nummatches(t) ≥ sum[d]
+</div>
+
+<p><code>Δ</code> 是空位随机游走的 95% 范围。<code>2.3</code> 是原程序给定的系数。取 <code>p = 0.1</code>、<code>d = 2000</code> 得 <code>Δ = ⌊2.3 × √200⌋ = 32</code>。区间宽度 65。</p>
+
+<p><code>d ≤ 20</code> 时不做区间，<code>lo = hi = d</code>。理由：短周期的漂移空间本来就小，扩大到邻域只会引入噪声。</p>
+
+<h3>Q3.3 判据三：区域竞争</h3>
+
+<p>求和有一个副作用：邻近的强周期也能把和推过门槛。所以还要检查竞争。条件有两条：</p>
+
+<ul>
+  <li>区间内没有任何单个距离的匹配数<strong>大于</strong> <code>d</code> 的匹配数。</li>
+  <li>如果有，但那个距离自己的证据已经过期，就不算竞争者。</li>
+</ul>
+
+<p>第二条由"先摘链、再比较"实现。代码在比较之前调用 <code>no_matches_so_unlink_distance</code>。这样一个已经死掉的距离不会阻止候选。</p>
+
+<h3>Q3.4 阈值从哪里来</h3>
+
+<p>阈值存在两张长 2001 的表里，索引是 <code>min(d, 2000)</code>。PM = 80 时的取值：</p>
+
+<table>
+<tr><th style="width:12%">d</th><th style="width:26%">wait[d] 等待</th><th style="width:26%">sum[d] 证据碱基</th><th>说明</th></tr>
+<tr><td>7</td><td>18</td><td>5</td><td>短周期。一组 4 元组命中就接近门槛。</td></tr>
+<tr><td>30</td><td>28</td><td>6</td><td>切换到 5 元组。等待变长，证据和几乎不变。</td></tr>
+<tr><td>160</td><td>62</td><td>43</td><td>切换到 7 元组。指纹变稀有，等待明显变长。</td></tr>
+<tr><td>1000</td><td>67</td><td>386</td><td>长周期。证据和与 <code>d</code> 近似成正比。</td></tr>
+<tr><td>2000</td><td>68</td><td>818</td><td>一份拷贝约 2000 个位置，约四成能留下匹配碱基。</td></tr>
+</table>
+
+<p>为什么证据和随 <code>d</code> 增长：窗口长度是 <code>d + 1</code>。每个位置都可能贡献一次匹配。窗口越长，可数的碱基越多。门槛必须同步提高，否则长周期会过松。</p>
+
+<p>为什么等待时间在 30 和 160 跳变：元组变长，随机命中变稀有，第一次命中需要等更久。表的台阶与元组切换点重合，这不是巧合。</p>
+
+<p>为什么用表而不用公式：精确分布要处理窗口重叠、序列自相关、多重比较。解析式很难写对。用投币模型做模拟，直接存分位数，更可靠也更容易复现。</p>
+
+<div class="warn"><span class="lbl">失效条件</span><p>如果真实数据的空位率远高于 <code>PI</code>，<code>Δ</code> 会太窄。证据被分摊到区间外，判据二失败，重复被漏掉。此时应当提高 <code>PI</code>，不要降低 <code>Minscore</code>。</p></div>
+
+<h3>Q3.5 判据之后</h3>
+
+<p>通过三条判据只说明"值得做一次比对"。程序还要做一次廉价的二次筛选。距离 <code>d</code> 大于 250 时，检查"已知最佳周期表"：</p>
+
+<ul>
+  <li>如果当前位置已被某条已确认记录覆盖，而 <code>d</code> 不在那条记录的前 5 个周期里，就跳过。</li>
+  <li>如果 <code>d</code> 在其中，或者当前位置没有被覆盖，就继续。</li>
+</ul>
+
+<p>这张表保存每条已报告记录的前 5 个周期和它的区间，最旧的在尾部。记录的终点早于 <code>start − 2 × maxdistance</code> 就删除。</p>
+
+<p><span class="file">落点</span>判据主体 <span class="anchor">src/scan.rs:403</span>，阈值初始化 <span class="anchor">src/scan.rs:525</span>，表数据 <span class="anchor">src/tables.rs:29</span>，最佳周期表 <span class="anchor">src/scan.rs:319</span>。</p>
+
+<h2 id="q4"><span class="badge">Q4</span>怎样从一条证据得到完整比对</h2>
+
+<p>证据只说"位置 <code>i</code> 与位置 <code>i − d</code> 相似"。它不给区间，不给分数，不给拷贝数。第二级要从一条线索得到这四样东西。</p>
+
+<div class="trio">
+  <div class="t-problem"><h4>问题</h4><p>比对需要模式串，也需要起止位置。两者都未知。若先固定区间，边界错一点就会漏掉半个重复。</p></div>
+  <div class="t-method"><h4>手段</h4><p>把以种子位置结尾的 <code>d</code> 个碱基当作模式，视为无限重复串，做环绕动态规划。反向扫一次定左边界，正向扫一次定右边界。</p></div>
+  <div class="t-why"><h4>理由</h4><p>局部比对自己决定在哪里开始和结束。列号取模让任意相位都能接上。屏障阻止比对跑到无关区域。</p></div>
+</div>
+
+<h3>Q4.1 模式从哪里来</h3>
+
+<p>程序取 <code>EC = S[i − d + 1 .. i]</code>，正好是以种子位置结尾的一份拷贝，种子在其末尾。</p>
+
+<pre><i>// src/algo.rs:214</i>
+for g in 0..size {
+    ec[g] = sequence[(start − size + g + 1)];
+}</pre>
+
+<p>这份拷贝可能带错误。它不是最终模式。Q7 会用共识替换它。但作为比对的起点，它已经足够：它和相邻拷贝的相似度最高。</p>
+
+<h3>Q4.2 为什么要"环绕"</h3>
+
+<p>模式只存一份。序列有几十份。若把模式复制成几十份，矩阵宽度会随序列长度增长，成本无法接受。</p>
+
+<p>程序换一种做法：列号对 <code>d</code> 取模。走到最后一列之后，下一列回到第 0 列。于是矩阵只有 <code>d</code> 列，却能表达无限重复的模式。</p>
+
+<figure class="fig-s" style="max-width:660px">
+<svg viewBox="0 0 520 360" role="img" aria-label="环绕动态规划示例">
+  <text x="84" y="16" class="lbl">列号 = 模式位置，对 d = 7 取模</text>
+
+  <text x="111" y="40" text-anchor="middle" class="mono">0</text>
+  <text x="165" y="40" text-anchor="middle" class="mono">1</text>
+  <text x="219" y="40" text-anchor="middle" class="mono">2</text>
+  <text x="273" y="40" text-anchor="middle" class="mono">3</text>
+  <text x="327" y="40" text-anchor="middle" class="mono">4</text>
+  <text x="381" y="40" text-anchor="middle" class="mono">5</text>
+  <text x="435" y="40" text-anchor="middle" class="mono">6</text>
+
+  <g stroke="#e3e9e6" fill="#fff">
+    <rect x="84" y="50" width="54" height="30"/><rect x="138" y="50" width="54" height="30"/><rect x="192" y="50" width="54" height="30"/><rect x="246" y="50" width="54" height="30"/><rect x="300" y="50" width="54" height="30"/><rect x="354" y="50" width="54" height="30"/><rect x="408" y="50" width="54" height="30"/>
+    <rect x="84" y="80" width="54" height="30"/><rect x="138" y="80" width="54" height="30"/><rect x="192" y="80" width="54" height="30"/><rect x="246" y="80" width="54" height="30"/><rect x="300" y="80" width="54" height="30"/><rect x="354" y="80" width="54" height="30"/><rect x="408" y="80" width="54" height="30"/>
+    <rect x="84" y="110" width="54" height="30"/><rect x="138" y="110" width="54" height="30"/><rect x="192" y="110" width="54" height="30"/><rect x="246" y="110" width="54" height="30"/><rect x="300" y="110" width="54" height="30"/><rect x="354" y="110" width="54" height="30"/><rect x="408" y="110" width="54" height="30"/>
+    <rect x="84" y="140" width="54" height="30"/><rect x="138" y="140" width="54" height="30"/><rect x="192" y="140" width="54" height="30"/><rect x="246" y="140" width="54" height="30"/><rect x="300" y="140" width="54" height="30"/><rect x="354" y="140" width="54" height="30"/><rect x="408" y="140" width="54" height="30"/>
+    <rect x="84" y="170" width="54" height="30"/><rect x="138" y="170" width="54" height="30"/><rect x="192" y="170" width="54" height="30"/><rect x="246" y="170" width="54" height="30"/><rect x="300" y="170" width="54" height="30"/><rect x="354" y="170" width="54" height="30"/><rect x="408" y="170" width="54" height="30"/>
+    <rect x="84" y="200" width="54" height="30"/><rect x="138" y="200" width="54" height="30"/><rect x="192" y="200" width="54" height="30"/><rect x="246" y="200" width="54" height="30"/><rect x="300" y="200" width="54" height="30"/><rect x="354" y="200" width="54" height="30"/><rect x="408" y="200" width="54" height="30"/>
+    <rect x="84" y="230" width="54" height="30"/><rect x="138" y="230" width="54" height="30"/><rect x="192" y="230" width="54" height="30"/><rect x="246" y="230" width="54" height="30"/><rect x="300" y="230" width="54" height="30"/><rect x="354" y="230" width="54" height="30"/><rect x="408" y="230" width="54" height="30"/>
+    <rect x="84" y="260" width="54" height="30"/><rect x="138" y="260" width="54" height="30"/><rect x="192" y="260" width="54" height="30"/><rect x="246" y="260" width="54" height="30"/><rect x="300" y="260" width="54" height="30"/><rect x="354" y="260" width="54" height="30"/><rect x="408" y="260" width="54" height="30"/>
+  </g>
+
+  <g fill="#e5f1ee" stroke="#9dc9c0">
+    <rect x="84" y="50" width="54" height="30"/><rect x="138" y="80" width="54" height="30"/><rect x="192" y="110" width="54" height="30"/><rect x="246" y="140" width="54" height="30"/><rect x="300" y="170" width="54" height="30"/><rect x="354" y="200" width="54" height="30"/><rect x="408" y="230" width="54" height="30"/><rect x="84" y="260" width="54" height="30"/>
+  </g>
+
+  <g class="mono" fill="#0d6b63" text-anchor="middle">
+    <text x="111" y="70">T</text><text x="165" y="100">C</text><text x="219" y="130">A</text><text x="273" y="160">T</text><text x="327" y="190">C</text><text x="381" y="220">G</text><text x="435" y="250">G</text><text x="111" y="280">T</text>
+  </g>
+
+  <g class="mono" fill="#6b7875" text-anchor="end">
+    <text x="70" y="70">T</text><text x="70" y="100">C</text><text x="70" y="130">A</text><text x="70" y="160">T</text><text x="70" y="190">C</text><text x="70" y="220">G</text><text x="70" y="250">G</text><text x="70" y="280">T</text>
+  </g>
+
+  <path class="dash" d="M435 258 C 470 300, 200 328, 120 288" marker-end="url(#ar2)" stroke="#0d6b63"/>
+  <text x="276" y="344" text-anchor="middle" class="lbl">第 8 个碱基回到第 0 列，分数继续加 2</text>
+</svg>
+<figcaption>图 2。一份模式 "TCATCGG"。列号 0 到 6 循环使用，所以矩阵只有 7 列，却能表达无限重复的模式。图中只标出最优路径经过的单元格。</figcaption>
+</figure>
+
+<p>分数沿对角线累积：2、4、6、…、28。第 8 个碱基落在第 0 列，因为 <code>7 mod 7 = 0</code>。序列和模式连续对上，路径就不会中断。</p>
+
+<h3>Q4.3 两次扫描</h3>
+
+<pre><i>// 反向：从种子之后一行开始，行号下行，序列位置回退</i>
+realr = start + 1; r = bw;
+while !end_of_trace && realr &gt; 1 && r &gt; 0 { … }
+
+<i>// 正向：从反向阶段的最优行开始，行号上行，序列位置前进</i>
+realr = minrealrow − 1; r = 0;
+while !end_of_trace && realr &lt; length && r &lt; bw { … }</pre>
+
+<p>反向扫描回答"重复从哪里开始"。正向扫描回答"重复到哪里结束"。两次都从种子附近出发，所以两次看到的是同一个结构。</p>
+
+<p>为什么不一次扫完？因为重复可以向种子两侧延伸。起点在种子左边，终点在种子右边。一次单向扫描只能覆盖一侧。</p>
+
+<h3>Q4.4 分数下界与 −1000 屏障</h3>
+
+<p>局部比对给每格一个 0 下界。没有别的约束时，比对会在任意位置重新开始。这在重复检测里是灾难：它会在远处找到另一个高分区域，报出一个与种子无关的重复。</p>
+
+<p>程序加一个屏障。条件：位置已经越过种子左侧 <code>size</code>（<code>newwrap</code> 用 <code>max(size, 20)</code>），并且分数恰好是 0。此时把 0 改写成 −1000。</p>
+
+<pre><i>// src/algo.rs:642</i>
+if realr &lt;= start − max(size, 20) && v == 0 {
+    v = −1000;  <i>// 不许在此重新开始</i>
+}</pre>
+
+<p>−1000 比任何合法分数都小。它不会被 max 选中，因此路径无法从这里穿过。屏障的净效果是：比对必须覆盖种子，只能向两侧延伸有限距离。</p>
+
+<h3>Q4.5 为什么每行要扫两遍</h3>
+
+<p>列号取模之后，第 0 列与最后一列相邻。这一对相邻关系构成一个环：算第 0 列需要最后一列，算最后一列又需要第 0 列。一行之内无法一次算完。</p>
+
+<p>程序先给环上一个临时值，用这个值算出一行。第二遍把第一遍结束时留在 <code>pleft</code> 里的结果接回环的切点，重算整行。两遍之后，环上的值自洽。</p>
+
+<div class="key"><span class="lbl">抽象说法</span><p>环绕依赖是一个环。程序用一次不动点迭代解它：先猜一个入口值，算一圈，再把出口值接回入口，重算一圈。重复检测的环只有一格宽，所以两遍足够。</p></div>
+
+<p>带状版本不需要两遍。它每行从带的上边界开始处理，左依赖在带内传递。<strong>带的边界就是环的切点</strong>。切点之外本来就不算，所以没有环要解。</p>
+
+<p><span class="file">落点</span>全列版 <span class="anchor">src/algo.rs:585</span>，带状版 <span class="anchor">src/algo.rs:187</span>，屏障 <span class="anchor">src/algo.rs:116</span>。</p>
+
+<h2 id="q5"><span class="badge">Q5</span>周期最大 2000，比对太贵怎么办</h2>
+
+<p>全列环绕 DP 的每行成本是 <code>d</code> 次单元格计算。取 <code>d = 2000</code>，一行就是 2000 次。重复长度 2000，一共 400 万次。单个候选就要几毫秒。一条染色体有上万个候选，加起来不可接受。</p>
+
+<div class="trio">
+  <div class="t-problem"><h4>问题</h4><p>正确路径只会沿对角线走，但矩阵要算全部 d 列。绝大部分单元格是浪费。</p></div>
+  <div class="t-method"><h4>手段</h4><p>只算中心线两侧各 <code>w</code> 列。中心随路径移动。连续 3 行选中同一步就重新居中。</p></div>
+  <div class="t-why"><h4>理由</h4><p>路径偏离对角线的幅度由空位随机游走决定。它的 95% 范围只有 <code>2.3√(p·d)</code>。带外单元格几乎不可能在最优路径上。</p></div>
+</div>
+
+<h3>Q5.1 带宽从哪来</h3>
+
+<div class="math">
+Δ(d) = ⌊ 2.3 · √(p · d) ⌋ <span class="c">，d &gt; 20</span><br>
+w = max(6, Δ(d))<br>
+前向带 w′ = min(2w, d / 3)
+</div>
+
+<p>取 <code>p = 0.1</code>，得到下面的对照：</p>
+
+<table>
+<tr><th style="width:12%">d</th><th style="width:16%">Δ</th><th style="width:16%">带半径 w</th><th style="width:20%">每行单元格</th><th>占全列比例</th></tr>
+<tr><td>50</td><td>5</td><td>6</td><td>13</td><td>26%</td></tr>
+<tr><td>100</td><td>7</td><td>7</td><td>15</td><td>15%</td></tr>
+<tr><td>500</td><td>16</td><td>16</td><td>33</td><td>6.6%</td></tr>
+<tr><td>2000</td><td>32</td><td>32</td><td>65</td><td>3.3%</td></tr>
+</table>
+
+<p>周期越大，收益越大。这也是带状优化只用于 <code>d &gt; 20</code> 的原因：小周期的带太宽，几乎等于全矩阵，不如直接全算。</p>
+
+<figure>
+<svg viewBox="0 0 900 320" role="img" aria-label="带状动态规划与重新居中">
+  <defs><clipPath id="bandclip"><rect x="60" y="44" width="312" height="216"/></clipPath></defs>
+  <text x="60" y="30" class="lbl">行 = 序列位置，列 = 模式列号（对 d 取模）</text>
+
+  <rect x="60" y="44" width="312" height="216" fill="#fff" stroke="#d8dedb"/>
+
+  <g stroke="#eef1ef">
+    <line x1="86" y1="44" x2="86" y2="260"/><line x1="112" y1="44" x2="112" y2="260"/>
+    <line x1="138" y1="44" x2="138" y2="260"/><line x1="164" y1="44" x2="164" y2="260"/>
+    <line x1="190" y1="44" x2="190" y2="260"/><line x1="216" y1="44" x2="216" y2="260"/>
+    <line x1="242" y1="44" x2="242" y2="260"/><line x1="268" y1="44" x2="268" y2="260"/>
+    <line x1="294" y1="44" x2="294" y2="260"/><line x1="320" y1="44" x2="320" y2="260"/>
+    <line x1="346" y1="44" x2="346" y2="260"/>
+    <line x1="60" y1="62" x2="372" y2="62"/><line x1="60" y1="80" x2="372" y2="80"/>
+    <line x1="60" y1="98" x2="372" y2="98"/><line x1="60" y1="116" x2="372" y2="116"/>
+    <line x1="60" y1="134" x2="372" y2="134"/><line x1="60" y1="152" x2="372" y2="152"/>
+    <line x1="60" y1="170" x2="372" y2="170"/><line x1="60" y1="188" x2="372" y2="188"/>
+    <line x1="60" y1="206" x2="372" y2="206"/><line x1="60" y1="224" x2="372" y2="224"/>
+    <line x1="60" y1="242" x2="372" y2="242"/>
+  </g>
+
+  <g clip-path="url(#bandclip)">
+    <polyline points="151,53 151,71 151,89 151,107 151,125 151,143 203,161 203,179 203,197 203,215 203,233 203,251"
+      fill="none" stroke="#e5f1ee" stroke-width="78" stroke-linejoin="round"/>
+  </g>
+
+  <polyline points="151,53 151,71 151,89 151,107 151,125 151,143 203,161 203,179 203,197 203,215 203,233 203,251"
+    fill="none" stroke="#0d6b63" stroke-width="1.6" stroke-dasharray="6 4"/>
+
+  <path class="dash" d="M206 150 L 258 150" marker-end="url(#ar2)" stroke="#0d6b63"/>
+  <text x="264" y="154" class="lbl" fill="#0d6b63">重新居中：中心右移 2 列</text>
+
+  <text x="60" y="282" class="lbl">虚线 = 带中心　　浅色 = 实际计算的单元格</text>
+  <text x="60" y="300" class="lbl">带宽度 = 2w + 1 列。图中约为 3 列，仅作示意。</text>
+
+  <g style="font-size:11.5px">
+    <text x="430" y="52" style="font-weight:600;font-size:12.5px">三条规则</text>
+    <text x="430" y="76">1. 中心初值取种子对齐的列号。</text>
+    <text x="430" y="96">2. 默认每行沿对角线移动一格。</text>
+    <text x="430" y="116">3. 连续 3 行选中同一步，中心跳到该列。</text>
+
+    <text x="430" y="152" style="font-weight:600;font-size:12.5px">为什么中心要动</text>
+    <text x="430" y="176">一次插入缺失让路径永久平移一列。</text>
+    <text x="430" y="196">中心不动，路径就会滑出带外。</text>
+    <text x="430" y="216">中心跟随，带始终包住路径。</text>
+
+    <text x="430" y="252" style="font-weight:600;font-size:12.5px">为什么是 3 行</text>
+    <text x="430" y="276">单行匹配可能是噪声。</text>
+    <text x="430" y="296">连续 3 行同行，说明真的在沿对角线走。</text>
+  </g>
+</svg>
+<figcaption>图 3。带状矩阵。浅色区域是实际计算的单元格。中心在第 6 行之后右移 2 列，带跟着移动。带外的单元格不计算，也不参与回溯。</figcaption>
+</figure>
+
+<h3>Q5.2 中心移动引起的边界问题</h3>
+
+<p>中心默认沿对角线每行移动一格。重新居中生效时，中心跳到最近三行的匹配列。设本行中心相对上一行移动了 <code>k</code> 列，把 <code>k</code> 规约到 <code>(−d/2, d/2]</code>。行内单元格因此分成三段：</p>
+
+<table>
+<tr><th style="width:16%">段</th><th style="width:26%">可用前驱</th><th>原因</th></tr>
+<tr><td>中间主体</td><td>对角、上、左、0</td><td>三个前驱都落在上一行的带内。</td></tr>
+<tr><td>一个边界格</td><td>对角、左、0</td><td>上一行对应位置在带外，无"上"前驱。</td></tr>
+<tr><td>另一侧边界</td><td>左、0</td><td>上一行对应位置都在带外，只剩"左"。</td></tr>
+</table>
+
+<p>这就是代码中 <code>max4</code>、<code>max3</code>、<code>max2</code> 三个函数各出现一次的原因。它不是优化，是正确性要求。给带外单元格编一个分数会让路径穿过不存在的区域。</p>
+
+<h3>Q5.3 前向带为什么更宽</h3>
+
+<pre><i>// src/scan.rs:623</i>
+band = max(6, Δ(d));
+bandforward = min(2 × band, d / 3);
+narrowbandwrap(i, d, band, bandforward, false, 3);</pre>
+
+<p>反向阶段的带以种子为中心，路径就在中心附近。正向阶段要走出种子区域，进入尚未探测的部分。路径可能已经偏移了几列。带宽加倍，用来重新捕获路径。</p>
+
+<p>上界 <code>d/3</code> 保证带不会宽到失去意义。硬上界是 <code>MAXBANDWIDTH = 150</code>。<code>2w + 1 &gt; 150</code> 时程序报错退出，退出码 −1。</p>
+
+<h3>Q5.4 这个优化的风险</h3>
+
+<p>带宽只由 <code>d</code> 和 <code>PI</code> 决定，不由数据决定。如果真实空位率远高于 <code>PI</code>，路径会漂得比带快。重新居中要等连续 3 行的一致匹配。漂移太快时，带可能在居中生效之前就丢掉路径。</p>
+
+<p>症状：分数偏低，或区间被截断。处理办法是提高 <code>PI</code>，让 <code>Δ</code> 变大。不要只降 <code>Minscore</code>，那会放进更多噪声。</p>
+
+<p><span class="file">落点</span>带宽计算 <span class="anchor">src/scan.rs:623</span>，重新居中 <span class="anchor">src/algo.rs:254</span>，三段循环 <span class="anchor">src/algo.rs:268</span>。</p>
+
+<h2 id="q6"><span class="badge">Q6</span>怎样取回路径、拷贝数和统计</h2>
+
+<p>动态规划只给出分数。报告需要路径、拷贝数、匹配率和周期。四样东西都要从矩阵里取回。</p>
+
+<div class="trio">
+  <div class="t-problem"><h4>问题</h4><p>矩阵只存分数，没存方向。若额外存方向矩阵，内存会翻倍。</p></div>
+  <div class="t-method"><h4>手段</h4><p>回溯时重算三个前驱表达式，看哪个等于当前值。拷贝数按跨越模式边界的次数累加。统计用相距一个周期的双指针扫描。</p></div>
+  <div class="t-why"><h4>理由</h4><p>整数分数加固定公式，使前驱可反解。周期边界是拷贝的天然计数器。同列配对就是"相邻拷贝逐位比较"。</p></div>
+</div>
+
+<h3>Q6.1 回溯：用等式反推方向</h3>
+
+<p>从最高分单元格 <code>(maxrealrow, maxcol)</code> 出发。每个单元格的值必然等于下面三者之一：</p>
+
+<div class="math">
+对角：S(r−1, j−1) + 相似度(seq[i], ec[j])<br>
+上　：S(r−1, j) + δ <span class="c">（序列有插入）</span><br>
+左　：S(r, j−1) + δ <span class="c">（模式有插入）</span>
+</div>
+
+<p>按这个顺序试。命中哪个就写哪两个字符，然后移动到对应前驱。循环直到分数为 0 或到达矩阵边界。</p>
+
+<p>为什么可以只靠等式：分数是整数，公式固定，所以三个候选值最多只有一个等于当前值。不需要方向矩阵。内存从 <code>L × d</code> 字节降到 0。</p>
+
+<h3>Q6.2 带状回溯的两个特殊问题</h3>
+
+<p><strong>列号要换算。</strong>带内列号 <code>i</code> 与模式列号 <code>c</code> 的关系是 <code>i = w + k</code>，其中 <code>k</code> 是本行中心相对上一行的偏移。回溯时必须用同一个换算去找上一行的前驱，否则会读错格。</p>
+
+<p><strong>0 有两种含义。</strong>局部比对里的 0 可能是屏障（−1000 改写前的位置），也可能是真实的比对起点。带状回溯会先做一次判定：检查当前 0 是否等于某个前驱加对应得分。若是，就认为它是合法起点，继续回溯；若不是，就停止。</p>
+
+<pre><i>// src/algo.rs:905</i>
+if option == LOCAL && sval == 0 && r != 0 {
+    <i>// 逐个测试前驱，确认这个 0 是不是合法起点</i>
+    legitimate_zero = …;
+}</pre>
+
+<p>没有这段判定，边界附近的重复会被截断，报告的区间会少几个碱基。</p>
+
+<h3>Q6.3 拷贝数</h3>
+
+<p>模式是周期串。回溯每跨过一次列号 0 的边界，就说明走过了一份完整拷贝。</p>
+
+<pre><i>// src/algo.rs:816</i>
+fullcopy = (maxcol + 1) % size;
+<i>// 回溯中途</i>
+if j == fullcopy { copynumber += 1.0 }
+<i>// 回溯结束时补上不足一份的尾部</i>
+copynumber += (maxcol − j) / size</pre>
+
+<p>拷贝数有两个用途。第一，写进报告。第二，作为过滤条件：</p>
+
+<div class="math">
+d ≤ 50　　　　　copies ≥ 1.9<br>
+50 &lt; d ≤ 100　　copies ≥ 1.9 − 0.002 × (d − 50)<br>
+d &gt; 100　　　　copies ≥ 1.8
+</div>
+
+<p>门槛略低于 2，因为末端通常不完整。取 <code>d = 75</code> 得 1.85。含义是：至少要有接近两份拷贝，否则证据不足以称为串联重复。</p>
+
+<h3>Q6.4 统计：双指针与距离直方图</h3>
+
+<p>回溯得到的四条平行数组是：序列字符、模式字符、序列位置、模式列号。统计阶段用两个指针扫它。</p>
+
+<ol>
+  <li>左指针 <code>lp</code> 移到第一个非空位的模式字符。</li>
+  <li>右指针 <code>rp</code> 向前走，直到模式列号与 <code>lp</code> 相同，并且不是空位。</li>
+  <li>两个指针逐格前进，比较序列字符。</li>
+</ol>
+
+<p>比较结果分四种：</p>
+
+<table>
+<tr><th style="width:26%">情形</th><th style="width:20%">计数</th><th>说明</th></tr>
+<tr><td>两边都不是空位，字符相同</td><td>match +1</td><td>同时记录两个序列位置的距离。</td></tr>
+<tr><td>两边都不是空位，字符不同</td><td>mismatch +1</td><td>同一列上的替换。</td></tr>
+<tr><td>一边是空位</td><td>indel +1</td><td>插入或缺失。</td></tr>
+<tr><td>两边都是空位</td><td>不计数</td><td>该列在两份拷贝里都不存在。</td></tr>
+</table>
+
+<p>每次匹配都产生一个距离 <code>|indexprime[rp] − indexprime[lp]|</code>。程序把它记入直方图。最后取直方图的众数作为报告周期。</p>
+
+<div class="key"><span class="lbl">为什么用众数</span><p>共识长度可能不精确。空位会让实际间距在 <code>period ± 1</code> 之间抖动。众数对抖动不敏感，对系统性偏移敏感。它给出的周期与比对本身一致，因此比候选 <code>d</code> 更可信。</p></div>
+
+<p>同一次扫描还产出熵。熵由四种碱基的比例算出，范围 0 到 2。纯 AT 重复的熵接近 1，四种碱基均匀的重复接近 2。</p>
+
+<p><span class="file">落点</span>全列回溯 <span class="anchor">src/algo.rs:811</span>，带状回溯 <span class="anchor">src/algo.rs:880</span>，统计 <span class="anchor">src/scan.rs:829</span>。</p>
+
+<h2 id="q7"><span class="badge">Q7</span>周期可能是倍数，怎样定下来</h2>
+
+<p>候选 <code>d</code> 来自一次元组命中。它可能是真实周期的 2 倍、3 倍或 7 倍。用倍数做模式，比对同样能得高分，因为周期串的倍数周期也是周期串。</p>
+
+<div class="trio">
+  <div class="t-problem"><h4>问题</h4><p><code>d</code> 只是线索。种子那份拷贝还带错误。直接用 <code>d</code> 做模式，边界与分数都会有偏差。</p></div>
+  <div class="t-method"><h4>手段</h4><p>三重校正：区间内的周期投票、逐列共识投票、用共识重跑一次比对。最终周期取直方图众数。</p></div>
+  <div class="t-why"><h4>理由</h4><p>投票只剔除与显著间距明显不符的候选。倍数周期常常仍在前 3 名之内，所以收尾交给去冗余。共识与重对齐消除种子拷贝的个别错误。</p></div>
+</div>
+
+<h3>Q7.1 第一重：区间内的周期投票</h3>
+
+<p>报告区间确定后，程序在该区间的序列上再统计一次短距离结构。做法如下：</p>
+
+<ol>
+  <li>取所有长度为 2 的元组，按码值分组。</li>
+  <li>同一码值的相邻出现给出一个距离。累加到 <code>counts[distance]</code>。</li>
+  <li>对 <code>counts</code> 做一次线性拟合，减去趋势项 <code>i × s</code>。</li>
+  <li>取前 5 名，存入 <code>sort_multiples</code>。</li>
+  <li>候选 <code>d</code> 只要落在前 3 名，就通过。</li>
+</ol>
+
+<p>减去趋势的理由：完全重复的序列里，距离越远，可配对的起点越少。计数天然随距离线性下降。这个下降与"是不是周期"无关，属于背景。减去它，峰值才突出。</p>
+
+<p>这条判据是粗筛，不是精确定理。它能拒绝"倍数太大"的候选，不保证找到最小周期。真实数据里，一个 AT 富集区可能同时报告 2、14、16 三种周期。收尾工作由 Q8 完成。</p>
+
+<div class="note">当 <code>d = 1</code> 时跳过投票。单碱基重复没有内部结构，程序改用另一条判据：区间内出现最多的碱基占比不低于 80%。</div>
+
+<h3>Q7.2 第二重：共识序列</h3>
+
+<p>比对结果是一张表，每行是"序列的一个碱基对应模式的哪一列"。把同一列的所有碱基收集起来，取多数，就得到共识序列。</p>
+
+<p>列有两种。设模式列号为 <code>c</code>：</p>
+
+<ul>
+  <li><strong>对齐列</strong> <code>2c + 1</code>。该列在某份拷贝里存在。</li>
+  <li><strong>插入列</strong> <code>2c</code>。该列只在部分拷贝里存在，属于插入。</li>
+</ul>
+
+<p>判定规则：</p>
+
+<ol>
+  <li>对齐列：在 A、C、G、T、空位中取多数。</li>
+  <li>插入列：若插入比例 ≥ 50%，输出多数碱基；否则输出空位。</li>
+  <li>最后压缩：删掉所有空位，剩下的长度就是共识长度 <code>cons_classlength</code>。</li>
+</ol>
+
+<p>为什么插入列要单独判断：一个碱基可能在 7 份拷贝里出现 4 次，在另外 3 份里缺失。这时它应当进入模式，因为多数拷贝有它。直接按列对齐会把它压掉。</p>
+
+<h3>Q7.3 第三重：用共识重跑比对</h3>
+
+<pre><i>// src/scan.rs:649</i>
+classlength = d;
+get_consensus(d);
+if cons_classlength != classlength { classlength = cons_classlength }
+newwrap 或 narrowbandwrap(..., with_consensus = true, ...);</pre>
+
+<p>第二次比对把 <code>EC</code> 换成共识。分数、区间、拷贝数全部重算。第一次比对的结果只用于产生共识，不再使用。</p>
+
+<p>为什么值得多花一次比对：第一次的模式是序列片段，包含种子所在拷贝的所有错误。错误会压低分数，也会让边界偏一两个碱基。共识是多数意见，错误被平均掉。第二次比对的分数更接近真实相似度。</p>
+
+<h3>Q7.4 一个真实例子</h3>
+
+<p>测试数据 <code>tests/data/diff_cn.fasta</code> 中有一段 AT 富集区。程序对它输出三条记录：</p>
+
+<pre>first last period copies size matches indels score  A  C  G  T entropy pattern
+16    111  2      48.0   2    76      0      108    42 0  12 44 1.42    TA
+15    111  14     6.6    14   83      9      130    42 0  13 44 1.43    GTATATATATATAG
+16    111  16     6.2    16   89      4      136    42 0  12 44 1.42    TATATATATATAGGTA</pre>
+
+<p>三条记录覆盖同一段序列。周期 2、14、16 都能成立。这是倍数问题的直接证据。为什么 14 和 16 没有被删掉，见 Q8：它们的分数明显高于 108。</p>
+
+<h3>Q7.5 最终周期</h3>
+
+<p>报告里的 <code>period</code> 来自 Q6.4 的直方图众数，不是 <code>classlength</code>，也不是候选 <code>d</code>。三者可以不同：</p>
+
+<table>
+<tr><th style="width:22%">量</th><th style="width:26%">来源</th><th>典型关系</th></tr>
+<tr><td>候选 <code>d</code></td><td>元组命中的距离</td><td>可能是倍数</td></tr>
+<tr><td><code>classlength</code></td><td>共识压缩后的长度</td><td>约等于真实周期</td></tr>
+<tr><td><code>period</code></td><td>匹配碱基距离的众数</td><td>等于或接近 <code>classlength</code></td></tr>
+</table>
+
+<p><span class="file">落点</span>周期投票 <span class="anchor">src/scan.rs:59</span>，共识 <span class="anchor">src/algo.rs:1435</span>，重对齐 <span class="anchor">src/scan.rs:656</span>。</p>
+
+<h2 id="q8"><span class="badge">Q8</span>同一重复被报多次，怎样收尾</h2>
+
+<p>Q1 到 Q7 只保证"每个候选被正确处理"。它们不保证"同一段序列只报一次"。倍数周期、边界差异、判据的粗筛都会带来重复记录。</p>
+
+<div class="trio">
+  <div class="t-problem"><h4>问题</h4><p>输出必须可用于下游。同一位点出现三条记录会导致注释重复、掩码重复。</p></div>
+  <div class="t-method"><h4>手段</h4><p>四步后处理：按周期上限裁剪，按起点排序，按重叠与分数规则去冗余，按发现顺序编号。</p></div>
+  <div class="t-why"><h4>理由</h4><p>排序后重叠记录必定相邻，只需局部比较。规则用"周期成倍数且分数不显著更高"表达信息冗余。</p></div>
+</div>
+
+<h3>Q8.1 四步</h3>
+
+<pre><i>// src/clean.rs:491</i>
+remove_by_size(maxperiod);    <i>// 1. 周期超过 MaxPeriod 的记录删除</i>
+sort_by_index();              <i>// 2. 按 first 升序</i>
+if !redundoff { remove_redundancy(); }   <i>// 3. 去冗余（-r 可关）</i>
+sort_by_count();              <i>// 4. 按发现顺序，输出编号用</i></pre>
+
+<h3>Q8.2 冗余的判定</h3>
+
+<p>两条记录 <code>i</code> 与 <code>j</code>，先算区间重叠长度。只有重叠占任一方的 90% 以上，才考虑删除：</p>
+
+<div class="math">
+overlap / i.length ≥ 0.9　或者　overlap / j.length ≥ 0.9
+</div>
+
+<p>再看信息是否冗余：</p>
+
+<ul>
+  <li><code>i.period</code> 是 <code>j.period</code> 的整数倍，并且 <code>i.score ≤ 1.1 × j.score</code>：删 <code>i</code>。</li>
+  <li>两者周期相同，并且 <code>i.score ≤ j.score</code>：删 <code>i</code>。</li>
+</ul>
+
+<p>两个条件都不满足时，两条都保留。</p>
+
+<h3>Q8.3 为什么这样写</h3>
+
+<p><strong>为什么是 90%。</strong>同一重复的两次报告，边界常常差几个碱基。要求 100% 重叠会漏掉这种情况。90% 允许边界误差，同时排除"只是路过"的记录。</p>
+
+<p><strong>为什么要求周期成倍数。</strong>周期 7 和周期 12 覆盖同一段序列，是两种不同的结构，不能互相删除。只有倍数关系才说明"长周期是短周期的重复"。</p>
+
+<p><strong>为什么是 1.1。</strong>如果长周期报告的分数明显更高，说明它捕捉到了短周期看不到的结构。这时不能删。上一节的例子正是这种情况：<code>130 &gt; 1.1 × 108 = 118.8</code>，所以周期 14 保留。</p>
+
+<p><strong>为什么先按起点排序。</strong>排序后，与第 <code>i</code> 条重叠的记录一定紧跟在它后面。内层循环一旦发现不重叠就跳出。整个过程是局部的，不需要两两比较全部记录。</p>
+
+<h3>Q8.4 对齐文件也要同步</h3>
+
+<p>HTML 明细文件在去冗余之前就写好了。删除记录后，文件里还留着它们的比对块。所以程序重写一遍文件：</p>
+
+<ol>
+  <li>逐行扫描。遇到以 <code>Fo</code> 开头的行，读后面两行。</li>
+  <li>若第三行含有当前记录的引用串，保留这三行及其后的内容。</li>
+  <li>否则跳过整块。</li>
+  <li>最后按每 120 条一页切分，文件名加 <code>.1</code>、<code>.2</code> 等后缀。</li>
+</ol>
+
+<p>引用串由起点、终点、周期、拷贝数、共识长度和序号拼成。它是表格与明细之间的锚点。这也是为什么去冗余必须在写表格之前完成。</p>
+
+<div class="warn"><span class="lbl">副作用</span><p>去冗余有顺序依赖。先删哪一条，会影响后面能否删除。程序按起点顺序扫描，结果是确定的，但不保证全局最优。这一点与 C 版一致。</p></div>
+
+<p><span class="file">落点</span>判定 <span class="anchor">src/clean.rs:99</span>，主循环 <span class="anchor">src/clean.rs:130</span>，文件重写 <span class="anchor">src/clean.rs:177</span>，分页 <span class="anchor">src/clean.rs:241</span>。</p>
+
+<h2 id="ch3"><span class="badge">§3</span>实现：状态与内存</h2>
+
+<p>前八章只讲抽象。本章把抽象落到具体的内存布局。读完之后，再看代码就不会迷路。</p>
+
+<h3>3.1 一个实例装一条序列</h3>
+
+<p>原程序把状态放在文件级全局变量里。Rust 版把它们收进一个结构体 <code>Trf</code>。每条 FASTA 序列创建一个实例，序列处理完就丢弃。</p>
+
+<pre><i>// src/state.rs:221</i>
+pub struct Trf {
+    params, fasta, sequence, length, bw,
+    s, up, diag, ec, consensus, align_pair, sm, index,
+    alpha, beta, delta, pm, pi, pindel,
+    minscore, maxperiod, maxdistance, reportmin,
+    tag, distance, distanceseenarray, best_period_list,
+    tuple_size, tuple_max_distance, tuple_code,
+    tuple_hash, history, history_size, next_free_history_index,
+    band_center, records, …
+}</pre>
+
+<p>这样做的直接好处是：多序列文件可以顺序处理，内存不会跨序列增长。也便于测试时只构造一条序列。</p>
+
+<h3>3.2 打分矩阵 S 的布局</h3>
+
+<p><code>S</code> 是一维数组，按行连续存放。列数固定为 151，行数是 <code>bw + 1</code>：</p>
+
+<div class="math">
+S[r][i] = s[r × 151 + i]<br>
+bw = min(maxwraplength, n) <span class="c">，maxwraplength 默认 2 000 000</span>
+</div>
+
+<p>为什么列数固定：带内列号的最大值是 <code>2w</code>，而 <code>w ≤ 74</code>。取 151 保证够用，同时让下标乘法变成常数。若按 <code>2w + 1</code> 变化，每次访问都要重新算行偏移。</p>
+
+<p>行是循环使用的。反向阶段从第 <code>bw</code> 行往下走，正向阶段从第 0 行往上走。中间的 <code>minrealrow</code> 是两次扫描的接缝。</p>
+
+<h3>3.3 模式缓冲区与共识数组</h3>
+
+<p><code>EC</code> 存当前模式，长度是 <code>2 × (2000 + 1)</code>。为什么是两倍：共识可能有插入列，长度会超过原始 <code>d</code>。上限取 <code>MAXPATTERNSIZECONSTANT = 2000</code>。</p>
+
+<p>共识数组有 8 条平行数组：A、C、G、T、空位、插入、列总数、字母总数。列号规则固定：</p>
+
+<ul>
+  <li><code>2c</code> 是第 <code>c</code> 列的插入槽。</li>
+  <li><code>2c + 1</code> 是第 <code>c</code> 列的对齐槽。</li>
+</ul>
+
+<p>两倍长度就是为了这个交错布局。取一个碱基的计数时，只需一次下标运算。</p>
+
+<h3>3.4 回溯结果的四条平行数组</h3>
+
+<pre><i>// src/state.rs:198</i>
+struct AlignPair {
+    length, score,
+    textprime[2·bw+2],    <i>// 序列字符</i>
+    textsecnd[2·bw+2],    <i>// 模式字符</i>
+    indexprime[2·bw+2],   <i>// 序列位置</i>
+    indexsecnd[2·bw+2],   <i>// 模式列号</i>
+}</pre>
+
+<p>四条数组用同一个下标。第 <code>l</code> 列就是一个比对列。这种布局让统计阶段的双指针扫得非常直接：两个指针就是两个下标。</p>
+
+<p>数组长度是 <code>2 × bw + 2</code>。理由：一次比对最多覆盖 <code>2 × bw</code> 行。反向占一半，正向占一半。</p>
+
+<h3>3.5 距离表与历史环</h3>
+
+<table>
+<tr><th style="width:26%">结构</th><th style="width:30%">规模</th><th>用途</th></tr>
+<tr><td><code>distance[]</code></td><td><code>maxdistance + 1</code> 个列表</td><td>每个距离的滑窗证据。</td></tr>
+<tr><td>每个列表的容量</td><td><code>max(d, 20) + 1</code></td><td>窗口内的位置数。</td></tr>
+<tr><td><code>tag[]</code></td><td><code>maxdistance / 50 + 1</code></td><td>快速定位活跃距离。</td></tr>
+<tr><td><code>history[]</code></td><td>每个元组尺寸一个环，<code>2 × tuple_max_distance + 4</code> 槽</td><td>元组最近出现的位置。</td></tr>
+<tr><td><code>tuple_hash[]</code></td><td><code>4<sup>k</sup></code> 项，每个尺寸一张</td><td>码值到历史槽的入口。</td></tr>
+<tr><td><code>band_center[]</code></td><td><code>bw + 1</code> 项</td><td>每行的带中心列号。</td></tr>
+</table>
+
+<p>只有 <code>distance[]</code> 的规模与 <code>maxdistance</code> 的平方成正比。这是整套结构里唯一的大块内存，也是 <code>MaxPeriod</code> 不能随意调大的原因。</p>
+
+<h3>3.6 整数分数与浮点边界</h3>
+
+<p>热路径上只有整数。分数、列号、位置、距离全是 <code>i32</code>。原因有三条：</p>
+
+<ul>
+  <li>整数比较没有舍入误差。同一份输入在任何平台上得到同一路径。</li>
+  <li>整数加法比浮点加法快，且容易向量化。</li>
+  <li>回溯靠等式反解前驱。浮点相等判断不可靠，整数相等判断可靠。</li>
+</ul>
+
+<p>浮点只出现在外围：<code>d_range</code> 的平方根、拷贝数的累加、熵、比例统计。这些量不进矩阵，不影响路径。</p>
+
+<h3>3.7 完整的驱动流程</h3>
+
+<pre><i>// src/control.rs:33</i>
+打开 .txt.html
+初始化最佳周期表
+init_and_fill_coin_toss_stats()   <i>// 阈值表、元组尺寸、区间半径</i>
+newtupbo()                        <i>// 主扫描</i>
+trf_clean()                       <i>// 去冗余、分页、写表格</i></pre>
+
+<p><code>init_and_fill_coin_toss_stats</code> 做三件事：按 PM 选表；按元组尺寸填 <code>tuple_size</code> 与 <code>tuple_max_distance</code>；按 <code>d_range</code> 填每个距离的 <code>lo_d_range</code> 与 <code>hi_d_range</code>。</p>
+
+<h3>3.8 输出文件</h3>
+
+<table>
+<tr><th style="width:34%">文件名</th><th>内容</th></tr>
+<tr><td><code>前缀.参数串.1.html</code></td><td>重复表格，含指向明细的链接。</td></tr>
+<tr><td><code>前缀.参数串.txt.html</code> → <code>.1.html</code></td><td>比对明细。每 120 条一页。</td></tr>
+<tr><td><code>前缀.参数串.dat</code></td><td>14 字段的制表数据。加 <code>-d</code> 生成。</td></tr>
+<tr><td><code>前缀.参数串.mask</code></td><td>重复位置替换成 N 的 FASTA。加 <code>-m</code> 生成。</td></tr>
+</table>
+
+<p>参数串是 <code>Match.Mismatch.Delta.PM.PI.Minscore.MaxPeriod</code>。同一份数据用不同参数跑，文件不会互相覆盖。<code>-ngs</code> 模式只把 <code>.dat</code> 内容写到标准输出，不写文件。</p>
+
+<h2 id="ch4"><span class="badge">§4</span>走查：一条 35 bp 序列</h2>
+
+<p>用 <code>tests/data/small_test.fasta</code> 的第一条序列。它长 35 bp，是 7 bp 单元重复 5 次。</p>
+
+<pre>&gt;0
+TCATCGGTCATCGGTCATCGGTCATCGGTCATCGG</pre>
+
+<h3>4.1 初始化</h3>
+
+<div class="math">
+n = 35<br>
+maxdistance = 2000 → 取 min(2000, 0.6 × 35 = 21) = 21 → 取 max(21, 200) = 200<br>
+元组尺寸 = 4, 5, 7　最大距离 = 29, 159, 200<br>
+pindel = 0.10
+</div>
+
+<p>注意 <code>maxdistance = 200</code> 而不是 21。取最小值之后的 200 是下限。短序列也因此有完整的距离表。</p>
+
+<h3>4.2 第一条证据</h3>
+
+<p>位置 1 到 4 是 <code>TCAT</code>。位置 8 到 11 也是 <code>TCAT</code>。元组在 <code>i = 11</code> 时命中旧位置 <code>i = 4</code>，得到 <code>d = 7</code>。</p>
+
+<p>下一位 <code>i = 12</code> 的元组是 <code>CATC</code>，与位置 5 相同。它与上一条证据相邻，于是合并：</p>
+
+<pre>i = 11:  distance[7].entry = { location: 11, size: 4 }   nummatches = 4
+i = 12:  合并 → { location: 12, size: 5 }                nummatches = 5</pre>
+
+<p>这就是"匹配碱基"计数：一次 4 元组命中贡献 4 个碱基，相邻命中只多贡献 1 个。</p>
+
+<h3>4.3 三条判据</h3>
+
+<table>
+<tr><th style="width:24%">判据</th><th style="width:34%">实际值</th><th>结果</th></tr>
+<tr><td>等待时间</td><td><code>first = 11</code>，上限 <code>max(0, 12−20) + 18 = 18</code></td><td>通过</td></tr>
+<tr><td>区间证据和</td><td><code>d ≤ 20</code>，区间只有 7 自己，和为 5</td><td>5 ≥ 5，通过</td></tr>
+<tr><td>区域竞争</td><td>区间内只有 7 一个距离</td><td>通过</td></tr>
+</table>
+
+<p><code>d = 7 ≤ 250</code>，跳过最佳周期表检查。进入比对。</p>
+
+<h3>4.4 比对</h3>
+
+<p><code>d = 7 ≤ 20</code>，走全列版本 <code>newwrap</code>。<code>start = 12</code>，模式取位置 6 到 12：<code>GGTCATC</code>。</p>
+
+<p>反向扫描从 13（<code>start + 1</code>）开始逐行后退，正向扫描从反向结果的最优行前进到 35。屏障设在 <code>start − max(7, 20) = −8</code>，实际不触发，因为序列从 1 开始。</p>
+
+<p>每条对角线命中得 +2。路径覆盖 35 个碱基，没有错配和空位：</p>
+
+<div class="math">
+分数 = 35 × 2 = 70　　(copies = 5.0，跨过 5 次模式边界)
+</div>
+
+<h3>4.5 共识与重对齐</h3>
+
+<p>进入共识之前还有两道检查。拷贝数 5.0 高于门槛 1.9，通过。倍数投票取区间 [1, 35] 的前 3 个显著间距，结果是 7、14、21，候选 7 在其中，通过。</p>
+
+<p>比对把 35 行分配到 7 个模式列。每列的 5 个碱基完全一致，共识是 <code>TCATCGG</code>，长度 7，没有插入列。用共识再跑一次比对，分数仍是 70，区间仍是 1 到 35。</p>
+
+<h3>4.6 报告与清洗</h3>
+
+<p>周期取直方图众数。匹配碱基的间距集中在 7，所以 <code>period = 7</code>。写入记录：</p>
+
+<table>
+<tr><th style="width:22%">字段</th><th style="width:18%">值</th><th>含义</th></tr>
+<tr><td><code>first</code></td><td>1</td><td>起点。</td></tr>
+<tr><td><code>last</code></td><td>35</td><td>终点。</td></tr>
+<tr><td><code>period</code></td><td>7</td><td>周期。匹配距离的众数。</td></tr>
+<tr><td><code>copies</code></td><td>5.0</td><td>拷贝数。</td></tr>
+<tr><td><code>size</code></td><td>7</td><td>共识长度。</td></tr>
+<tr><td><code>matches</code></td><td>100</td><td>匹配率，单位 %。</td></tr>
+<tr><td><code>indels</code></td><td>0</td><td>空位率，单位 %。</td></tr>
+<tr><td><code>score</code></td><td>70</td><td>比对分数。35 个匹配 × 2。</td></tr>
+<tr><td>A / C / G / T</td><td>14 / 28 / 28 / 28</td><td>碱基占比，单位 %。四舍五入取整。</td></tr>
+<tr><td><code>entropy</code></td><td>1.95</td><td>熵，范围 0 到 2。</td></tr>
+<tr><td><code>pattern</code></td><td>TCATCGG</td><td>共识模式串。</td></tr>
+</table>
+
+<h3>4.7 清洗前后对比</h3>
+
+<p>关闭去冗余（<code>-r</code>）再跑一次，可以看到清洗前的完整记录。三个测试序列都会产生倍数记录：</p>
+
+<table>
+<tr><th style="width:16%">序列</th><th style="width:30%">清洗前（<code>-r</code>）</th><th>清洗后</th></tr>
+<tr><td>0</td><td>周期 7，周期 14</td><td>周期 7</td></tr>
+<tr><td>1</td><td>周期 12、24、36</td><td>周期 12</td></tr>
+<tr><td>2</td><td>周期 35、70、105</td><td>周期 35</td></tr>
+</table>
+
+<p>倍数记录全部得分相同。按 Q8 的规则，<code>i.period</code> 是 <code>j.period</code> 的倍数，且 <code>i.score ≤ 1.1 × j.score</code>，所以删除。区间重叠也是 100%，满足 90% 的条件。</p>
+
+<div class="key"><span class="lbl">这条对比说明什么</span><p>倍数问题不在产生阶段解决。产生阶段容忍倍数，甚至欢迎倍数：去掉它要付出额外的判据，还可能误杀真实的长周期。收尾阶段用一条廉价规则统一处理。</p></div>
+
+<h3>4.8 与 C 版逐字节一致的原因</h3>
+
+<ul>
+  <li>分数是整数，所有比较没有舍入差异。</li>
+  <li>浮点只用于输出字段。输出用 C 的 <code>%*.*f</code> 语义，包括 <code>0/0</code> 输出 <code>-nan</code>。</li>
+  <li>序列描述按原始字节写入，不经过 UTF-8 校验。</li>
+  <li>管道提前关闭时恢复 <code>SIGPIPE</code> 默认处理，退出状态与 C 版相同。</li>
+  <li>发布构建启用 fat LTO 与单代码生成单元，扫描循环的机器码接近 C。</li>
+</ul>
+
+<h2 id="cheat"><span class="badge">§5</span>速查</h2>
+
+<h3>5.1 常量</h3>
+
+<table>
+<tr><th style="width:30%">名字</th><th style="width:14%">值</th><th>作用</th></tr>
+<tr><td><code>MAXBANDWIDTH</code></td><td>150</td><td>带内列数上限。超出即报错退出。</td></tr>
+<tr><td><code>STRIDE</code></td><td>151</td><td><code>S</code> 矩阵的固定行宽。</td></tr>
+<tr><td><code>SMALLDISTANCE</code></td><td>20</td><td>小于等于它用全列 DP，否则用带状。</td></tr>
+<tr><td><code>MINBANDRADIUS</code></td><td>6</td><td>带半径下限。</td></tr>
+<tr><td><code>RECENTERCRITERION</code></td><td>3</td><td>连续 3 行同一步就重新居中。</td></tr>
+<tr><td><code>TAGSEP</code></td><td>50</td><td>距离标签的分组间隔。</td></tr>
+<tr><td><code>MAXPATTERNSIZECONSTANT</code></td><td>2000</td><td>模式缓冲区与表的索引上限。</td></tr>
+<tr><td><code>NUMBER_OF_PERIODS</code></td><td>5</td><td>每条记录保留的候选周期数。</td></tr>
+<tr><td><code>NUMBER_OF_PERIODS_TO_TEST</code></td><td>3</td><td>倍数判据实际比对的名次数。</td></tr>
+<tr><td><code>EO_MAX_TBL</code></td><td>120</td><td>每个 HTML 表格与明细页的记录数。</td></tr>
+</table>
+
+<h3>5.2 公式</h3>
+
+<table>
+<tr><th style="width:34%">量</th><th>公式</th></tr>
+<tr><td>搜索距离上限</td><td><code>max(200, min(max(MaxPeriod, 500), 0.6 n))</code></td></tr>
+<tr><td>空位漂移半径</td><td><code>Δ(d) = ⌊2.3 √(PI/100 × d)⌋</code>，<code>d &gt; 20</code></td></tr>
+<tr><td>带半径</td><td><code>w = max(6, Δ)</code>；前向 <code>w′ = min(2w, d/3)</code></td></tr>
+<tr><td>证据区间</td><td><code>[d − Δ, d + Δ]</code>，<code>d ≤ 20</code> 时只取 <code>d</code></td></tr>
+<tr><td>最小匹配碱基数</td><td><code>Minscore / Match = 50 / 2 = 25</code></td></tr>
+<tr><td>拷贝数门槛</td><td><code>≥ 1.9</code>（<code>d ≤ 50</code>），线性降到 <code>1.8</code>（<code>d = 100</code>）</td></tr>
+<tr><td>冗余判定</td><td>重叠 ≥ 90% 且（周期成倍数且 <code>score ≤ 1.1 ×</code> 对方 或 周期相同且分数不高于对方）</td></tr>
+</table>
+
+<h3>5.3 参数影响</h3>
+
+<table>
+<tr><th style="width:14%">参数</th><th style="width:30%">调大后</th><th>风险</th></tr>
+<tr><td><code>Match</code></td><td>分数整体变大，同一门槛更容易过</td><td>短重复增多</td></tr>
+<tr><td><code>Mismatch</code></td><td>容忍度下降，错配多的重复被丢弃</td><td>漏掉高突变重复</td></tr>
+<tr><td><code>Delta</code></td><td>空位罚分加重，倾向于无空位比对</td><td>真实 indel 被当成错配</td></tr>
+<tr><td><code>PM</code></td><td>只支持 80 与 75。75 更宽松</td><td>其他值直接报错退出</td></tr>
+<tr><td><code>PI</code></td><td>区间变宽，带宽变大</td><td>计算变慢，误报增多</td></tr>
+<tr><td><code>Minscore</code></td><td>报告变少</td><td>短重复被过滤</td></tr>
+<tr><td><code>MaxPeriod</code></td><td>搜索范围变大，内存与时间按平方增长</td><td>2000 是实际上限</td></tr>
+</table>
+
+<h3>5.4 五个常见误读</h3>
+
+<ol>
+  <li><strong>把 <code>size</code> 当成周期。</strong><code>size</code> 是共识长度，<code>period</code> 是直方图众数。两者通常相等，但不保证。</li>
+  <li><strong>认为 <code>copies</code> 是整数。</strong>它是浮点数。末端不完整的部分按比例计入。</li>
+  <li><strong>认为 <code>MaxPeriod</code> 就是搜索上限。</strong>搜索上限是 <code>maxdistance</code>，受序列长度影响。</li>
+  <li><strong>认为 <code>Minscore</code> 决定一切。</strong>拷贝数、倍数判据、冗余剔除都可以在分数达标后继续否决。</li>
+  <li><strong>认为 0 分表示空白。</strong>在带状回溯里，0 可能是合法起点。程序为此单独判定。</li>
+</ol>
+
+<h2 id="quiz"><span class="badge">§6</span>自查</h2>
+
+<div class="qa">
+<p class="qno">Q1</p>
+<p>一条 1000 bp 的序列，参数 <code>MaxPeriod = 2000</code>。搜索的最大距离是多少？为什么不是 2000？</p>
+<details><summary>答案</summary>
+<p>600。先取 <code>max(2000, 500) = 2000</code>，再取 <code>min(2000, 0.6 × 1000 = 600)</code>，最后取 <code>max(600, 200) = 600</code>。一个周期超过序列长度六成的重复，最多只有一份半拷贝，证据不足。</p>
+</details>
+</div>
+
+<div class="qa">
+<p class="qno">Q2</p>
+<p>为什么距离表里的 <code>nummatches</code> 要按碱基数计，而不是按命中次数计？</p>
+<details><summary>答案</summary>
+<p>因为阈值表是按匹配碱基标定的，也因为连续命中会重叠。一段 100 bp 的匹配产生 97 次命中，但只有 100 个匹配碱基。按次数计会重复计算 96 次，门槛的含义就消失了。</p>
+</details>
+</div>
+
+<div class="qa">
+<p class="qno">Q3</p>
+<p>为什么等待时间判据能排除噪声，却不能单独使用？</p>
+<details><summary>答案</summary>
+<p>等待时间只约束"第一条证据的位置"。随机序列偶尔也会很早出现一条证据，之后不再出现。它不能证明证据总量够。所以要配合区间证据和与区域竞争。</p>
+</details>
+</div>
+
+<div class="qa">
+<p class="qno">Q4</p>
+<p>屏障为什么设在种子左侧 <code>size</code> 处，而不是紧贴种子？</p>
+<details><summary>答案</summary>
+<p>紧贴会切断比对向左延伸的能力。重复的起点常常在种子左侧一份拷贝之外。留出一份的距离，既允许合理延伸，又阻止跑到无关区域。全列版用 <code>max(size, 20)</code>，给小周期留同样的余量。</p>
+</details>
+</div>
+
+<div class="qa">
+<p class="qno">Q5</p>
+<p>带半径由 <code>PI</code> 决定。如果真实空位率是 30%，而 <code>PI = 10</code>，会发生什么？</p>
+<details><summary>答案</summary>
+<p><code>Δ</code> 按 0.1 计算，只有真实波动范围的约三分之一。路径更早滑出带。重新居中要等连续 3 行的一致匹配，漂移太快就追不上。结果是分数偏低或区间被截断。应当提高 <code>PI</code>。</p>
+</details>
+</div>
+
+<div class="qa">
+<p class="qno">Q6</p>
+<p>为什么共识要比对两次才能得到？</p>
+<details><summary>答案</summary>
+<p>第一次比对需要模式。此时唯一可用的模式是种子那份拷贝，它带错误。第一次比对的结果用于逐列投票，得到共识。共识更干净，但它的长度和相位可能与原模式不同，所以要用它重跑一次，才能得到与它一致的分数、区间和拷贝数。</p>
+</details>
+</div>
+
+<div class="qa">
+<p class="qno">Q7</p>
+<p>为什么去冗余要求"周期成倍数"？如果两条记录周期不同但区间几乎相同，应当删哪一条？</p>
+<details><summary>答案</summary>
+<p>区间相同不代表信息冗余。周期 7 与周期 12 描述两种不同的重复单元，都可能是真实结构。倍数关系才说明长周期是短周期的重复。周期不同且不成倍数时，两条都保留。</p>
+</details>
+</div>
+
+<div class="qa">
+<p class="qno">Q8</p>
+<p>关闭去冗余后，三条测试序列分别产生 2、3、3 条记录。这说明哪个阶段最需要后处理？</p>
+<details><summary>答案</summary>
+<p>倍数周期在多处产生：元组命中的距离、周期投票的前 3 名、共识长度。去掉它们要付出误杀的风险。因此程序选择容忍，把统一收尾放在最后一步。这也是"先产生后清洗"这个结构决定的直接后果。</p>
+</details>
+</div>
+
+<h2 id="refs"><span class="badge">§7</span>参考</h2>
+
+<ul>
+  <li>G. Benson, <em>Tandem repeats finder: a program to analyze DNA sequences</em>, Nucleic Acids Research, 1999, 27(2): 573–580.</li>
+  <li>原始 C 程序 4.10.0，作者 Gary Benson。本读本对应 Rust 移植版，模块划分见 <code>README.md</code>。</li>
+  <li>阈值表 <code>WAITDATA80</code>、<code>SUMDATA80</code>、<code>WAITDATA75</code>、<code>SUMDATA75</code> 由原程序生成，见 <code>src/tables.rs</code>。</li>
+</ul>
+
+<footer>
+<p>本读本与 <code>docs/trf-algorithm-textbook.html</code> 的组织方式不同。那一本按执行顺序逐层讲解。本读本按"问题 → 手段 → 理由"组织，先给抽象，再给代码落点。</p>
+<p>代码引用与行号对应仓库当前版本。若源码变动，请以函数名为准。</p>
+</footer>
+
+</div>
+</body>
+</html>

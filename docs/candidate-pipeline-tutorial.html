@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>候选是怎样产生的 · trfrs 第一级流水线教程</title>
+<style>
+:root{
+  --paper:#f6f7f5;
+  --card:#ffffff;
+  --ink:#1a2220;
+  --muted:#5d6b68;
+  --line:#d8dedb;
+  --line-soft:#e8ecea;
+  --teal:#0d6b63;
+  --teal-soft:#e5f1ee;
+  --amber:#8f5d10;
+  --amber-soft:#fbf2de;
+  --red:#9a3b2c;
+  --red-soft:#fbeae6;
+  --code-bg:#f1f3f1;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --serif:"Noto Serif SC","Source Han Serif SC","Songti SC",Georgia,serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font:16px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","Source Han Sans SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.rail{position:sticky;top:0;z-index:20;background:rgba(246,247,245,.95);border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}
+.rail-in{max-width:960px;margin:0 auto;padding:9px 26px;display:flex;gap:16px;align-items:center;overflow-x:auto;font-size:12.5px;white-space:nowrap}
+.rail-in b{font-family:var(--serif);font-size:13px;letter-spacing:.02em;color:var(--teal)}
+.rail-in a{color:var(--muted);text-decoration:none;padding:2px 0;border-bottom:1px solid transparent}
+.rail-in a:hover{color:var(--ink);border-bottom-color:var(--teal)}
+.page{max-width:960px;margin:0 auto;padding:0 26px 140px}
+
+/* cover */
+.hero{padding:66px 0 34px;border-bottom:3px double var(--line)}
+.kicker{font-size:11.5px;letter-spacing:.22em;color:var(--teal);margin:0 0 14px;font-weight:600}
+h1{font-family:var(--serif);font-size:42px;line-height:1.28;margin:0 0 14px;letter-spacing:-.01em;font-weight:700}
+.lede{font-size:17.5px;line-height:1.7;color:#3c4a47;max-width:44em;margin:0 0 22px}
+.hero-meta{display:flex;flex-wrap:wrap;gap:10px 26px;font-size:12.5px;color:var(--muted)}
+.hero-meta code{background:var(--code-bg)}
+
+/* headings */
+h2{font-family:var(--serif);font-size:27px;line-height:1.4;margin:64px 0 12px;padding-top:14px;border-top:1px solid var(--line);letter-spacing:-.01em}
+h2 .badge{display:inline-block;font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;color:#fff;background:var(--teal);border-radius:5px;padding:3px 8px;vertical-align:4px;margin-right:12px;font-weight:600}
+h3{font-family:var(--serif);font-size:19px;margin:34px 0 10px;letter-spacing:0}
+h4{font-size:15px;margin:22px 0 8px;color:#33403d;font-weight:700}
+p{margin:0 0 14px}
+ul,ol{margin:0 0 16px;padding-left:24px}
+li{margin:5px 0}
+li::marker{color:var(--teal)}
+strong{font-weight:700}
+em{font-style:normal;background:linear-gradient(transparent 62%,#d7ece6 62%);padding:0 1px}
+a{color:var(--teal)}
+code{font-family:var(--mono);font-size:.875em;background:var(--code-bg);border:1px solid var(--line-soft);border-radius:4px;padding:.06em .32em}
+
+/* components */
+.trio{display:grid;grid-template-columns:1fr 1fr 1fr;margin:20px 0 26px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)}
+.trio>div{padding:15px 17px 13px;border-right:1px solid var(--line);font-size:14.5px;line-height:1.72}
+.trio>div:last-child{border-right:0}
+.trio h4{margin:0 0 8px;font-size:11.5px;letter-spacing:.16em;color:var(--muted);font-weight:700}
+.trio p{margin:0 0 8px}
+.trio p:last-child{margin:0}
+.trio .t-problem{background:var(--teal-soft)}
+.trio .t-method{background:var(--card)}
+.trio .t-why{background:var(--amber-soft)}
+
+.key{border-left:3px solid var(--teal);background:var(--card);padding:13px 18px;margin:20px 0;border-radius:0 10px 10px 0}
+.key p:last-child{margin:0}
+.key .lbl{font-size:11.5px;letter-spacing:.16em;color:var(--teal);font-weight:700;display:block;margin-bottom:4px}
+.warn{border-left:3px solid var(--red);background:var(--red-soft);padding:13px 18px;margin:20px 0;border-radius:0 10px 10px 0;font-size:14.8px}
+.warn p:last-child{margin:0}
+.warn .lbl{font-size:11.5px;letter-spacing:.16em;color:var(--red);font-weight:700;display:block;margin-bottom:4px}
+.note{font-size:14px;color:var(--muted);border-top:1px dashed var(--line);padding-top:10px;margin:18px 0}
+
+pre{margin:0 0 18px;background:var(--code-bg);border:1px solid var(--line);border-radius:9px;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.62}
+pre b{color:var(--teal);font-weight:600}
+pre i{color:var(--muted);font-style:normal}
+.file{font-family:var(--mono);font-size:11.5px;color:var(--muted);letter-spacing:.03em;margin:0 0 6px;display:block}
+.anchor{display:inline-block;font-family:var(--mono);font-size:11.5px;color:var(--teal);background:var(--teal-soft);border:1px solid #cfe4df;border-radius:4px;padding:0 5px;white-space:nowrap}
+
+.math{font-family:var(--mono);font-size:14px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:14px 18px;margin:16px 0;line-height:1.9;overflow-x:auto}
+.math .c{color:var(--muted)}
+
+table{border-collapse:collapse;width:100%;margin:16px 0 22px;font-size:14px;background:var(--card)}
+th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+th{background:#eef1ef;font-weight:700;font-size:13px}
+td code{white-space:nowrap}
+.tbl-cap{font-size:12.5px;color:var(--muted);margin:-14px 0 22px}
+
+details{border:1px solid var(--line);border-radius:9px;background:var(--card);padding:12px 16px;margin:12px 0}
+details summary{cursor:pointer;font-weight:600;font-size:14.5px}
+details[open] summary{margin-bottom:10px;color:var(--teal)}
+details p:last-child{margin-bottom:0}
+
+figure{margin:22px 0 26px}
+figure svg{display:block;width:100%;height:auto;background:var(--card);border:1px solid var(--line);border-radius:10px}
+figcaption{font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.65}
+svg text{font-family:-apple-system,"Noto Sans SC",sans-serif;font-size:12px;fill:#33403d}
+svg .mono{font-family:var(--mono);font-size:11px}
+svg .box{fill:#fff;stroke:#c9d3cf;stroke-width:1.2}
+svg .box-a{fill:var(--teal-soft);stroke:#9dc9c0;stroke-width:1.2}
+svg .box-b{fill:var(--amber-soft);stroke:#dfc38c;stroke-width:1.2}
+svg .ln{stroke:#9aa8a4;stroke-width:1.2;fill:none}
+svg .dash{stroke:#9aa8a4;stroke-width:1.2;fill:none;stroke-dasharray:5 4}
+svg .hot{stroke:var(--teal);stroke-width:2;fill:none}
+svg .band{fill:#e8f2ef;stroke:none}
+svg .lbl{font-size:10.5px;fill:#6b7875}
+
+.steps{counter-reset:step;margin:22px 0}
+.step{border:1px solid var(--line);border-radius:12px;background:var(--card);padding:0 0 6px;margin:0 0 18px;overflow:hidden}
+.step-h{display:flex;align-items:baseline;gap:12px;padding:12px 18px 10px;background:#eef1ef;border-bottom:1px solid var(--line)}
+.step-h .no{font-family:var(--mono);font-size:12px;color:#fff;background:var(--teal);border-radius:5px;padding:2px 8px;font-weight:600}
+.step-h .ti{font-family:var(--serif);font-size:17px;font-weight:700}
+.step-h .io{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.step .body{padding:14px 18px 6px}
+
+.qa{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:16px 18px;margin:16px 0}
+.qa .qno{font-family:var(--mono);font-size:11.5px;color:var(--teal);letter-spacing:.1em}
+
+footer{margin-top:80px;border-top:1px solid var(--line);padding-top:24px;font-size:13px;color:var(--muted)}
+
+@media (max-width:800px){
+  h1{font-size:32px}
+  h2{font-size:23px}
+  .trio{grid-template-columns:1fr}
+  .trio>div{border-right:0;border-bottom:1px solid var(--line)}
+  .page{padding:0 18px 100px}
+  .rail-in{padding:8px 18px}
+  .step-h .io{display:none}
+}
+@media print{
+  .rail{display:none}
+  body{background:#fff}
+  h2{break-after:avoid}
+  .trio,.qa,pre,table,figure,.step{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+
+<nav class="rail"><div class="rail-in">
+  <b>候选产生流程</b>
+  <a href="#s0">0 总览</a>
+  <a href="#s1">1 预备</a>
+  <a href="#s2">2 编码</a>
+  <a href="#s3">3 历史链</a>
+  <a href="#s4">4 记账</a>
+  <a href="#s5">5 活跃清单</a>
+  <a href="#s6">6 判据</a>
+  <a href="#s7">7 二次筛选</a>
+  <a href="#s8">8 放行</a>
+  <a href="#s9">9 走查</a>
+  <a href="#s10">10 速查</a>
+</div></nav>
+
+<div class="page">
+
+<header class="hero">
+  <p class="kicker">TRF 4.10.0 · RUST 移植版 · 分步教程</p>
+  <h1>候选是怎样产生的<br>trfrs 第一级流水线七步走查</h1>
+  <p class="lede">TRF 把检测拆成两级：第一级便宜，只负责回答"这里可能有一个周期为 d 的重复吗"；第二级昂贵，才做真正的比对。本教程沿着一个碱基的旅程走完第一级的每一步，看候选从一条短串命中开始，怎样被记账、被检验、最后被放行。</p>
+  <div class="hero-meta">
+    <span>对象：<code>src/scan.rs</code></span>
+    <span>前置阅读：<code>docs/trf-problem-to-code.html</code> Q1–Q3（可选）</span>
+    <span>运行示例：<code>tests/data/small_test.fasta</code> 第一条序列</span>
+  </div>
+</header>
+
+<h2 id="s0"><span class="badge">§0</span>总览：候选是什么，从哪来</h2>
+
+<p><strong>候选</strong>（candidate）是一个二元组 <code>(i, d)</code>：位置 <code>i</code> 处发现证据，提示"这里可能存在周期为 <code>d</code> 的串联重复"。它不是结论——随机序列也会产生候选。候选只是<em>比对的入场券</em>：拿到券的位置进入第二级做动态规划；拿不到的，程序从头到尾没有为它开过一张矩阵。</p>
+
+<p>第一级流水线的完整链路如下。每个方框对应本教程的一节：</p>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#9aa8a4"/>
+    </marker>
+  </defs>
+  <rect class="box-a" x="20"  y="40" width="150" height="60" rx="8"/>
+  <text x="95"  y="65" text-anchor="middle" font-weight="600">1 逐位扫描</text>
+  <text class="mono" x="95" y="84" text-anchor="middle">滚动 4 进制码</text>
+
+  <rect class="box-a" x="200" y="40" width="150" height="60" rx="8"/>
+  <text x="275" y="65" text-anchor="middle" font-weight="600">2 历史链</text>
+  <text class="mono" x="275" y="84" text-anchor="middle">d = i − 旧位置</text>
+
+  <rect class="box-a" x="380" y="40" width="150" height="60" rx="8"/>
+  <text x="455" y="65" text-anchor="middle" font-weight="600">3 距离表记账</text>
+  <text class="mono" x="455" y="84" text-anchor="middle">窗口 + 合并</text>
+
+  <rect class="box-a" x="560" y="40" width="150" height="60" rx="8"/>
+  <text x="635" y="65" text-anchor="middle" font-weight="600">4 活跃清单</text>
+  <text class="mono" x="635" y="84" text-anchor="middle">链表 + 标签桶</text>
+
+  <rect class="box-b" x="760" y="40" width="120" height="60" rx="8"/>
+  <text x="820" y="65" text-anchor="middle" font-weight="600">5 三条判据</text>
+  <text class="mono" x="820" y="84" text-anchor="middle">查阈值表</text>
+
+  <rect class="box-b" x="470" y="170" width="180" height="60" rx="8"/>
+  <text x="560" y="195" text-anchor="middle" font-weight="600">6 最佳周期表筛选</text>
+  <text class="mono" x="560" y="214" text-anchor="middle">仅 d &gt; 250</text>
+
+  <rect class="box" x="200" y="170" width="180" height="60" rx="8"/>
+  <text x="290" y="195" text-anchor="middle" font-weight="600">7 放行 → 第二级</text>
+  <text class="mono" x="290" y="214" text-anchor="middle">环绕动态规划</text>
+
+  <line class="ln" x1="170" y1="70" x2="198" y2="70" marker-end="url(#ar)"/>
+  <line class="ln" x1="350" y1="70" x2="378" y2="70" marker-end="url(#ar)"/>
+  <line class="ln" x1="530" y1="70" x2="558" y2="70" marker-end="url(#ar)"/>
+  <line class="ln" x1="710" y1="70" x2="758" y2="70" marker-end="url(#ar)"/>
+  <line class="ln" x1="820" y1="100" x2="820" y2="140" />
+  <line class="ln" x1="820" y1="140" x2="560" y2="140" />
+  <line class="ln" x1="560" y1="140" x2="560" y2="168" marker-end="url(#ar)"/>
+  <line class="ln" x1="470" y1="200" x2="382" y2="200" marker-end="url(#ar)"/>
+
+  <line class="dash" x1="290" y1="170" x2="290" y2="140" />
+  <line class="dash" x1="290" y1="140" x2="90" y2="140" />
+  <line class="dash" x1="90" y1="140" x2="90" y2="102" marker-end="url(#ar)"/>
+  <text class="lbl" x="130" y="133">已报告区间与最佳周期反馈回来，抑制重复候选</text>
+
+  <text class="lbl" x="20" y="280">实线 = 候选的数据流　虚线 = 第二级写回第一级的反馈　蓝底 = 记账（不做判定）　黄底 = 判定</text>
+</svg>
+<figcaption>图 1。第一级流水线。注意只有第 5、6 步做"判定"，前面四步全是记账。整个第一级没有任何比对矩阵。</figcaption>
+</figure>
+
+<div class="key"><span class="lbl">本教程的走查约定</span>
+<p>全程使用同一条 35 bp 测试序列 <code>TCATCGGTCATCGGTCATCGGTCATCGGTCATCGG</code>（<code>TCATCGG</code> × 5），参数取人类 DNA 默认组合 <code>2 5 7 80 10 50 2000</code>。每一步都给出：它在做什么、对应哪段代码、在这条序列上发生了什么。</p>
+</div>
+
+<h2 id="s1"><span class="badge">§1</span>预备：把阈值装进内存</h2>
+
+<p>流水线跑起来之前，有两件事要先备好。它们不产生候选，但决定了后面每一步的"尺度"。</p>
+
+<h3>1.1 距离表按 <code>maxdistance</code> 建</h3>
+
+<p>每个可能的周期长度 <code>d</code>（1 到 <code>maxdistance</code>）一张小表，另加一条按 <code>d</code> 排序的双向链表和标签数组。容量一次性分配，运行期不再扩容。</p>
+
+<h3>1.2 阈值表来自随机模型</h3>
+
+<p>对每个 <code>d</code>，程序需要回答"多少证据才算多"。答案不靠拍脑袋：用投币模型（每个位置以 <code>PM/100</code> 概率匹配、<code>PI/100</code> 概率发生插入缺失）做模拟，取分位数，预生成两张长 2001 的表：</p>
+
+<ul>
+<li><code>wait[d]</code>——等待时间门槛（窗口打开后，第一条证据最晚何时出现）；</li>
+<li><code>sum[d]</code>——区间证据和门槛（匹配碱基数下限）。</li>
+</ul>
+
+<p>PM = 80 时的代表性取值：</p>
+
+<table>
+<tr><th style="width:14%">d</th><th style="width:22%">wait[d]</th><th style="width:22%">sum[d]</th><th>说明</th></tr>
+<tr><td>7</td><td>18</td><td>5</td><td>短周期。一组 4 元组命中就接近门槛。</td></tr>
+<tr><td>30</td><td>28</td><td>6</td><td>切换到 5 元组，等待变长。</td></tr>
+<tr><td>160</td><td>62</td><td>43</td><td>切换到 7 元组，指纹变稀有。</td></tr>
+<tr><td>1000</td><td>67</td><td>386</td><td>证据和与 d 近似成正比。</td></tr>
+<tr><td>2000</td><td>68</td><td>818</td><td>窗口长约 d，门槛必须同步提高。</td></tr>
+</table>
+
+<p>表的台阶出现在 <code>d = 30</code> 和 <code>d = 160</code>——正好是元组长度切换点。这不是巧合，§2 会解释。</p>
+
+<p class="file">落点　阈值初始化 <span class="anchor">src/scan.rs:525</span>，表数据 <span class="anchor">src/tables.rs:29</span></p>
+
+<h2 id="s2"><span class="badge">§2</span>第 1 步：逐位扫描，滚动编码</h2>
+
+<div class="trio">
+  <div class="t-problem"><h4>在做什么</h4><p>把序列变成可索引的"指纹"。每个位置都要能 O(1) 地回答："我手里的 k 个碱基，最近一次出现在哪里？"</p></div>
+  <div class="t-method"><h4>怎么做</h4><p>A/C/G/T 编码为 0/1/2/3，长度 k 的短串就是一个 4 进制整数。每前进一位，丢最高位、补最低位，滚动更新。</p></div>
+  <div class="t-why"><h4>为什么成立</h4><p>编码是每次一位的常数操作，没有回溯、没有哈希碰撞处理。成本全部落在扫描本身。</p></div>
+</div>
+
+<p>主循环 <code>scan_sequence()</code> 每前进一个位置 <code>i</code>，维护一个 7 元组码：</p>
+
+<pre><i>// src/scan.rs:767</i>
+code = (code % FOUR_TO_THE[6]) × 4 + index[sequence[i]]</pre>
+
+<p>短元组不用单独扫：7 元组码取模即得后缀。</p>
+
+<pre><i>// src/scan.rs:771</i>
+tuple_code[3] = code           <i>// k = 7</i>
+tuple_code[2] = code % 4⁵      <i>// k = 5</i>
+tuple_code[1] = code % 4⁴      <i>// k = 4</i></pre>
+
+<p>为什么是 4、5、7 三档？因为<em>距离越大，需要越稀有的指纹</em>。随机序列中两个指定位置共享一个 k 元组的概率是 4<sup>−k</sup>：k=4 时 1/256，k=7 时 1/16384。距离 d 的窗口长约 d，期望证据数 ≈ n·W·4<sup>−k</sup>，要让它不随 d 失控，k 必须随 d 增大：</p>
+
+<table>
+<tr><th style="width:20%">元组长度 k</th><th style="width:26%">负责的距离区间</th><th>理由</th></tr>
+<tr><td>4</td><td>1 到 29</td><td>副本短，容不下长精确串。</td></tr>
+<tr><td>5</td><td>30 到 159</td><td>居中。误报率降到 1/1024。</td></tr>
+<tr><td>7</td><td>160 到 maxdistance</td><td>长副本提供长精确串，用最稀有指纹。</td></tr>
+</table>
+
+<div class="warn"><span class="lbl">非 ACGT 字符</span>
+<p>遇到 N 等字符时滚动码作废，程序重置编码，等凑满连续 7 个好字符才重建（<span class="anchor">src/scan.rs:737</span>）。副作用：跨 N 的重复会被切成两段，第一级不会把 N 两侧接起来。</p>
+</div>
+
+<p class="file">落点　主循环 <span class="anchor">src/scan.rs:692</span>，编码与元组更新 <span class="anchor">src/scan.rs:756</span></p>
+
+<h2 id="s3"><span class="badge">§3</span>第 2 步：历史链找距离</h2>
+
+<div class="trio">
+  <div class="t-problem"><h4>在做什么</h4><p>周期是待求量。如果把它当未知数，比对要对每个 d 重做。第一级要先把"周期问题"降维成"距离问题"。</p></div>
+  <div class="t-method"><h4>怎么做</h4><p>每个元组码挂一条历史链，记录这个码最近几次出现的位置。新命中到达时，沿链回访旧位置，差值 d = i − 旧位置 就是距离。</p></div>
+  <div class="t-why"><h4>为什么成立</h4><p>距离是周期的一种（周期 d 的重复必然产生距离 d），反过来不成立。这个不对称让"只记账、不判定"成为可能。</p></div>
+</div>
+
+<p>在位置 <code>i</code> 得到码 <code>c</code> 之后，程序做三件事：</p>
+
+<pre><i>// src/scan.rs:794（抽象形式）</i>
+h = 新历史槽
+history[h] = { location: i, previous: head[c], code: c }
+head[c] = h          <i>// 三步：写槽、接链、改头指针</i>
+
+<i>// 然后沿 previous 走链：</i>
+while y != 0:
+    d = i − history[y].location
+    if d &gt; tuple_max_distance[g]:  在此断链，后面更远，停
+    if d ≤ tuple_max_distance[g−1]: 归更短的元组管，跳过
+    else:                          process_candidate(i, d, k)   <i>// → §4</i></pre>
+
+<p>第二个截断条件保证<em>一个距离只由一个元组尺寸负责</em>——7 元组的命中不会在 d = 10 上重复记账，那里归 4 元组管。</p>
+
+<p>历史槽放在环形数组里，总容量 <code>2 × tuple_max_distance + 4</code>，写满覆盖最旧的。被覆盖的槽位置必然更旧、距离已超上限，所以不会漏近处的证据。</p>
+
+<div class="key"><span class="lbl">35 bp 走查</span>
+<p>位置 1–4 的元组 <code>TCAT</code>，在位置 8–11 再次出现。当 <code>i = 11</code> 时，程序从哈希表取到 <code>TCAT</code> 的历史链，发现旧位置 4，算出 <code>d = 7</code>。这是本序列的第一条证据。注意此刻还没有任何"这是重复"的判断——只是登记了一个 <code>(11, 7, 4)</code>。</p>
+</div>
+
+<p class="file">落点　链遍历与候选分派 <span class="anchor">src/scan.rs:799</span></p>
+
+<h2 id="s4"><span class="badge">§4</span>第 3 步：距离表记账</h2>
+
+<div class="trio">
+  <div class="t-problem"><h4>在做什么</h4><p>每条线索都往表里写一笔。若不加控制，条目随时间无限累积，遍历与判据都会失控。</p></div>
+  <div class="t-method"><h4>怎么做</h4><p>每个 d 的小表只保留滑动窗口内的条目；相邻命中合并成一段；计数按"匹配碱基"而非命中次数。</p></div>
+  <div class="t-why"><h4>为什么成立</h4><p>证据有时效：太旧的匹配说明重复已经中断。合并使一段长精确匹配的条目数从 O(L) 降到 O(1)。</p></div>
+</div>
+
+<p>证据条目是一个二元组 <code>(location, size)</code>：<code>location</code> 是匹配段的最右位置，<code>size</code> 是这段连续匹配的长度。窗口左端：</p>
+
+<pre><i>// src/scan.rs:138</i>
+windowleftend = min(location − d, location − 20) + 1</pre>
+
+<p>含义：窗口至少覆盖一份完整拷贝；短周期（d &lt; 20）再给 20 个位置的余量。插入新证据前，先从窗口左端丢弃过期条目，并且要同步扣减匹配碱基数：</p>
+
+<pre><i>// src/scan.rs:144</i>
+match_count −= entry[low].size;   <i>// 不能只减条目数！</i>
+entry_count −= 1;</pre>
+
+<p>新命中若与上一条目相邻，就合并而不是新开：</p>
+
+<pre><i>// src/scan.rs:157</i>
+if entry[hi].location == location − 1:
+    entry[hi].location += 1
+    entry[hi].size += 1
+    match_count += 1        <i>// 只加 1：4 个碱基里 3 个已数过</i></pre>
+
+<div class="key"><span class="lbl">关键细节：计数单位</span>
+<p><code>match_count</code> 数的是<strong>匹配碱基</strong>。一次 4 元组命中贡献 4；两个相邻命中合并且只多贡献 1。一段 100 bp 的精确匹配，最终只剩 1 个条目、<code>size = 100</code>。这个语义直接决定判据的量纲——§6 的门槛说"匹配碱基至少 5 个"，不是"命中至少 5 次"。</p>
+</div>
+
+<div class="key"><span class="lbl">35 bp 走查</span>
+<pre>i = 11:  distance[7].entry = { location: 11, size: 4 }   match_count = 4
+i = 12:  元组 CATC 命中位置 5，与上一条相邻
+         合并 →  { location: 12, size: 5 }               match_count = 5</pre>
+<p>到 <code>i = 12</code>，d = 7 的账本上已有 5 个匹配碱基——恰好够到门槛 sum[7] = 5。这是合并机制的直接效果：孤立命中差 1 个碱基过不了线，相邻合并就过了。</p>
+</div>
+
+<p class="file">落点　记账 <span class="anchor">src/scan.rs:133</span></p>
+
+<h2 id="s5"><span class="badge">§5</span>第 4 步：活跃清单</h2>
+
+<div class="trio">
+  <div class="t-problem"><h4>在做什么</h4><p>判据需要在 [lo, hi] 区间内对所有距离求和、比较。扫描全部 2000 张表不可行，大部分表是空的。</p></div>
+  <div class="t-method"><h4>怎么做</h4><p>只有非空的 d 参与工作。它们串成按值排序的双向链表；另设每 50 个距离一组的标签数组做插入锚点。</p></div>
+  <div class="t-why"><h4>为什么成立</h4><p>遍历成本变成"区间内的活跃距离数"而不是 O(maxdistance)。摘链保证死掉的距离不再产生任何成本。</p></div>
+</div>
+
+<p>三条维护规则：</p>
+
+<ol>
+<li><strong>入链</strong>：d 的表第一次收到证据时插入链表。为避免每次从链表头扫描，先查 <code>tag[d/50]</code>——游标比 d 小就从游标处接上，比 d 大就沿 <code>link_down</code> 找第一个小于 d 的活跃距离。插入平均成本接近常数。</li>
+<li><strong>摘链</strong>：判据遍历邻居时顺带清理过期条目（<code>no_matches_so_unlink_distance</code>，<span class="anchor">src/scan.rs:225</span>）。条目清空就地摘链。这就是为什么活跃距离数通常只有几十。</li>
+<li><strong>同步标签</strong>：摘链时如果 <code>tag[t] == d</code>，要把受影响组的游标回落到 <code>link_down</code>，否则游标会指向已经不在链上的 d。</li>
+</ol>
+
+<p>内存上，全部表一次分配，每个 d 容量 <code>max(d, 20) + 1</code>，总计约 <code>maxdistance²/2</code> 条 × 8 字节。maxdistance = 2000 时约 16 MB——固定成本，可接受；这也解释了 MaxPeriod 为什么是 2000 而不是 100000。</p>
+
+<p class="file">落点　入链 <span class="anchor">src/scan.rs:174</span>，摘链 <span class="anchor">src/scan.rs:225</span>，标签 <span class="anchor">src/scan.rs:212</span></p>
+
+<h2 id="s6"><span class="badge">§6</span>第 5 步：三条判据——什么时候相信证据</h2>
+
+<div class="trio">
+  <div class="t-problem"><h4>在做什么</h4><p>证据只说明"两个位置共享一段短串"。随机序列也会产生证据。必须有一个可计算的显著性判断。</p></div>
+  <div class="t-method"><h4>怎么做</h4><p>三条判据：等待时间、区间证据和、区域竞争。阈值全部查表，索引是 min(d, 2000)。</p></div>
+  <div class="t-why"><h4>为什么成立</h4><p>真重复有三个可测特征：证据来得早、总量大、邻域内最强。三条判据各抓一个。随机命中很难同时满足。</p></div>
+</div>
+
+<p>判据主体是 <code>new_meet_criteria_3(d, i, tuplesize)</code>（<span class="anchor">src/scan.rs:403</span>）。三条依次是：</p>
+
+<h3>6.1 判据一：等待时间</h3>
+
+<div class="math">
+left = max(0, i − max(d, 20))<br>
+first_location ≤ left + wait[d]<br>
+<span class="c">first_location = 最老一段证据的起点 = entry[low].location − size + k</span>
+</div>
+
+<p>真重复的证据应该"来得早"：窗口一打开就该出现。随机命中可能在窗口任何位置，落进前 wait[d] 个位置只是小概率事件。</p>
+
+<h3>6.2 判据二：区间证据和</h3>
+
+<div class="math">
+Δ(d) = ⌊ 2.3 · √(p · d) ⌋　<span class="c">（p = PI/100，d &gt; 20；d ≤ 20 时区间只有 d 自己）</span><br>
+lo = max(1, d − Δ)，hi = min(maxdistance, d + Δ)<br>
+Σ<sub>t∈[lo,hi]</sub> match_count(t) ≥ sum[d]
+</div>
+
+<p>为什么不是只看 d 自己？因为插入和缺失会让后续副本的证据漂到 d±1、d±2——这些距离描述的是<em>同一个</em>重复。Δ 是空位随机游走的 95% 范围：p = 0.1、d = 2000 时 Δ = 32。同时程序还会检查主距离自己的 match_count 是否已单独达标（<code>main_d_matches ≥ min_krun_matches</code>），达标就不必做区间遍历。</p>
+
+<h3>6.3 判据三：区域竞争</h3>
+
+<p>区间求和有副作用：邻近的强周期也能把和推过线。所以要求 d 在邻域内没有竞争者：</p>
+
+<ul>
+<li>沿链表向下、向上遍历区间内的活跃距离；</li>
+<li>任何单个距离的 match_count <strong>严格大于</strong> d 的，d 出局；</li>
+<li>遍历前先对邻居执行摘链清理——已经死掉的距离不算竞争者，不能阻止候选。</li>
+</ul>
+
+<div class="key"><span class="lbl">35 bp 走查（i = 12, d = 7）</span>
+<table>
+<tr><th style="width:24%">判据</th><th style="width:36%">实际值</th><th>结果</th></tr>
+<tr><td>等待时间</td><td>first = 11，上限 max(0, 12−20) + 18 = 18</td><td>通过</td></tr>
+<tr><td>区间证据和</td><td>d ≤ 20，区间只有 7 自己，和为 5</td><td>5 ≥ 5，通过</td></tr>
+<tr><td>区域竞争</td><td>区间内只有 7 一个活跃距离</td><td>通过</td></tr>
+</table>
+<p>三条全过，<code>(12, 7)</code> 拿到入场券。</p>
+</div>
+
+<div class="warn"><span class="lbl">失效条件</span>
+<p>判据二的区间宽度 Δ 由 PI 决定。如果真实数据的空位率远高于设定的 PI，证据会被摊到区间之外，判据二失败，重复被漏掉。此时应当<em>提高 PI</em>，而不是降低 Minscore。</p>
+</div>
+
+<p class="file">落点　判据主体 <span class="anchor">src/scan.rs:403</span>，摘链在判据内 <span class="anchor">src/scan.rs:435</span></p>
+
+<h2 id="s7"><span class="badge">§7</span>第 6 步：最佳周期表——廉价的二次筛选</h2>
+
+<p>通过三条判据只说明"值得做一次比对"。但一个长重复天然会被它的所有倍数距离反复触发：周期 21 的重复会以 d = 7、14、21 各触发一次。比对是贵的，能省则省。</p>
+
+<p>程序维护一张"已知最佳周期表"：每条<em>已确认</em>记录保存它的区间和前 5 个显著周期，最旧的在尾部；终点早于 <code>start − 2 × maxdistance</code> 的记录删除。规则（<span class="anchor">src/scan.rs:610</span>）：</p>
+
+<ul>
+<li><strong>仅当 d &gt; 250</strong> 时执行检查——短距离重复便宜，不值得这道手续；</li>
+<li>若当前位置已被某条记录覆盖，且 d 不在那条记录的前 5 个周期里 → 跳过；</li>
+<li>否则放行。</li>
+</ul>
+
+<div class="key"><span class="lbl">为什么容忍倍数候选</span>
+<p>注意筛选只在入场前做"减法"，而且非常保守：倍数候选如果真的进入第二级并各自通过，产生多条重叠记录，统一交给后处理的去冗余规则处理（区间重叠 ≥ 90%、周期成倍数、分数不高于 1.1 倍才合并）。产生阶段不做精细判定，收尾阶段一条廉价规则统一收口。</p>
+</div>
+
+<p class="file">落点　最佳周期表 <span class="anchor">src/scan.rs:319</span>，调用点 <span class="anchor">src/scan.rs:610</span></p>
+
+<h2 id="s8"><span class="badge">§8</span>第 7 步：放行——把接力棒交给第二级</h2>
+
+<p>全部门槛通过后，<code>process_candidate</code> 的后半段（<span class="anchor">src/scan.rs:615</span>）接管：</p>
+
+<ol>
+<li><strong>比对</strong>：以位置 i 结尾的 d 个碱基为模式，做环绕动态规划。d ≤ 20 走全列版本；否则走窄带版本，带宽由空位随机游走范围决定。反向扫一次定左边界，正向扫一次定右边界。</li>
+<li><strong>拷贝数检查</strong>：copies 太低直接放弃（d ≤ 50 要求 ≥ 1.9，随 d 递减到 1.8）——只覆盖半份拷贝的"重复"没有报告价值。</li>
+<li><strong>倍数投票</strong>：对区间做周期投票，d 必须是前几个显著间距之一。</li>
+<li><strong>共识与重对齐</strong>：从比对直方图提取共识序列，用共识长度再跑一次比对。最终周期由重对齐结果决定，不由候选 d 决定。</li>
+<li><strong>输出</strong>：区间长度 ≥ minsize 且分数 ≥ minscore 才写入报告。</li>
+</ol>
+
+<p>第二级的细节（环绕 DP、带状回溯、共识投票、去冗余）见《从问题到代码》Q4–Q8，本教程不再展开。这里只需要一个数字感受第一级过滤的力度：</p>
+
+<div class="key"><span class="lbl">量级：19 比 1</span>
+<p>35 bp 测试序列上，第一级共登记 58 次证据（d = 7 记 25 次、d = 14 记 18 次、d = 21 记 11 次、d = 28 记 4 次），只有 3 个 (i, d) 通过全部判据、各开了一张比对矩阵。放到基因组上，这个比例就是"算得完"与"算不完"的差别。</p>
+</div>
+
+<h2 id="s9"><span class="badge">§9</span>全流程走查：一条 35 bp 序列</h2>
+
+<p>把七步串起来，回放 <code>TCATCGGTCATCGGTCATCGGTCATCGGTCATCGG</code> 的关键节点：</p>
+
+<table>
+<tr><th style="width:12%">位置 i</th><th style="width:30%">发生什么</th><th style="width:26%">账本状态</th><th>结果</th></tr>
+<tr><td>1–7</td><td>滚动码建立中，历史链逐渐充实</td><td>各 d 的表为空</td><td>无证据</td></tr>
+<tr><td>8–10</td><td>元组命中旧位置，d = 7、14、…开始登记</td><td>match_count 逐位增长</td><td>记账，未达门槛</td></tr>
+<tr><td><b>11</b></td><td>4 元组 <code>TCAT</code> 命中位置 4 → <b>d = 7</b>，第一条完整证据</td><td>distance[7]: match_count = 4</td><td>4 &lt; 5，不过线</td></tr>
+<tr><td><b>12</b></td><td>元组 <code>CATC</code> 命中位置 5，与上一条相邻 → 合并</td><td>distance[7]: match_count = 5</td><td><b>三条判据全过，放行</b></td></tr>
+<tr><td>12–…</td><td>进入第二级：模式 <code>GGTCATC</code>，环绕 DP，分数 70，copies 5.0</td><td>—</td><td>共识 <code>TCATCGG</code>，重对齐，输出</td></tr>
+<tr><td>18–19</td><td>同样的积累过程在 d = 14 上重演</td><td>distance[14] 过线</td><td>第二次放行，d = 14</td></tr>
+<tr><td>27–28</td><td>d = 21 同理</td><td>distance[21] 过线</td><td>第三次放行</td></tr>
+<tr><td>32+</td><td>d = 28 的账本始终只有零星几笔</td><td>未达门槛</td><td>窗口滑过，条目清空，永不比对</td></tr>
+</table>
+
+<p>最终输出一条记录（起点 1、终点 35、周期 7、分数 70），d = 14 与 d = 21 产生的重叠记录由去冗余阶段合并。整个过程中第一级没有开过任何比对矩阵；三次开矩阵，全部花在判据放行的候选上。</p>
+
+<div class="key"><span class="lbl">回到最初的问题</span>
+<p>"先证据，后比对"在这条序列上具体表现为：58 次零成本的记账，换 3 次昂贵的比对。证据是必要条件（真重复必然留下精确短串），判据负责把随机噪声挡在门外，比对只对幸存者做最终裁决。</p>
+</div>
+
+<h2 id="s10"><span class="badge">§10</span>速查与自测</h2>
+
+<h3>10.1 一页速查</h3>
+
+<table>
+<tr><th style="width:16%">步骤</th><th style="width:34%">职责</th><th style="width:26%">关键代码</th><th>关键量</th></tr>
+<tr><td>1 编码</td><td>滚动 4 进制码，4/5/7 三档</td><td><span class="anchor">src/scan.rs:756</span></td><td><code>tuple_code[g]</code></td></tr>
+<tr><td>2 历史链</td><td>同码旧位置 → 距离 d</td><td><span class="anchor">src/scan.rs:799</span></td><td><code>d = i − y.location</code></td></tr>
+<tr><td>3 记账</td><td>滑窗过期、相邻合并</td><td><span class="anchor">src/scan.rs:133</span></td><td><code>match_count</code>（碱基）</td></tr>
+<tr><td>4 活跃清单</td><td>有序链表 + 标签锚点</td><td><span class="anchor">src/scan.rs:174</span></td><td>活跃距离数</td></tr>
+<tr><td>5 判据</td><td>等待 / 区间和 / 竞争</td><td><span class="anchor">src/scan.rs:403</span></td><td><code>wait[]</code> <code>sum[]</code></td></tr>
+<tr><td>6 二次筛选</td><td>最佳周期表（d &gt; 250）</td><td><span class="anchor">src/scan.rs:610</span></td><td>前 5 个周期</td></tr>
+<tr><td>7 放行</td><td>环绕 DP → 共识 → 输出</td><td><span class="anchor">src/scan.rs:615</span></td><td>score / copies</td></tr>
+</table>
+
+<h3>10.2 自测题</h3>
+
+<div class="qa"><span class="qno">Q1</span>
+<p>为什么证据计数用"匹配碱基"而不用"命中次数"？如果换成命中次数，哪类候选会受益？</p>
+<details><summary>参考答案</summary>
+<p>相邻命中重叠 3 个碱基。按次数计，一段长精确匹配会虚增计数，短而密的随机重合更容易凑够门槛；按碱基计，计数与实际相同序列的长度成正比，物理含义清楚，且门槛（如 sum[7] = 5）对任何元组长度都是同一量纲。换成次数，短元组（k=4）的随机重合最受益，误报会上升。</p>
+</details>
+</div>
+
+<div class="qa"><span class="qno">Q2</span>
+<p>真实重复的错配率约 20%。为什么可以确信第一级不会漏掉它？</p>
+<details><summary>参考答案</summary>
+<p>只要某份副本里存在连续 k 个无错碱基，这个元组就会在下一份副本的对应位置再次出现，产生距离 d 的证据。0.8⁴ ≈ 0.41，一条几百 bp 的重复几乎不可能连一个 4 连无错段都没有。距离更大的区间用 k = 5、7 的更长指纹，由更长的无错段（概率更低但重复区总长度更长）覆盖。判据的区间求和（Δ(d)）进一步容忍 indel 引起的漂移。</p>
+</details>
+</div>
+
+<div class="qa"><span class="qno">Q3</span>
+<p>判据三为什么必须"先摘链、再比较"？如果反过来会发生什么？</p>
+<details><summary>参考答案</summary>
+<p>摘链清理会把窗口内条目已全部过期的死距离移出链表。若不先清理，一个早已死掉但历史计数仍高的邻居会被误判为"竞争者"，阻止当前候选放行——明明它自己已经没有任何窗口内的证据。先摘链保证比较只在"仍然活跃"的距离之间进行。</p>
+</details>
+</div>
+
+<div class="qa"><span class="qno">Q4</span>
+<p>d ≤ 20 时不做区间求和（区间只有 d 自己），d &gt; 250 才查最佳周期表。这两个"简化"分别省了什么、冒险了什么？</p>
+<details><summary>参考答案</summary>
+<p>d ≤ 20：短周期漂移空间小（Δ 公式在 d ≤ 20 时区间本来就近乎单点），扩区间只引入噪声；冒险是极小，因为短距离证据量大，门槛 5 个碱基很快达到。d ≤ 250 不查周期表：短距离比对便宜（全列 DP 只对小 d 使用），逐个查表反而开销占比高；冒险是同一个短重复可能被 2d、3d 多触发几次，多开几张矩阵，但这些冗余记录最终由去冗余阶段统一收口——花钱买个简单，值得。</p>
+</details>
+</div>
+
+<div class="qa"><span class="qno">Q5</span>
+<p>如果把 <code>maxdistance</code> 从 2000 提到 10000，第一级会有哪些直接后果？</p>
+<details><summary>参考答案</summary>
+<p>内存：距离表总量 ∝ maxdistance²/2，翻 5 倍（2000 → 10000）意味着约 16 MB → 400 MB 的固定分配。历史槽：容量 ∝ tuple_max_distance，同样显著增长。7 元组负责的距离上限拉长，链遍历更久。同时阈值表 wait[]/sum[] 只有 2001 项，d &gt; 2000 需要重新生成表。这就是 MaxPeriod 上限停在 2000 的工程原因。</p>
+</details>
+</div>
+
+<footer>
+<p>本教程是 <code>docs/trf-problem-to-code.html</code> 的配套分步读本，聚焦第一级流水线（候选产生）。比对、回溯、共识、去冗余见原读本 Q4–Q8。代码行号以当前工作区 <code>src/scan.rs</code> 为准，随代码演进可能漂移；函数名（<code>scan_sequence</code>、<code>process_candidate</code>、<code>add_tuple_match_to_distance_entry</code>、<code>new_meet_criteria_3</code>）是更稳定的锚点。</p>
+<p>trfrs · AGPL-3.0-or-later · 原 TRF 程序作者 Gary Benson</p>
+</footer>
+
+</div>
+</body>
+</html>
