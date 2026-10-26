@@ -1,4 +1,4 @@
-# trf — Tandem Repeats Finder (Rust port)
+# trfrs — Tandem Repeats Finder (Rust port)
 
 [![CI](https://github.com/keithyin/trfrs/actions/workflows/ci.yml/badge.svg)](https://github.com/keithyin/trfrs/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/keithyin/trfrs)](https://github.com/keithyin/trfrs/releases)
@@ -6,7 +6,7 @@
 [![Rust](https://img.shields.io/badge/rust-2021-dea584?logo=rust)](https://www.rust-lang.org/)
 [![Platforms](https://img.shields.io/badge/platforms-linux%20%7C%20macos%20%7C%20windows-blue)](#环境要求)
 
-`trf` 是 Tandem Repeats Finder (TRF) 参考 C 实现 4.10.0 的 Rust 移植版本。
+`trfrs` 是 Tandem Repeats Finder (TRF) 参考 C 实现 4.10.0 的 Rust 移植版本。
 命令行接口、控制流程与输出文件均与 C 版本保持一致，输出逐字节相同。
 
 - 依赖只有 `clap`（命令行解析）与 `libc`（Unix 下恢复 `SIGPIPE` 默认处理），产物为单个可执行文件
@@ -35,14 +35,14 @@ cargo build
 cargo build --release
 ```
 
-产物为 `target/release/trf`。
+产物为 `target/release/trfrs`。
 
 ## 运行
 
 参数格式与 C 版完全一致，前 8 个参数是必需的：
 
 ```bash
-trf File Match Mismatch Delta PM PI Minscore MaxPeriod [options]
+trfrs File Match Mismatch Delta PM PI Minscore MaxPeriod [options]
 ```
 
 | 参数 | 含义 |
@@ -62,20 +62,20 @@ trf File Match Mismatch Delta PM PI Minscore MaxPeriod [options]
 
 ```bash
 # 使用仓库自带测试数据
-./target/release/trf tests/data/small_test.fasta 2 5 7 80 10 50 2000
+./target/release/trfrs tests/data/small_test.fasta 2 5 7 80 10 50 2000
 
 # 同时生成 .dat 数据文件
-./target/release/trf tests/data/multi.fasta 2 5 7 80 10 50 2000 -d
+./target/release/trfrs tests/data/multi.fasta 2 5 7 80 10 50 2000 -d
 
 # 紧凑 .dat 格式直接输出到屏幕（适合流程管道）
-./target/release/trf tests/data/small_test.fasta 2 5 7 80 10 50 2000 -ngs
+./target/release/trfrs tests/data/small_test.fasta 2 5 7 80 10 50 2000 -ngs
 
 # 从标准输入读取
-cat tests/data/small_test.fasta | ./target/release/trf - 2 5 7 80 10 50 2000 -ngs
+cat tests/data/small_test.fasta | ./target/release/trfrs - 2 5 7 80 10 50 2000 -ngs
 
 # 版本信息 / 用法
-./target/release/trf -v
-./target/release/trf            # 参数不足时打印用法
+./target/release/trfrs -v
+./target/release/trfrs            # 参数不足时打印用法
 ```
 
 也可以用 `cargo run` 运行，注意用 `--` 分隔 cargo 与程序参数：
@@ -102,9 +102,9 @@ cargo run --release -- tests/data/small_test.fasta 2 5 7 80 10 50 2000 -ngs
 单短横线的长选项写法（`-ngs`、`-maxlength 3`）也照旧可用：
 
 ```bash
-trf input.fasta 2 5 7 80 10 50 2000 -df      # 等价于 -d -f
-trf input.fasta 2 5 7 80 10 50 2000 -l3      # 等价于 -l 3 或 -l=3
-trf input.fasta 2 5 7 80 10 50 2000 -ngs     # 等价于 --ngs
+trfrs input.fasta 2 5 7 80 10 50 2000 -df      # 等价于 -d -f
+trfrs input.fasta 2 5 7 80 10 50 2000 -l3      # 等价于 -l 3 或 -l=3
+trfrs input.fasta 2 5 7 80 10 50 2000 -ngs     # 等价于 --ngs
 ```
 
 命令行解析由 `clap` 完成；选项写在 8 个位置参数之前或之后均可，

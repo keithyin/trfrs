@@ -1610,12 +1610,12 @@ score ≈ α·匹配数 + β·错配数 + δ·空位数
 
 <h3>17.1 构建并运行</h3>
 <pre><code>cargo build --release
-./target/release/trf tests/data/small_test.fasta 2 5 7 80 10 50 2000 -ngs</code></pre>
+./target/release/trfrs tests/data/small_test.fasta 2 5 7 80 10 50 2000 -ngs</code></pre>
 
 <p><code>-ngs</code> 模式把紧凑的 <code>.dat</code> 打到标准输出，不写文件。适合观察。</p>
 
 <h3>17.2 与参考答案比对</h3>
-<pre><code>./target/release/trf tests/data/small_test.fasta 2 5 7 80 10 50 2000 -ngs \
+<pre><code>./target/release/trfrs tests/data/small_test.fasta 2 5 7 80 10 50 2000 -ngs \
   &gt; /tmp/out.txt
 diff /tmp/out.txt tests/data/small_test.fasta.out</code></pre>
 

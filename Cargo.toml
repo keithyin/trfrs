@@ -8,7 +8,7 @@ repository = "https://github.com/keithyin/trfrs"
 readme = "README.md"
 
 [[bin]]
-name = "trf"
+name = "trfrs"
 path = "src/main.rs"
 
 [dependencies]

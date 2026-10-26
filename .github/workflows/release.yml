@@ -111,24 +111,24 @@ jobs:
         if: matrix.archive == 'tar.gz'
         run: |
           cd target/${{ matrix.target }}/release
-          tar czf ../../../trf-${{ matrix.target }}.tar.gz trf
+          tar czf ../../../trfrs-${{ matrix.target }}.tar.gz trfrs
           cd ../../..
-          shasum -a 256 trf-${{ matrix.target }}.tar.gz > trf-${{ matrix.target }}.tar.gz.sha256
+          shasum -a 256 trfrs-${{ matrix.target }}.tar.gz > trfrs-${{ matrix.target }}.tar.gz.sha256
 
       - name: Package (windows)
         if: matrix.archive == 'zip'
         shell: pwsh
         run: |
-          Compress-Archive -Path target/${{ matrix.target }}/release/trf.exe -DestinationPath trf-${{ matrix.target }}.zip
-          (Get-FileHash trf-${{ matrix.target }}.zip -Algorithm SHA256).Hash.ToLower() | Out-File trf-${{ matrix.target }}.zip.sha256
+          Compress-Archive -Path target/${{ matrix.target }}/release/trfrs.exe -DestinationPath trfrs-${{ matrix.target }}.zip
+          (Get-FileHash trfrs-${{ matrix.target }}.zip -Algorithm SHA256).Hash.ToLower() | Out-File trfrs-${{ matrix.target }}.zip.sha256
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: trf-${{ matrix.target }}
+          name: trfrs-${{ matrix.target }}
           path: |
-            trf-${{ matrix.target }}.tar.gz*
-            trf-${{ matrix.target }}.zip*
+            trfrs-${{ matrix.target }}.tar.gz*
+            trfrs-${{ matrix.target }}.zip*
 
   release:
     name: Publish GitHub Release

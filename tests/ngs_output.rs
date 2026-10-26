@@ -44,7 +44,7 @@ fn data_dir() -> PathBuf {
 fn run_fixture(fasta: &str, args: &[&str], tag: &str) -> (PathBuf, Output) {
     let dir = temp_dir(tag);
     std::fs::copy(data_dir().join(fasta), dir.join(fasta)).expect("copy fixture");
-    let output = Command::new(env!("CARGO_BIN_EXE_trf"))
+    let output = Command::new(env!("CARGO_BIN_EXE_trfrs"))
         .current_dir(&dir)
         .arg(fasta)
         .args(PARAMS)
@@ -156,7 +156,7 @@ fn non_utf8_header_is_preserved() {
     fasta.extend_from_slice(b"\nACCCCTCAGGGTACCCCTCAGGGTACCCCTCAGGGTACCCCTCAGGGT\n");
     std::fs::write(dir.join("bad.fasta"), &fasta).expect("write fasta");
 
-    let output = Command::new(env!("CARGO_BIN_EXE_trf"))
+    let output = Command::new(env!("CARGO_BIN_EXE_trfrs"))
         .current_dir(&dir)
         .arg("bad.fasta")
         .args(PARAMS)
@@ -222,7 +222,7 @@ fn broken_pipe_terminates_by_signal() {
     }
     std::fs::write(dir.join("big.fasta"), format!(">big\n{sequence}\n")).expect("write fasta");
 
-    let mut child = Command::new(env!("CARGO_BIN_EXE_trf"))
+    let mut child = Command::new(env!("CARGO_BIN_EXE_trfrs"))
         .current_dir(&dir)
         .arg("big.fasta")
         .args(PARAMS)
