@@ -1,5 +1,5 @@
 [package]
-name = "trf"
+name = "trfrs"
 version = "4.10.0"
 edition = "2021"
 description = "Tandem Repeats Finder: Rust port of the reference C implementation"
