@@ -26,9 +26,9 @@ use std::collections::VecDeque;
 use crate::clean::RepeatRecord;
 use crate::fasta::base_index;
 use crate::state::{
-    BestPeriodElement, HistoryEntry, Trf, DASH, FOUR_TO_THE, MAX_PATTERN_SIZE_CONSTANT, MIN_BAND_RADIUS,
-    NUMBER_OF_PERIODS, NUMBER_OF_PERIODS_INTO_SORTMULTIPLES, NUMBER_OF_PERIODS_TO_TEST,
-    RECENTER_CRITERION, SMALL_DISTANCE, TAG_SEPARATION,
+    BestPeriodElement, HistoryEntry, Trf, DASH, FOUR_TO_THE, MAX_PATTERN_SIZE_CONSTANT,
+    MIN_BAND_RADIUS, NUMBER_OF_PERIODS, NUMBER_OF_PERIODS_INTO_SORTMULTIPLES,
+    NUMBER_OF_PERIODS_TO_TEST, RECENTER_CRITERION, SMALL_DISTANCE, TAG_SEPARATION,
 };
 use crate::tables::{SUMDATA75, SUMDATA80, WAITDATA75, WAITDATA80};
 
@@ -70,8 +70,8 @@ fn get_top_periods(
     let mut position = 0i32;
     let end = length - 2;
     while position <= end {
-        let tuple_id =
-            nucleotide_index[pattern[position as usize] as usize] * 4 + nucleotide_index[pattern[(position + 1) as usize] as usize];
+        let tuple_id = nucleotide_index[pattern[position as usize] as usize] * 4
+            + nucleotide_index[pattern[(position + 1) as usize] as usize];
         history[position as usize] = heads[tuple_id as usize];
         heads[tuple_id as usize] = position;
 
@@ -183,7 +183,9 @@ impl Trf {
         if self.tag[tag_bucket as usize] < distance {
             lower_distance = self.tag[tag_bucket as usize];
             let mut tag_bucket_cursor = tag_bucket;
-            while tag_bucket_cursor <= self.top_tag && self.tag[tag_bucket_cursor as usize] < distance {
+            while tag_bucket_cursor <= self.top_tag
+                && self.tag[tag_bucket_cursor as usize] < distance
+            {
                 self.tag[tag_bucket_cursor as usize] = distance;
                 tag_bucket_cursor += 1;
             }
@@ -220,7 +222,8 @@ impl Trf {
             return;
         }
         let mut tag_bucket_cursor = tag_bucket;
-        while tag_bucket_cursor <= self.top_tag && self.tag[tag_bucket_cursor as usize] == distance {
+        while tag_bucket_cursor <= self.top_tag && self.tag[tag_bucket_cursor as usize] == distance
+        {
             self.tag[tag_bucket_cursor as usize] = link_down;
             tag_bucket_cursor += 1;
         }
@@ -277,11 +280,7 @@ impl Trf {
         ptr.score = score;
     }
 
-    pub fn search_for_distance_match_in_distance_seen(
-        &self,
-        distance: i32,
-        start: i32,
-    ) -> bool {
+    pub fn search_for_distance_match_in_distance_seen(&self, distance: i32, start: i32) -> bool {
         self.distance_seen[distance as usize].end >= start
     }
 
@@ -405,10 +404,16 @@ impl Trf {
     }
 
     /// `distance_meets_criteria()`.
-    pub fn distance_meets_criteria(&mut self, distance: i32, location: i32, tuple_size: i32) -> bool {
+    pub fn distance_meets_criteria(
+        &mut self,
+        distance: i32,
+        location: i32,
+        tuple_size: i32,
+    ) -> bool {
         let info = &self.distance[distance as usize];
         let min_krun_matches = info.k_run_sums_criteria;
-        let max_first_match_location = max2(0, location - max2(distance, 20)) + info.waiting_time_criteria;
+        let max_first_match_location =
+            max2(0, location - max2(distance, 20)) + info.waiting_time_criteria;
         let low_end_of_range = info.min_distance_range;
         let high_end_of_range = info.max_distance_range;
         let main_d_matches = info.match_count;
@@ -542,8 +547,12 @@ impl Trf {
                 self.distance[distance as usize].min_distance_range = distance;
                 self.distance[distance as usize].max_distance_range = distance;
             } else {
-                self.distance[distance as usize].min_distance_range = max2(distance - self.indel_random_walk_range(distance), 1);
-                self.distance[distance as usize].max_distance_range = min2(distance + self.indel_random_walk_range(distance), self.max_distance);
+                self.distance[distance as usize].min_distance_range =
+                    max2(distance - self.indel_random_walk_range(distance), 1);
+                self.distance[distance as usize].max_distance_range = min2(
+                    distance + self.indel_random_walk_range(distance),
+                    self.max_distance,
+                );
             }
         }
 
@@ -582,9 +591,15 @@ impl Trf {
             waitdata = &WAITDATA75;
             sumdata = &SUMDATA75;
         } else {
-            let text = format!("\nNo wait table file for PM={}", self.match_probability_percent);
+            let text = format!(
+                "\nNo wait table file for PM={}",
+                self.match_probability_percent
+            );
             self.write_to_alignment_file(&text);
-            eprint!("\nNo wait table file for PM={}", self.match_probability_percent);
+            eprint!(
+                "\nNo wait table file for PM={}",
+                self.match_probability_percent
+            );
             self.fatal(-13);
         }
 
@@ -627,18 +642,34 @@ impl Trf {
         } else {
             let band_radius = max2(MIN_BAND_RADIUS, self.indel_random_walk_range(distance));
             let band_radius_forward = min2(2 * band_radius, distance / 3);
-            self.narrow_band_wraparound_dp(position, distance, band_radius, band_radius_forward, false, RECENTER_CRITERION);
-            self.cell_count[distance as usize] +=
-                self.rows * (2 * max2(MIN_BAND_RADIUS, self.indel_random_walk_range(distance)) + 1) as f64;
-            let trace_band_radius = min2(2 * max2(MIN_BAND_RADIUS, self.indel_random_walk_range(distance)), distance / 3);
-            self.get_narrow_band_pair_alignment_with_copynumber(distance, trace_band_radius, crate::state::LOCAL);
+            self.narrow_band_wraparound_dp(
+                position,
+                distance,
+                band_radius,
+                band_radius_forward,
+                false,
+                RECENTER_CRITERION,
+            );
+            self.cell_count[distance as usize] += self.rows
+                * (2 * max2(MIN_BAND_RADIUS, self.indel_random_walk_range(distance)) + 1) as f64;
+            let trace_band_radius = min2(
+                2 * max2(MIN_BAND_RADIUS, self.indel_random_walk_range(distance)),
+                distance / 3,
+            );
+            self.get_narrow_band_pair_alignment_with_copynumber(
+                distance,
+                trace_band_radius,
+                crate::state::LOCAL,
+            );
         }
         self.add_to_distance_seen(position, distance, self.max_real_row, self.max_score);
 
         /* number of copies required, less restrictive for larger patterns */
         let copynumber = self.copynumber;
         if (distance <= 50 && copynumber < 1.9)
-            || (distance > 50 && distance <= 100 && copynumber < 1.9 - 0.002 * (distance - 50) as f64)
+            || (distance > 50
+                && distance <= 100
+                && copynumber < 1.9 - 0.002 * (distance - 50) as f64)
             || (distance > 100 && copynumber < 1.8)
         {
             return;
@@ -666,11 +697,26 @@ impl Trf {
             let class_length = self.class_length;
             let band_radius = max2(MIN_BAND_RADIUS, self.indel_random_walk_range(class_length));
             let band_radius_forward = min2(2 * band_radius, class_length / 3);
-            self.narrow_band_wraparound_dp(position, class_length, band_radius, band_radius_forward, true, RECENTER_CRITERION);
-            self.cell_count[class_length as usize] +=
-                self.rows * (2 * max2(MIN_BAND_RADIUS, self.indel_random_walk_range(class_length)) + 1) as f64;
-            let trace_band_radius = min2(2 * max2(MIN_BAND_RADIUS, self.indel_random_walk_range(class_length)), class_length / 3);
-            self.get_narrow_band_pair_alignment_with_copynumber(class_length, trace_band_radius, crate::state::LOCAL);
+            self.narrow_band_wraparound_dp(
+                position,
+                class_length,
+                band_radius,
+                band_radius_forward,
+                true,
+                RECENTER_CRITERION,
+            );
+            self.cell_count[class_length as usize] += self.rows
+                * (2 * max2(MIN_BAND_RADIUS, self.indel_random_walk_range(class_length)) + 1)
+                    as f64;
+            let trace_band_radius = min2(
+                2 * max2(MIN_BAND_RADIUS, self.indel_random_walk_range(class_length)),
+                class_length / 3,
+            );
+            self.get_narrow_band_pair_alignment_with_copynumber(
+                class_length,
+                trace_band_radius,
+                crate::state::LOCAL,
+            );
         }
         self.add_to_distance_seen(position, distance, self.max_real_row, self.max_score);
         self.adjust_best_period_entry(distance);
@@ -678,7 +724,9 @@ impl Trf {
         let class_length = self.class_length;
         let copynumber = self.copynumber;
         if (class_length <= 50 && copynumber < 1.9)
-            || (class_length > 50 && class_length <= 100 && copynumber < 1.9 - 0.002 * (distance - 50) as f64)
+            || (class_length > 50
+                && class_length <= 100
+                && copynumber < 1.9 - 0.002 * (distance - 50) as f64)
             || (class_length > 100 && copynumber < 1.8)
         {
             return;
@@ -687,7 +735,10 @@ impl Trf {
         if class_length >= self.minsize && self.align_pair.score >= self.minscore {
             self.output_count += 1.0;
             self.output_size_count[class_length as usize] += 1;
-            let text = format!("\nFound at i:{} original size:{} final size:{}", position, distance, class_length);
+            let text = format!(
+                "\nFound at i:{} original size:{} final size:{}",
+                position, distance, class_length
+            );
             self.write_to_alignment_file(&text);
             self.report_repeat(class_length);
         }
@@ -762,25 +813,31 @@ impl Trf {
                 rolling_code = 0;
                 let mut code_pos = bad_char_index + 1;
                 while code_pos <= position {
-                    rolling_code = rolling_code * 4 + self.nucleotide_index[self.sequence[code_pos as usize] as usize];
+                    rolling_code = rolling_code * 4
+                        + self.nucleotide_index[self.sequence[code_pos as usize] as usize];
                     code_pos += 1;
                 }
                 if position - bad_char_index >= max_tuple_size {
                     build_entire_code = false;
                 }
             } else {
-                rolling_code = (rolling_code % FOUR_TO_THE[(self.tuple_size[self.num_tuple_sizes as usize] - 1) as usize]) * 4
+                rolling_code = (rolling_code
+                    % FOUR_TO_THE[(self.tuple_size[self.num_tuple_sizes as usize] - 1) as usize])
+                    * 4
                     + self.nucleotide_index[self.sequence[position as usize] as usize];
             }
 
             self.tuple_code[self.num_tuple_sizes as usize] = rolling_code;
             for smaller_tuple_index in (1..self.num_tuple_sizes as usize).rev() {
-                self.tuple_code[smaller_tuple_index] = rolling_code % FOUR_TO_THE[self.tuple_size[smaller_tuple_index] as usize];
+                self.tuple_code[smaller_tuple_index] =
+                    rolling_code % FOUR_TO_THE[self.tuple_size[smaller_tuple_index] as usize];
             }
 
             /* process this position using all the tuple sizes */
             let mut tuple_index = 1usize;
-            while tuple_index <= self.num_tuple_sizes as usize && position - bad_char_index >= self.tuple_size[tuple_index] {
+            while tuple_index <= self.num_tuple_sizes as usize
+                && position - bad_char_index >= self.tuple_size[tuple_index]
+            {
                 let node = self.tuple_hash[tuple_index][self.tuple_code[tuple_index] as usize];
                 let write_slot = self.next_free_history_index[tuple_index];
                 let mut next_free_slot = write_slot + 1;
@@ -789,9 +846,12 @@ impl Trf {
                 }
 
                 if self.history[tuple_index][next_free_slot as usize].location != 0
-                    && next_free_slot == self.tuple_hash[tuple_index][self.history[tuple_index][next_free_slot as usize].code as usize]
+                    && next_free_slot
+                        == self.tuple_hash[tuple_index]
+                            [self.history[tuple_index][next_free_slot as usize].code as usize]
                 {
-                    let evicted_code = self.history[tuple_index][next_free_slot as usize].code as usize;
+                    let evicted_code =
+                        self.history[tuple_index][next_free_slot as usize].code as usize;
                     self.tuple_hash[tuple_index][evicted_code] = 0;
                 }
                 self.next_free_history_index[tuple_index] = next_free_slot;
@@ -848,7 +908,9 @@ impl Trf {
             left_col += 1;
             if left_col > align_length {
                 self.write_to_alignment_file("\nError in statistics.");
-                self.write_to_alignment_file("\nInitial left pointer exceeds AlignPair.length while");
+                self.write_to_alignment_file(
+                    "\nInitial left pointer exceeds AlignPair.length while",
+                );
                 self.write_to_alignment_file("\nlooking for first non -");
                 self.fatal(-10);
             }
@@ -859,7 +921,9 @@ impl Trf {
             self.write_to_alignment_file("\nInitial right pointer exceeds AlignPair.length");
             self.fatal(-10);
         }
-        while self.align_pair.pattern_index[right_col as usize] != self.align_pair.pattern_index[left_col as usize] {
+        while self.align_pair.pattern_index[right_col as usize]
+            != self.align_pair.pattern_index[left_col as usize]
+        {
             right_col += 1;
             if right_col > align_length {
                 self.write_to_alignment_file("\nError in statistics.");
@@ -877,9 +941,13 @@ impl Trf {
                 self.fatal(-10);
             }
         }
-        if self.align_pair.pattern_index[left_col as usize] != self.align_pair.pattern_index[right_col as usize] {
+        if self.align_pair.pattern_index[left_col as usize]
+            != self.align_pair.pattern_index[right_col as usize]
+        {
             self.write_to_alignment_file("\nError in statistics.");
-            self.write_to_alignment_file("\nInitial left pointer index not the same as\ninitial right pointer index");
+            self.write_to_alignment_file(
+                "\nInitial left pointer index not the same as\ninitial right pointer index",
+            );
             self.fatal(-10);
         }
 
@@ -898,8 +966,12 @@ impl Trf {
                         != self.align_pair.pattern_index[right_col as usize]
                     {
                         self.write_to_alignment_file("\nError in statistics.");
-                        self.write_to_alignment_file("\nLeft pointer index not the same as right pointer index");
-                        self.write_to_alignment_file("\non match or mismatch when nothing is dash.");
+                        self.write_to_alignment_file(
+                            "\nLeft pointer index not the same as right pointer index",
+                        );
+                        self.write_to_alignment_file(
+                            "\non match or mismatch when nothing is dash.",
+                        );
                         let text = format!(
                             "\nAlignPair.pattern_index[{}]: {}, AlignPair.sequence_index[{}]: {}\nAlignPair.pattern_index[{}]: {}, AlignPair.sequence_index[{}]: {}",
                             left_col,
@@ -939,8 +1011,11 @@ impl Trf {
                         != self.align_pair.pattern_index[right_col as usize]
                     {
                         self.write_to_alignment_file("\nError in statistics.");
-                        self.write_to_alignment_file("\nLeft pointer index not the same as right pointer index");
-                        let text = format!("\non do nothing.\nlp: {},  rp: {}", left_col, right_col);
+                        self.write_to_alignment_file(
+                            "\nLeft pointer index not the same as right pointer index",
+                        );
+                        let text =
+                            format!("\non do nothing.\nlp: {},  rp: {}", left_col, right_col);
                         self.write_to_alignment_file(&text);
                         self.fatal(-10);
                     }
@@ -951,7 +1026,9 @@ impl Trf {
                         != self.align_pair.pattern_index[right_col as usize]
                     {
                         self.write_to_alignment_file("\nError in statistics.");
-                        self.write_to_alignment_file("\nLeft pointer index not the same as right pointer index");
+                        self.write_to_alignment_file(
+                            "\nLeft pointer index not the same as right pointer index",
+                        );
                         self.write_to_alignment_file("\non indel caused by dash in sequence_text.");
                         let text = format!(
                             "\nAlignPair.pattern_index[{}]: {}, AlignPair.sequence_index[{}]: {}\nAlignPair.pattern_index[{}]: {}, AlignPair.sequence_index[{}]: {}",
@@ -976,8 +1053,12 @@ impl Trf {
                     != self.align_pair.pattern_index[right_col as usize]
                 {
                     self.write_to_alignment_file("\nError in statistics.");
-                    self.write_to_alignment_file("\nLeft pointer index not the same as right pointer index");
-                    self.write_to_alignment_file("\non match or mismatch when both secnd are dash.");
+                    self.write_to_alignment_file(
+                        "\nLeft pointer index not the same as right pointer index",
+                    );
+                    self.write_to_alignment_file(
+                        "\non match or mismatch when both secnd are dash.",
+                    );
                     let text = format!("\nlp: {},  rp: {}", left_col, right_col);
                     self.write_to_alignment_file(&text);
                     self.fatal(-10);

@@ -407,10 +407,7 @@ impl Trf {
             tag: vec![0; (max_distance / TAG_SEPARATION) as usize + 1],
             top_tag,
             distance,
-            distance_seen: vec![
-                DistanceSeenEntry::default();
-                MAX_PATTERN_SIZE_CONSTANT + 1
-            ],
+            distance_seen: vec![DistanceSeenEntry::default(); MAX_PATTERN_SIZE_CONSTANT + 1],
             best_period_list: VecDeque::new(),
             criteria_count: vec![0; 2 * (max_distance as usize + 1)],
             consensus_count: vec![0; 2 * (max_distance as usize + 1)],
