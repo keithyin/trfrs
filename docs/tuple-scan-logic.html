@@ -1,0 +1,968 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>元组扫描逻辑 · trfrs</title>
+<style>
+:root{
+  --paper:#f6f7f5;
+  --card:#ffffff;
+  --ink:#1a2220;
+  --muted:#5d6b68;
+  --line:#d8dedb;
+  --line-soft:#e8ecea;
+  --teal:#0d6b63;
+  --teal-soft:#e5f1ee;
+  --amber:#8f5d10;
+  --amber-soft:#fbf2de;
+  --red:#9a3b2c;
+  --red-soft:#fbeae6;
+  --code-bg:#f1f3f1;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --serif:"Noto Serif SC","Source Han Serif SC","Songti SC",Georgia,serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font:16px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","Source Han Sans SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.rail{position:sticky;top:0;z-index:20;background:rgba(246,247,245,.95);border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}
+.rail-in{max-width:960px;margin:0 auto;padding:9px 26px;display:flex;gap:16px;align-items:center;overflow-x:auto;font-size:12.5px;white-space:nowrap}
+.rail-in b{font-family:var(--serif);font-size:13px;letter-spacing:.02em;color:var(--teal)}
+.rail-in a{color:var(--muted);text-decoration:none;padding:2px 0;border-bottom:1px solid transparent}
+.rail-in a:hover{color:var(--ink);border-bottom-color:var(--teal)}
+.page{max-width:960px;margin:0 auto;padding:0 26px 140px}
+
+.hero{padding:66px 0 34px;border-bottom:3px double var(--line)}
+.kicker{font-size:11.5px;letter-spacing:.22em;color:var(--teal);margin:0 0 14px;font-weight:600}
+h1{font-family:var(--serif);font-size:42px;line-height:1.28;margin:0 0 14px;letter-spacing:-.01em;font-weight:700}
+.lede{font-size:17.5px;line-height:1.7;color:#3c4a47;max-width:44em;margin:0 0 22px}
+.hero-meta{display:flex;flex-wrap:wrap;gap:10px 26px;font-size:12.5px;color:var(--muted)}
+.hero-meta code{background:var(--code-bg)}
+
+h2{font-family:var(--serif);font-size:27px;line-height:1.4;margin:64px 0 12px;padding-top:14px;border-top:1px solid var(--line);letter-spacing:-.01em}
+h2 .badge{display:inline-block;font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;color:#fff;background:var(--teal);border-radius:5px;padding:3px 8px;vertical-align:4px;margin-right:12px;font-weight:600}
+h3{font-family:var(--serif);font-size:19px;margin:34px 0 10px}
+h4{font-size:15px;margin:22px 0 8px;color:#33403d;font-weight:700}
+p{margin:0 0 14px}
+ul,ol{margin:0 0 16px;padding-left:24px}
+li{margin:5px 0}
+li::marker{color:var(--teal)}
+strong{font-weight:700}
+em{font-style:normal;background:linear-gradient(transparent 62%,#d7ece6 62%);padding:0 1px}
+a{color:var(--teal)}
+code{font-family:var(--mono);font-size:.875em;background:var(--code-bg);border:1px solid var(--line-soft);border-radius:4px;padding:.06em .32em}
+
+.key{border-left:3px solid var(--teal);background:var(--card);padding:13px 18px;margin:20px 0;border-radius:0 10px 10px 0}
+.key p:last-child{margin:0}
+.key .lbl{font-size:11.5px;letter-spacing:.16em;color:var(--teal);font-weight:700;display:block;margin-bottom:4px}
+.warn{border-left:3px solid var(--red);background:var(--red-soft);padding:13px 18px;margin:20px 0;border-radius:0 10px 10px 0;font-size:14.8px}
+.warn p:last-child{margin:0}
+.warn .lbl{font-size:11.5px;letter-spacing:.16em;color:var(--red);font-weight:700;display:block;margin-bottom:4px}
+.note{font-size:14px;color:var(--muted);border-top:1px dashed var(--line);padding-top:10px;margin:18px 0}
+
+pre{margin:0 0 18px;background:var(--code-bg);border:1px solid var(--line);border-radius:9px;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.62}
+pre code{background:none;border:0;padding:0;font-size:100%}
+
+table{border-collapse:collapse;width:100%;margin:18px 0 24px;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden;font-size:13.5px}
+th,td{padding:8px 12px;border-bottom:1px solid var(--line-soft);text-align:left;vertical-align:top;line-height:1.6}
+th{font-size:11.5px;letter-spacing:.08em;color:var(--muted);background:var(--teal-soft);font-weight:700;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+td code{white-space:nowrap}
+.tbl-scroll{overflow-x:auto}
+.hit{color:var(--teal);font-weight:700}
+.skip{color:var(--red)}
+.new{color:var(--muted)}
+
+.seq{font-family:var(--mono);font-size:14px;letter-spacing:.08em;background:var(--code-bg);border:1px solid var(--line);border-radius:8px;padding:10px 14px;margin:14px 0;overflow-x:auto;white-space:pre}
+.seq .bad{color:var(--red);font-weight:700;background:var(--red-soft);border-radius:3px}
+.seq .tk{border-bottom:2px solid var(--teal);padding-bottom:1px}
+
+.fig{margin:26px 0 32px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 16px 12px;overflow-x:auto}
+.fig svg{display:block;width:100%;min-width:700px;height:auto;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC",sans-serif}
+.fig figcaption{font-size:13px;color:var(--muted);border-top:1px dashed var(--line);margin-top:12px;padding-top:10px;line-height:1.75}
+.fig figcaption b{color:var(--ink);font-weight:700}
+.fig code{background:var(--code-bg)}
+
+.foot{margin-top:80px;padding-top:18px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)}
+</style>
+</head>
+<body>
+
+<div class="rail"><div class="rail-in">
+<b>trfrs · 元组扫描</b>
+<a href="#overview">总览</a>
+<a href="#params">参数与频带</a>
+<a href="#ds">数据结构</a>
+<a href="#loop">主循环</a>
+<a href="#ex1">示例一</a>
+<a href="#ex2">示例二</a>
+<a href="#ex3">示例三</a>
+<a href="#props">性质清单</a>
+</div></div>
+
+<div class="page">
+
+<header class="hero">
+<p class="kicker">TRFS SOURCE WALKTHROUGH · SRC/SCAN.RS</p>
+<h1>元组扫描逻辑</h1>
+<p class="lede">本文用自然语言精确描述 <code>trfrs</code>（TRF 4.10.0 的 Rust 移植）中
+<code>scan_sequence()</code> 的元组扫描机制：序列如何被切成重叠元组、如何编码、如何用
+哈希表加环形历史链表找出所有"相距 d 的相同元组"，以及距离 d 如何被分派到唯一的元组长度
+<strong>距离频带</strong>（2.1 定义）。</p>
+<div class="hero-meta">
+<span>源码 <code>src/scan.rs · scan_sequence()</code>（697–831 行）</span>
+<span>结构定义 <code>src/state.rs · HistoryEntry</code>（144–149 行）</span>
+<span>下游流水线 <a href="candidate-pipeline-tutorial.html">候选产生教程</a></span>
+</div>
+</header>
+
+<!-- ============================================================ -->
+<h2 id="overview"><span class="badge">01</span>总览：扫描在解决什么问题</h2>
+
+<p>串联重复的候选周期是整数 <code>d</code>（<code>1 ≤ d ≤ MaxPeriod</code>；<code>MaxPeriod</code> 是命令行
+第 8 个参数"最大重复单元长度"，取值 1–2000）。扫描器要找的
+"证据"是<strong>一次元组匹配</strong>：两个以 <code>p−d</code> 与 <code>p</code> 为结束位置、
+长度同为 k 的窗口（连续 k 个碱基的子串）内容完全相同。这次匹配说明相距 <code>d</code> 的两段
+k 长序列一致，从而<strong>支持"以 p 为右端点、存在周期 d 的重复"这一假设</strong>。扫描器的唯一职责是：</p>
+
+<div class="warn">
+<span class="lbl">措辞纠正</span>
+<p>证据是<strong>一次匹配事件</strong>——这对相同的元组；<code>d</code> 只是该假设里的
+<strong>参数值</strong>，不是证据本身。把 <code>d</code> 叫作证据，等于把"量"与"事件"混为一谈。
+而且这次匹配<strong>不充分、不唯一、不必要、且只是局部的</strong>：随机的相同 k-元组也会在距离 d 处
+撞上，所以它只能算候选，还须通过统计准则（证据要攒够、且首次匹配不能太晚，见示例一的具体阈值）；
+真实基本周期为 q 时，q 的任何倍数同样会匹配，故 d 未必是
+最小周期；反过来，真存在周期 d 的重复也可能拿不出匹配（可用长度不足 k，或元组自身跨了非 ACGT 字符）；
+它只说明两个相距 d 的 k 窗口一致，并不说明两者之间处处满足周期 d。</p>
+</div>
+
+<div class="key">
+<span class="lbl">核心任务</span>
+<p>对序列上每个位置 p，找出所有满足 <code>d ≤ MaxPeriod</code> 的先前位置
+<code>p−d</code>，使得以这两处为<strong>结束位置</strong>的某个 k-元组完全相同；
+对每一个这样的数对 <code>(p, d)</code>，调用一次
+<code>process_candidate(p, d, k)</code>——<strong>一次匹配 = 一个候选</strong>，由此进入后续流水线。</p>
+</div>
+
+<p>三点约定先说清楚，后文全部沿用：</p>
+<ul>
+<li><strong>元组以结束位置索引。</strong>位置 p 的 k-元组覆盖区间
+<code>[p−k+1, p]</code>。这不是随意选择：它保证"同长元组相等"对后缀封闭——
+若两个 k-元组相等，则它们的 (k−1)-后缀元组也相等。这一性质是<a href="#bands">距离频带</a>分派
+不重不漏的根基（定义见 2.1，论证见 <a href="#ex3">示例三</a>）。</li>
+<li><strong>位置从 0 开始</strong>，与源码一致。</li>
+<li><strong>碱基编码</strong> <code>A=0, C=1, G=2, T=3</code>（大小写等价，非 ACGT 字符不编码）。
+k-元组的码是其碱基编码按 4 进制拼成的整数，最左字符为最高位。例如
+"ACGT" = 0·4³+1·4²+2·4+3 = <code>27</code>。</li>
+</ul>
+
+<h3>1.1 术语约定（后文反复使用的简写）</h3>
+
+<p>下面这些说法在源码里多数并不存在，是本文为叙述方便起的名字；首次出现处一般还会再解释一次。</p>
+
+<table>
+<tr><th>说法</th><th>含义</th></tr>
+<tr><td>元组匹配</td><td>两处以结束位置索引的 k-元组同码（即"一次匹配"）</td></tr>
+<tr><td>候选</td><td>一次匹配上报后、尚未被判据与 DP 确认的"周期 d"假设</td></tr>
+<tr><td>登记</td><td>把 <code>(码, 位置)</code> 写入哈希表，并把位置挂到该码链的头部（4.4）</td></tr>
+<tr><td>表头</td><td>链头节点；哈希表就指向它，也就是该码最近一次出现</td></tr>
+<tr><td>命中</td><td>查表时发现该码已有登记（随后才回溯、生成候选）</td></tr>
+<tr><td>回溯</td><td>沿 <code>previous</code> 指针从新到旧遍历链，逐个计算距离（4.5）</td></tr>
+<tr><td>摘链</td><td>回溯中把距离超出频带上界的节点连同更旧节点切断（4.5）</td></tr>
+<tr><td>上报</td><td>调用 <code>process_candidate</code>，把这次匹配交给后续流水线</td></tr>
+<tr><td>撞码</td><td>两处出现相同的元组码，可能纯属偶然——随机噪声</td></tr>
+<tr><td>距离窗口</td><td>以当前位置为右端的<strong>最近 D 个位置</strong>（D 为该频带上界）；与"k 长窗口"不是一回事</td></tr>
+<tr><td>槽龄</td><td>某个 <code>history</code> 槽从写入起经过的插入轮数，满 <code>2(D+1)+1</code> 轮被覆写（3.3）</td></tr>
+<tr><td>位置龄</td><td>当前位置 − 该记录保存的位置（3.3）</td></tr>
+<tr><td>DP</td><td>动态规划；本文特指按周期逐行推进的带状比对（wraparound DP）</td></tr>
+<tr><td>indel</td><td>插入或缺失</td></tr>
+<tr><td>bp</td><td>碱基（个数）；"30 bp" 即 30 个碱基</td></tr>
+<tr><td>坏字符</td><td>非 ACGT 的字符，例如 <code>N</code>（4.1）</td></tr>
+<tr><td>统计准则</td><td>判断候选是否值得求解的阈值：匹配计数与等待时间（示例一）</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="params"><span class="badge">02</span>元组长度与距离频带</h2>
+
+<h3 id="bands">2.1 定义：什么叫"距离频带"</h3>
+
+<p>扫描同时对<strong>多种元组长度</strong>取证据。每种长度 k 配一个<strong>距离上界</strong>
+<code>tuple_max_distance[k]</code>（下文记 <code>D_k = tuple_max_distance[k]</code>），并遵守一条约定：</p>
+
+<div class="key">
+<span class="lbl">定义</span>
+<p>一次元组匹配（两处元组的结束位置相差 <code>d</code>）只有在
+<code>tuple_max_distance[k−1] &lt; d ≤ tuple_max_distance[k]</code> 时，才由<strong>长度 k</strong>
+的元组上报为候选。于是所有合法距离 <code>1 … MaxPeriod</code> 被切成首尾相接的若干区间
+<code>(0, D₁]</code>、<code>(D₁, D₂]</code>、…、<code>(Dₙ₋₁, Dₙ]</code>，每个区间绑定一种元组长度；
+这个区间就叫该元组长度的<strong>距离频带</strong>。</p>
+</div>
+
+<p>等价说法：对任意距离 d 定义"允许上报的最短元组"
+<code>k_min(d) = min{ k : d ≤ tuple_max_distance[k] }</code>，一次匹配只有在
+<code>k = k_min(d)</code> 时才成为候选。比 k_min <strong>短</strong>的元组在这个距离上证据太弱
+（多半是随机撞码），比 k_min <strong>长</strong>的元组则与更短的元组重复（同一对位置已经被上报过）。
+所以频带可以读成一张"距离 → 要求多强的元组证据"的分段表。</p>
+
+<p class="note">源码里并没有 "band / 频带" 这个词：实现里只有 <code>tuple_max_distance</code> 数组和
+上面那个不等式（4.5 的两条分支）。"距离频带"是本文为叙述方便给这些区间起的名字。
+另外，定义默认 <code>D_k</code> 单调递增；<code>MaxPeriod ≥ 159</code> 时成立。若把 MaxPeriod 设得
+比 159 还小，最长那条频带的上界会小于前一条，判据 <code>d &gt; D₂</code> 永远不成立，
+等价于 7-元组完全不参与上报。</p>
+
+<figure class="fig">
+<svg viewBox="0 0 900 240" role="img" aria-label="PM=80 的三条距离频带示意">
+<defs>
+<marker id="axr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#c9d1ce"/></marker>
+</defs>
+
+<text x="60" y="22" font-size="10.5" fill="#8a9693">距离 d 由小到大</text>
+<line x1="60" y1="34" x2="858" y2="34" stroke="#c9d1ce" stroke-width="1.2" marker-end="url(#axr)"/>
+
+<rect x="60" y="48" width="240" height="82" rx="8" fill="#e5f1ee" stroke="#0d6b63"/>
+<text x="74" y="72" font-size="13" font-weight="700" fill="#0d6b63">4-元组</text>
+<text x="74" y="94" font-size="12" font-family="ui-monospace,Menlo,Consolas,monospace" fill="#1a2220">d = 1 … 29</text>
+<text x="74" y="114" font-size="10.5" fill="#5d6b68">4⁴ = 256 种码</text>
+
+<rect x="300" y="48" width="260" height="82" rx="8" fill="#fbf2de" stroke="#8f5d10"/>
+<text x="314" y="72" font-size="13" font-weight="700" fill="#8f5d10">5-元组</text>
+<text x="314" y="94" font-size="12" font-family="ui-monospace,Menlo,Consolas,monospace" fill="#1a2220">d = 30 … 159</text>
+<text x="314" y="114" font-size="10.5" fill="#5d6b68">4⁵ = 1024 种码</text>
+
+<text x="580" y="96" text-anchor="middle" font-size="16" fill="#9aa5a1">⋯</text>
+
+<rect x="600" y="48" width="260" height="82" rx="8" fill="#eef2f1" stroke="#33403d"/>
+<text x="614" y="72" font-size="13" font-weight="700" fill="#33403d">7-元组</text>
+<text x="614" y="94" font-size="12" font-family="ui-monospace,Menlo,Consolas,monospace" fill="#1a2220">d = 160 … 2000</text>
+<text x="614" y="114" font-size="10.5" fill="#5d6b68">4⁷ = 16384 种码</text>
+
+<line x1="60" y1="138" x2="860" y2="138" stroke="#c9d1ce" stroke-width="1"/>
+<line x1="60" y1="138" x2="60" y2="144" stroke="#c9d1ce"/>
+<line x1="300" y1="138" x2="300" y2="144" stroke="#c9d1ce"/>
+<line x1="560" y1="138" x2="560" y2="144" stroke="#c9d1ce"/>
+<line x1="860" y1="138" x2="860" y2="144" stroke="#c9d1ce"/>
+<text x="60" y="158" font-size="10.5" fill="#5d6b68">0</text>
+<text x="300" y="158" text-anchor="middle" font-size="10.5" fill="#5d6b68">29</text>
+<text x="560" y="158" text-anchor="middle" font-size="10.5" fill="#5d6b68">159</text>
+<text x="860" y="158" text-anchor="end" font-size="10.5" fill="#5d6b68">2000</text>
+
+<text x="74" y="182" font-size="10.5" fill="#5d6b68">链只保留 ≤ 29</text>
+<text x="74" y="200" font-size="10.5" fill="#5d6b68">环形缓冲 62 槽</text>
+<text x="314" y="182" font-size="10.5" fill="#5d6b68">链只保留 ≤ 159</text>
+<text x="314" y="200" font-size="10.5" fill="#5d6b68">322 槽</text>
+<text x="614" y="182" font-size="10.5" fill="#5d6b68">链只保留 ≤ 2000</text>
+<text x="614" y="200" font-size="10.5" fill="#5d6b68">4004 槽</text>
+
+<text x="60" y="228" font-size="10.5" fill="#9aa5a1">段宽不代表真实比例：第 3 段实际覆盖 1841 个距离值（160…2000）</text>
+</svg>
+<figcaption><b>图 2-1　PM=80 的三条距离频带（MaxPeriod=2000）。</b>横轴是元组匹配的距离 d；
+刻度 0 / 29 / 159 / 2000 是频带边界，左端不含（合法距离从 1 起）。每个区间只由一种元组长度的
+匹配上报（定义见 2.1）。段宽仅示意，不代表数值比例；下排两行是该频带带来的两个副产物：
+历史链只保留到 D_k，环形缓冲长度也由 D_k 决定。</figcaption>
+</figure>
+
+<h3>2.2 一条频带同时决定三件事</h3>
+
+<ol>
+<li><strong>上报门槛</strong>：决定 <code>process_candidate</code> 会不会被调用——这是"频带"最直接的用途（4.5）。</li>
+<li><strong>链保留范围</strong>：长度 k 的<em>历史链</em>（<code>history[k]</code> 里同码出现串成的单链，见 3.2）
+只保留距离 ≤ D_k 的出现；回溯（沿 <code>previous</code> 从新到旧遍历这条链，见 4.5）一旦超过 D_k，
+就把更老的节点摘掉（3.3、4.5），所以短元组的链天然看不到远距离。</li>
+<li><strong>内存与遍历成本</strong>：环形缓冲（写满即回绕的定长数组，槽位见 3.2）长度由 D_k 决定，
+4-元组只要 62 槽、一次回溯至多数十步；7-元组要付出 4004 槽、单次回溯可达上千步的代价（§7 成本段）。</li>
+</ol>
+
+<h3>2.3 它不是什么</h3>
+
+<ul>
+<li>不是把<strong>序列</strong>切成段：它按"距离"分区，与序列位置无关；序列只在遇到非 ACGT 时才断开（4.1）。</li>
+<li>不是<strong>输出侧的周期分类</strong>：频带只决定"谁上报候选"，不决定最终报告的周期
+（<code>.dat</code> 里的 <code>period</code> 字段）——那是后续 DP（动态规划）与统计的事（见候选教程）。</li>
+<li>不是 <code>process_candidate</code> 里那份<strong>按距离累计的记录</strong>（每个 d 一份
+<code>(location, size)</code>、<code>match_count</code>，见示例一），也不是 DP 时为每个 d 算的
+<strong>容错半径</strong> <code>min_distance_range</code>/<code>max_distance_range</code>
+（indel——插入/缺失——随机游走范围）。三样东西名字都带"距离"，但分属不同层次。</li>
+<li>不是<strong>倍周期过滤</strong>：周期 30 的重复同样会给出 d=60、90、120… 的匹配，它们各自落在
+自己的频带里、照样成为候选（<code>process_candidate</code> 里的变量名就叫 <code>pass_multiples_test</code>）。
+剔除倍周期是 <code>passes_top_period_test()</code> 的职责，不在扫描这一层。</li>
+</ul>
+
+<h3>2.4 代码里的频带表</h3>
+
+<p>频带边界不是从序列里算出来的，而是按匹配概率 <code>PM</code> 查表得到
+（<code>init_criteria_tables()</code>）：</p>
+
+<table>
+<tr><th>PM</th><th>元组长度 k（按索引 1…n）</th><th colspan="4">tuple_max_distance[k]（该频带的距离上界）</th></tr>
+<tr><td>80（人 DNA 常用）</td><td><code>4, 5, 7</code></td><td><code>[0]=0</code></td><td><code>[1]=29</code></td><td><code>[2]=159</code></td><td><code>[3]=MaxPeriod</code>（如 2000）</td></tr>
+<tr><td>75</td><td><code>3, 4, 5, 7</code></td><td><code>[0]=0</code></td><td><code>[1]=29</code></td><td><code>[2]=43</code></td><td><code>[3]=159</code>，<code>[4]=MaxPeriod</code></td></tr>
+</table>
+
+<p class="note">PM 是命令行必填的位置参数，没有默认值；<code>init_criteria_tables()</code>
+只内置 PM=80 与 PM=75 两套参数表，其它取值以 <code>fatal(-13)</code> 终止。
+表中 k 是元组长度本身（代码用下标 1…num_tuple_sizes 取用）；下标 0 的
+<code>tuple_max_distance[0]=0</code> 只是让判据 <code>d &gt; tuple_max_distance[k−1]</code>
+对最短频带恒成立。</p>
+
+<p>把同一组数字排成表，并补上哈希规模与选型理由：</p>
+<table>
+<tr><th>元组长度</th><th>负责的距离区间 d</th><th>哈希表大小 4ᵏ</th><th>为什么是这个长度</th></tr>
+<tr><td>4</td><td><code>1 … 29</code></td><td>256</td><td>只要 4 个连续 ACGT 就能用，遇到非 ACGT 字符后最先恢复出证据</td></tr>
+<tr><td>5</td><td><code>30 … 159</code></td><td>1024</td><td>码数比 4-元组多 4 倍，抵掉距离窗口变长带来的额外随机撞码</td></tr>
+<tr><td>7</td><td><code>160 … MaxPeriod</code></td><td>16384</td><td>码数再多 16 倍，使长距离上的随机撞码密度回到同一量级</td></tr>
+</table>
+
+<p class="note">可以自己验算的一条规律：把"本频带的候选偏移个数 ÷ 4ᵏ"算出来，PM=80 时是
+<code>29/256≈0.11</code>、<code>130/1024≈0.13</code>、<code>1841/16384≈0.11</code>
+（MaxPeriod 取 2000）——每个位置平均只会撞上约 0.1 个随机同码元组，三条频带的噪声被
+控制在同一量级。这是解释性观察，源码注释里没有这句话。PM=75 的最低频带是 3-元组、上界 29，
+<code>29/64≈0.45</code>，噪声明显更高，对应它更宽松的匹配假设。</p>
+
+<div class="warn">
+<span class="lbl">为什么分频带</span>
+<p>4-元组只有 4⁴=256 种取值。若用 4-元组检测 d≈1000 的重复，每个位置在最近 1000 个位置里
+平均会撞上约 <code>1000/256≈4</code> 个同码元组，几乎全是随机噪声。而真实的周期 1000 的重复，
+两拷贝在多数对应位置一致（错配与插入缺失只影响少数位置），仍会给出足够多的 7-元组匹配；
+7-元组（4⁷=16384 种）在同样长的距离窗口内，随机撞码期望只有 <code>1000/16384≈0.06</code>，
+噪声被压低约 40 倍。反过来，7-元组要求更长的无间断 ACGT 段，在短距离上会白白损失可用证据——
+所以短距离交给短元组，长距离交给长元组。</p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="ds"><span class="badge">03</span>数据结构：哈希表 + 环形历史链表</h2>
+
+<p>对每种元组长度 k（索引 1…n），扫描器维护两套结构：</p>
+
+<h3>3.1 哈希表 <code>tuple_hash[k]</code></h3>
+<p>长度为 4ᵏ 的整数数组。<code>tuple_hash[k][code]</code> 存的是"码为 code 的元组
+<strong>最近一次</strong>出现位置的槽位号"（指向 history 的下标）；<code>0</code> 表示该码在当前
+没有有效记录——从未出现，或旧链已被<strong>惰性淘汰</strong>（不立即清理，等槽位将被覆写时才解除登记，
+见 3.3）。</p>
+
+<h3>3.2 环形历史链表 <code>history[k]</code></h3>
+<p>长度为 <code>history_size = 2·(tuple_max_distance[k]+1)+2</code> 的环形缓冲，
+有效槽位是 <code>1 … 2(D+1)+1</code>（D 为该频带距离上界）：槽位 0 留作哨兵
+（不存数据，只当"空指针"用，链的终点写 0），写入游标推进到 <code>history_size</code> 时回绕到 1。
+每个槽是三条记录：</p>
+
+<table>
+<tr><th>字段</th><th>含义</th></tr>
+<tr><td><code>location</code></td><td>该元组出现的（结束）位置。为 0 表示槽位空闲——因为首个可处理位置 ≥ min_tuple_size ≥ 3 &gt; 0，位置 0 永不入表，此标记安全。</td></tr>
+<tr><td><code>previous</code></td><td>同一码的<strong>次新</strong>出现所在槽位号；0 表示链到此为止。链上节点按位置从新到旧排列（更旧的会被距离截断或惰性淘汰摘掉）。</td></tr>
+<tr><td><code>code</code></td><td>该条目自身的元组码，供惰性淘汰时反查哈希表。</td></tr>
+</table>
+
+<p>写入游标 <code>next_free_history_index[k]</code> 指向下一个待写槽位，写满即回绕到 1。
+以 PM=80 为例，缓冲区长度分别为：D=29 时 <code>2·30+2=62</code>（可用槽位 61）、
+D=159 时 <code>322</code>（可用 321）、D=MaxPeriod=2000 时 <code>2·2001+2=4004</code>（可用 4003）。
+一个槽从写入到被覆写正好隔 <code>2(D+1)+1</code> 轮，约为最大保留距离的两倍，原因见 3.3。</p>
+
+<p class="note">槽里究竟存了什么（不是碱基，也不是周期），以及一条记录从写入到被覆写的全过程，
+3.4 会给出逐字段的答案。</p>
+
+<figure class="fig">
+<svg viewBox="0 0 900 430" role="img" aria-label="哈希表与环形历史链表的结构示意">
+<defs>
+<marker id="ah1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#0d6b63"/></marker>
+<marker id="ah2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#8f5d10"/></marker>
+</defs>
+
+<text x="86" y="22" font-size="11" fill="#5d6b68">下标＝元组码，值＝历史槽号；0 表示空（从未出现，或旧链已被淘汰）</text>
+
+<text x="30" y="63" transform="rotate(-90 30 63)" text-anchor="middle" font-size="11" fill="#5d6b68" font-family="ui-monospace,Menlo,Consolas,monospace">① tuple_hash[k]</text>
+<text x="30" y="264" transform="rotate(-90 30 264)" text-anchor="middle" font-size="11" fill="#5d6b68" font-family="ui-monospace,Menlo,Consolas,monospace">② history[k]</text>
+
+<g font-family="ui-monospace,Menlo,Consolas,monospace">
+<rect x="86" y="34" width="92" height="58" rx="7" fill="#f8f9f8" stroke="#d8dedb"/>
+<text x="132" y="62" text-anchor="middle" font-size="17" font-weight="700" fill="#9aa5a1">0</text>
+<text x="132" y="80" text-anchor="middle" font-size="10.5" fill="#5d6b68">码 0</text>
+
+<rect x="290" y="34" width="92" height="58" rx="7" fill="#e5f1ee" stroke="#0d6b63"/>
+<text x="336" y="62" text-anchor="middle" font-size="17" font-weight="700" fill="#0d6b63">3</text>
+<text x="336" y="80" text-anchor="middle" font-size="10.5" fill="#5d6b68">码 24</text>
+
+<rect x="392" y="34" width="92" height="58" rx="7" fill="#e5f1ee" stroke="#0d6b63"/>
+<text x="438" y="62" text-anchor="middle" font-size="17" font-weight="700" fill="#0d6b63">4</text>
+<text x="438" y="80" text-anchor="middle" font-size="10.5" fill="#5d6b68">码 97</text>
+
+<rect x="494" y="34" width="92" height="58" rx="7" fill="#fbf2de" stroke="#8f5d10"/>
+<text x="540" y="62" text-anchor="middle" font-size="17" font-weight="700" fill="#8f5d10">5</text>
+<text x="540" y="80" text-anchor="middle" font-size="10.5" fill="#5d6b68">码 134</text>
+
+<rect x="664" y="34" width="92" height="58" rx="7" fill="#f8f9f8" stroke="#d8dedb"/>
+<text x="710" y="62" text-anchor="middle" font-size="17" font-weight="700" fill="#9aa5a1">0</text>
+<text x="710" y="80" text-anchor="middle" font-size="10.5" fill="#5d6b68">码 255</text>
+</g>
+
+<text x="240" y="68" font-size="20" fill="#b9c2bf">⋯</text>
+<text x="626" y="68" font-size="20" fill="#b9c2bf">⋯</text>
+
+<line x1="336" y1="96" x2="336" y2="210" stroke="#0d6b63" stroke-width="1.6" stroke-dasharray="0" marker-end="url(#ah1)"/>
+<line x1="438" y1="96" x2="438" y2="210" stroke="#0d6b63" stroke-width="1.6" marker-end="url(#ah1)"/>
+<line x1="540" y1="96" x2="540" y2="210" stroke="#8f5d10" stroke-width="1.6" marker-end="url(#ah2)"/>
+
+<g>
+<rect x="86" y="216" width="92" height="96" rx="8" fill="#eef6f4" stroke="#0d6b63"/>
+<text x="98" y="236" font-size="10.5" fill="#5d6b68">槽 1</text>
+<text x="98" y="258" font-size="11.5" font-family="ui-monospace,Menlo,Consolas,monospace"><tspan fill="#5d6b68">loc </tspan><tspan fill="#1a2220">4</tspan></text>
+<text x="98" y="278" font-size="11.5" font-family="ui-monospace,Menlo,Consolas,monospace"><tspan fill="#5d6b68">prev </tspan><tspan fill="#9aa5a1">0</tspan></text>
+<text x="98" y="298" font-size="11.5" font-family="ui-monospace,Menlo,Consolas,monospace"><tspan fill="#5d6b68">code </tspan><tspan fill="#1a2220">97</tspan></text>
+</g>
+
+<g>
+<rect x="188" y="216" width="92" height="96" rx="8" fill="#fdf7ea" stroke="#8f5d10"/>
+<text x="200" y="236" font-size="10.5" fill="#5d6b68">槽 2</text>
+<text x="200" y="258" font-size="11.5" font-family="ui-monospace,Menlo,Consolas,monospace"><tspan fill="#5d6b68">loc </tspan><tspan fill="#1a2220">5</tspan></text>
+<text x="200" y="278" font-size="11.5" font-family="ui-monospace,Menlo,Consolas,monospace"><tspan fill="#5d6b68">prev </tspan><tspan fill="#9aa5a1">0</tspan></text>
+<text x="200" y="298" font-size="11.5" font-family="ui-monospace,Menlo,Consolas,monospace"><tspan fill="#5d6b68">code </tspan><tspan fill="#1a2220">134</tspan></text>
+</g>
+
+<g>
+<rect x="290" y="216" width="92" height="96" rx="8" fill="#ffffff" stroke="#d8dedb"/>
+<text x="302" y="236" font-size="10.5" fill="#5d6b68">槽 3</text>
+<text x="302" y="258" font-size="11.5" font-family="ui-monospace,Menlo,Consolas,monospace"><tspan fill="#5d6b68">loc </tspan><tspan fill="#1a2220">6</tspan></text>
+<text x="302" y="278" font-size="11.5" font-family="ui-monospace,Menlo,Consolas,monospace"><tspan fill="#5d6b68">prev </tspan><tspan fill="#9aa5a1">0</tspan></text>
+<text x="302" y="298" font-size="11.5" font-family="ui-monospace,Menlo,Consolas,monospace"><tspan fill="#5d6b68">code </tspan><tspan fill="#1a2220">24</tspan></text>
+</g>
+
+<g>
+<rect x="392" y="216" width="92" height="96" rx="8" fill="#eef6f4" stroke="#0d6b63"/>
+<text x="404" y="236" font-size="10.5" fill="#5d6b68">槽 4</text>
+<text x="404" y="258" font-size="11.5" font-family="ui-monospace,Menlo,Consolas,monospace"><tspan fill="#5d6b68">loc </tspan><tspan fill="#1a2220">7</tspan></text>
+<text x="404" y="278" font-size="11.5" font-family="ui-monospace,Menlo,Consolas,monospace"><tspan fill="#5d6b68">prev </tspan><tspan fill="#0d6b63">1</tspan></text>
+<text x="404" y="298" font-size="11.5" font-family="ui-monospace,Menlo,Consolas,monospace"><tspan fill="#5d6b68">code </tspan><tspan fill="#1a2220">97</tspan></text>
+</g>
+
+<g>
+<rect x="494" y="216" width="92" height="96" rx="8" fill="#fdf7ea" stroke="#8f5d10"/>
+<text x="506" y="236" font-size="10.5" fill="#5d6b68">槽 5</text>
+<text x="506" y="258" font-size="11.5" font-family="ui-monospace,Menlo,Consolas,monospace"><tspan fill="#5d6b68">loc </tspan><tspan fill="#1a2220">8</tspan></text>
+<text x="506" y="278" font-size="11.5" font-family="ui-monospace,Menlo,Consolas,monospace"><tspan fill="#5d6b68">prev </tspan><tspan fill="#8f5d10">2</tspan></text>
+<text x="506" y="298" font-size="11.5" font-family="ui-monospace,Menlo,Consolas,monospace"><tspan fill="#5d6b68">code </tspan><tspan fill="#1a2220">134</tspan></text>
+</g>
+
+<path d="M438,312 C438,352 132,352 132,318" fill="none" stroke="#0d6b63" stroke-width="1.6" marker-end="url(#ah1)"/>
+<path d="M540,312 C540,386 234,386 234,318" fill="none" stroke="#8f5d10" stroke-width="1.6" marker-end="url(#ah2)"/>
+
+<circle cx="598" cy="338" r="3.2" fill="#0d6b63"/>
+<text x="608" y="342" font-size="11" fill="#0d6b63">prev 链：位置 7 → 4，d = 3</text>
+<circle cx="598" cy="366" r="3.2" fill="#8f5d10"/>
+<text x="608" y="370" font-size="11" fill="#8f5d10">prev 链：位置 8 → 5，d = 3</text>
+
+<line x1="600" y1="216" x2="600" y2="312" stroke="#5d6b68" stroke-width="1.2" stroke-dasharray="4 3"/>
+<text x="600" y="206" text-anchor="middle" font-size="10.5" fill="#5d6b68">next_free = 6</text>
+<text x="632" y="270" font-size="18" fill="#b9c2bf">⋯</text>
+<text x="660" y="252" font-size="10.5" fill="#5d6b68">槽 6 … 61</text>
+<text x="660" y="270" font-size="10.5" fill="#5d6b68">写满回绕到 1</text>
+</svg>
+<figcaption><b>图 3-1　哈希表与环形历史链表（PM=80 的 4-元组，状态取自示例一处理到 p=8 时）。</b>
+上半是 <code>tuple_hash[1]</code> 的 256 格示意图：每格存的是<strong>槽号</strong>而不是位置；格里写 0 表示该码
+没有有效记录（从未出现，或旧链已淘汰）——这个 0 与下半的 0 号哨兵槽不是一回事。
+下半是 <code>history[1]</code> 的环形缓冲：可用槽 1…61，0 号槽留作哨兵，每槽三个字段
+<code>loc / prev / code</code>。<strong>槽号按写入顺序递增，与 position 没有对应关系</strong>——例如槽 1 存的是
+p=4 那条记录。竖直箭头＝哈希指向该码最近一次出现（表头）；弧形箭头＝沿 <code>prev</code> 走出的同码链，
+两条链各含一次相距 3 的匹配（97 的链在 p=7 走过，134 的链在 p=8 走过）。
+<code>next_free=6</code> 是下一个待写槽，图中用 ⋯ 略去槽 6…61。</figcaption>
+</figure>
+
+<h3>3.3 两条不变量</h3>
+<ul>
+<li><strong>链长受距离截断约束。</strong>每次回溯（见 4.5）都会把链上第一个距离超过
+<code>tuple_max_distance[k]</code> 的节点连同更老的全部节点摘掉。于是回溯<em>读到</em>的
+节点只有两类：距离 ≤ D 的节点（其槽刚写过不超过 D 轮，远早于 <code>2(D+1)+1</code>
+轮的覆写周期），以及那个触发截断的节点——它的位置龄（当前位置 − 该记录保存的位置）等于它与
+同名元组上次出现之间的间隔；
+若该间隔已达 <code>2(D+1)+1</code> 轮，它当时正是该码的表头，早已被下面的惰性淘汰解除登记、
+根本不在链上。两类节点读到的都是自己的有效记录。</li>
+<li><strong>惰性淘汰保护表头。</strong>若某个码长期不再出现，它的链会整体变老，
+表头槽位终将被覆写。覆写发生<strong>前一轮</strong>，扫描器检查即将被覆写的槽位：
+若它仍是其码的哈希表头，就把 <code>tuple_hash[code]</code> 清零，整条旧链被抛弃。
+没有这一步，哈希表会指向已被别的元组占用的槽位，回溯读出张冠李戴的位置。</li>
+</ul>
+
+<figure class="fig">
+<svg viewBox="0 0 900 200" role="img" aria-label="插入与惰性淘汰的四步时序">
+<defs>
+<marker id="ag" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#9aa5a1"/></marker>
+</defs>
+
+<g>
+<rect x="10" y="26" width="210" height="146" rx="10" fill="#ffffff" stroke="#0d6b63"/>
+<text x="24" y="50" font-size="11.5" font-weight="700" fill="#0d6b63">① 写当前元组到槽 w</text>
+<text x="24" y="80" font-size="10" font-family="ui-monospace,Menlo,Consolas,monospace" fill="#3c4a47">history[w] ← {loc,prev,code}</text>
+<text x="24" y="102" font-size="10" font-family="ui-monospace,Menlo,Consolas,monospace" fill="#3c4a47">hash[code] ← w</text>
+<text x="24" y="124" font-size="10" fill="#3c4a47">旧表头写进 prev</text>
+<text x="24" y="146" font-size="10" fill="#3c4a47">新位置成为链头</text>
+</g>
+
+<line x1="220" y1="99" x2="228" y2="99" stroke="#9aa5a1" stroke-width="1.4" marker-end="url(#ag)"/>
+
+<g>
+<rect x="230" y="26" width="210" height="146" rx="10" fill="#fdf7ea" stroke="#8f5d10"/>
+<text x="244" y="50" font-size="11.5" font-weight="700" fill="#8f5d10">② 检查槽 n = w+1</text>
+<text x="244" y="80" font-size="10" fill="#3c4a47">n 下一轮才会被写</text>
+<text x="244" y="102" font-size="10" font-family="ui-monospace,Menlo,Consolas,monospace" fill="#3c4a47">hash[hist[n].code] == n ?</text>
+<text x="244" y="124" font-size="10" fill="#3c4a47">是 → 先把该哈希项清零</text>
+<text x="244" y="146" font-size="10" fill="#3c4a47">旧链整体作废</text>
+</g>
+
+<line x1="440" y1="99" x2="448" y2="99" stroke="#9aa5a1" stroke-width="1.4" marker-end="url(#ag)"/>
+
+<g>
+<rect x="450" y="26" width="210" height="146" rx="10" fill="#fbeae6" stroke="#9a3b2c"/>
+<text x="464" y="50" font-size="11.5" font-weight="700" fill="#9a3b2c">③ 下一轮覆写 n</text>
+<text x="464" y="80" font-size="10" font-family="ui-monospace,Menlo,Consolas,monospace" fill="#3c4a47">history[n] ← 新记录</text>
+<text x="464" y="102" font-size="10" fill="#3c4a47">旧内容此刻才真正消失</text>
+<text x="464" y="124" font-size="10" fill="#3c4a47">哈希已不指向它</text>
+<text x="464" y="146" font-size="10" fill="#3c4a47">回溯不会读到脏位置</text>
+</g>
+
+<line x1="660" y1="99" x2="668" y2="99" stroke="#9aa5a1" stroke-width="1.4" marker-end="url(#ag)"/>
+
+<g>
+<rect x="670" y="26" width="210" height="146" rx="10" fill="#ffffff" stroke="#d8dedb"/>
+<text x="684" y="50" font-size="11.5" font-weight="700" fill="#33403d">④ 回溯（4.5）</text>
+<text x="684" y="80" font-size="10" fill="#3c4a47">从新表头沿 prev 走</text>
+<text x="684" y="102" font-size="10" font-family="ui-monospace,Menlo,Consolas,monospace" fill="#3c4a47">d = 位置 − loc</text>
+<text x="684" y="124" font-size="10" fill="#3c4a47">只上报本频带的 d</text>
+<text x="684" y="146" font-size="10" fill="#3c4a47">超界立即摘链</text>
+</g>
+</svg>
+<figcaption><b>图 3-2　一次插入的四步，以及淘汰检查为什么提前一轮。</b>
+① 本轮把当前元组写进槽 <code>w</code> 并让它成为表头；② 顺手检查槽 <code>n = w+1</code> 里的<strong>旧</strong>条目——
+它下一轮才会被覆写，若它仍是某个码的哈希表头，就先把这个哈希项清零；③ 下一轮 <code>n</code> 真的被覆写，
+此时已没有任何哈希指针指向它；④ 新表头进入回溯。
+省掉 ② 的后果：回溯顺着 <code>prev</code> 会读到别的元组后来写进同一槽位的 position，凭空造出候选。</figcaption>
+</figure>
+
+<h3>3.4 环形历史链到底存的是什么</h3>
+
+<p><strong>一句话：存的不是元组本身，而是"出现记录"。</strong>对每种元组长度 k，只要位置 p 处出现一个
+可用的 k-元组，就往该 k 的环里写一条记录——「码为 c 的元组，曾在位置 p 结束」。
+一条记录就是 3 个 <code>i32</code>，没有别的：</p>
+
+<table>
+<tr><th>字段</th><th>存的是什么</th><th>谁读它、拿来干什么</th></tr>
+<tr><td><code>location</code></td><td>这次出现的<strong>结束位置</strong> p（不是起点，也不是槽号）</td>
+<td>回溯时算距离 <code>d = 当前位置 − location</code>；也是判断"这条记录有多老"的唯一依据</td></tr>
+<tr><td><code>previous</code></td><td>同码<strong>上一次更早</strong>出现所在的<strong>槽号</strong>；0 表示没有更早的了</td>
+<td>把同码历史串成单链；插入时把新记录挂到旧表头前面，O(1)</td></tr>
+<tr><td><code>code</code></td><td>这条记录自己的<strong>元组码</strong>（k 位 4 进制数）</td>
+<td>槽要被复用时判断"我是不是某个码的表头"（<code>tuple_hash[code] == 本槽号</code>）——惰性淘汰靠它；
+也说明了链只连接<strong>同码</strong>节点</td></tr>
+</table>
+
+<p>所以环里既没有碱基串，也没有"这个位置属于哪个重复"。碱基串不必存——码就是它，
+真要碱基直接从序列读 <code>[p−k+1, p]</code>；周期、比对分数也不在这里，那是
+<code>distance[d]</code> 与 <code>AlignPair</code> 的层次（2.3 已把三样"距离"分开）。</p>
+
+<h4>槽号 ≠ 位置 ≠ 码</h4>
+<p>槽号只是"第几个写进来的"，与位置无关：图 3-1 里槽 1 存的是 p=4 的记录，槽 5 存的是 p=8 的。
+同一种 k 的<strong>所有码共用同一个环</strong>——4-元组的 256 种码全挤在 61 个槽里；
+同一个码可以有多条记录（多次出现），不同码的记录在物理上相邻存放却互不相连，
+链只沿 <code>previous</code> 走，所以链表在数组里跨越回绕点也毫无问题，物理相邻没有语义。</p>
+
+<p>PM=80 时每个位置最多写 <strong>3 条</strong>记录（4/5/7-元组各一条，前提是各自已凑够长度），
+它们进的是 3 个<strong>互不相通</strong>的环和 3 张互不相通的哈希表。</p>
+
+<h4>链 = 这个码最近的若干次出现</h4>
+<p>哈希表 <code>tuple_hash[k][code]</code> 只回答一件事：这个码<strong>最新</strong>一次出现在哪个槽（表头）。
+顺着 <code>previous</code> 走，就是这个码从新到旧的出现序列；走到 0、或距离超过该频带上界就停（4.5）。
+以图 3-1 的 134 链为例：表头槽 5（loc 8）→ prev 指向槽 2（loc 5），立刻得到 <code>d = 8 − 5 = 3</code>；
+槽 2 的 prev 是 0，链到此为止。一次回溯读到的，就是这些"能减出候选距离的旧位置"。</p>
+
+<h4>链的正确读法：四条容易误解的地方</h4>
+
+<table>
+<tr><th>码</th><th>表头（哈希指向）</th><th>沿 <code>previous</code> 走</th><th>该码的出现位置（元组结束处，新→旧）</th><th>回溯得到</th></tr>
+<tr><td>97</td><td>槽 4</td><td>4 → 1 → 0</td><td>7, 4</td><td>d = 3</td></tr>
+<tr><td>134</td><td>槽 5</td><td>5 → 2 → 0</td><td>8, 5</td><td>d = 3</td></tr>
+<tr><td>24</td><td>槽 3</td><td>3 → 0</td><td>6</td><td>只有一条，无候选</td></tr>
+</table>
+
+<ul>
+<li><strong>链是视图，不是容器。</strong>源码里并不存在"每个码一条链"的对象：只有 61 个共享槽，
+加上每槽一个 <code>previous</code>。某条链是顺着指针走出来的<strong>临时结果</strong>，
+多个码的链在同一个数组里交错存放，物理相邻没有语义。</li>
+<li><strong>单向。</strong>指针只指向<strong>更旧</strong>的一次出现，没有反向指针，也没有"下一条更新的记录"可查；
+要按时间正序输出，必须先收集再反转。</li>
+<li><strong>不是全历史。</strong>链只覆盖"仍在环里、且尚未被距离截断"的那一段；更早的节点已经被摘链
+（<code>previous←0</code>）或被覆写。所以它是"最近若干次出现"的窗口，不是这个码的完整足迹。</li>
+<li><strong>每条链只属于一个 <code>(k, code)</code> 组合。</strong>三张哈希表、三个环互不相通：
+数值同为 97 的 4-元组码与 5-元组码，是两条毫无关系的链（示例一 p=7 那行就同时出现了这两个 97）。</li>
+<li><strong>深度由"使用"保证，不由"存放"保证。</strong>回溯走到第一个 <code>d &gt; D_k</code> 的节点时，
+就把它连同更旧的全部摘掉，所以<strong>任何产生过候选的节点都满足 <code>d ≤ D_k</code></strong>
+（判据是严格大于，<code>d = D_k</code> 仍算合格）。但"暂时存在链里"不等于"已超距就会被立刻清掉"：
+若这个码此后一直不出现，就没有人去走这条链，链里会暂时留着按当前位置看已超距的节点——
+它们不产生任何候选，等这个码下次出现时被一次性截断（只读一次就丢）。
+另一条硬上限是槽的寿命：<code>2(D+1)+1</code> 轮后必被覆写，届时表头若还指着它会先被清零（3.3）。
+上限只由 k 决定（29 / 159 / 2000），与码、与序列都无关。</li>
+</ul>
+
+<p>槽位是按写入顺序分配的：在游标走过的一圈之内，<strong>槽号越大越新</strong>；越过回绕点后顺序折回，
+槽 1 又比最后一个槽新。正因如此，"覆写游标前方那一格"永远等于"丢弃当前最老的那条记录"——
+环天然就是一个<strong>最近 <code>2(D+1)+1</code> 次出现</strong>的滑动窗口，而不是"按位置索引"的数组。</p>
+
+<h4>一条记录的一生</h4>
+
+<table>
+<tr><th>阶段</th><th>触发条件</th><th>槽与哈希的变化</th></tr>
+<tr><td>① 写入</td><td>位置 p 的 k-元组可用</td>
+<td>占用游标所指的槽，写入 <code>loc / prev / code</code>；<code>tuple_hash[code]</code> 改指本槽；本槽成为表头</td></tr>
+<tr><td>② 被走</td><td>同码后来又出现</td>
+<td>每次回溯都会经过它并算出 d；某次距离超界时会把它摘出链（<code>previous ← 0</code>）</td></tr>
+<tr><td>③ 变成死记录</td><td>被摘链之后，或它所在的整条链随表头一起被废弃</td>
+<td>三个数还留在槽里，但已经没有任何链能走到它——只是占着位置等覆写</td></tr>
+<tr><td>④ 被覆写</td><td>游标转一圈回来（隔 <code>2(D+1)+1</code> 轮）</td>
+<td>若它此刻仍是某个码的表头，先 <code>tuple_hash[该码] ← 0</code>（3.3），随后整槽被新记录覆盖</td></tr>
+</table>
+
+<h4>容量与内存账（PM=80，MaxPeriod=2000）</h4>
+
+<table>
+<tr><th>元组长度 k</th><th>D</th><th>分配长度 <code>2(D+1)+2</code></th><th>可用槽 <code>1…2(D+1)+1</code></th><th>记录占用（12 B/条）</th></tr>
+<tr><td>4</td><td>29</td><td>62</td><td>61</td><td>744 B</td></tr>
+<tr><td>5</td><td>159</td><td>322</td><td>321</td><td>3,864 B</td></tr>
+<tr><td>7</td><td>2000</td><td>4004</td><td>4003</td><td>48,048 B</td></tr>
+<tr><td>合计</td><td>—</td><td>4,388</td><td>4,385</td><td>≈ 51.4 KiB</td></tr>
+</table>
+
+<p>再加上三张哈希表 <code>4⁴ + 4⁵ + 4⁷ = 17,664</code> 个 <code>i32</code>（≈ 69 KiB），
+整套扫描结构约 <strong>120 KiB，与序列长度无关</strong>：环的容量由"要保留多远"（D）决定，不由序列多长决定。
+这也回答了容量为什么取 <code>2(D+1)+2</code> 而不是 <code>D+1</code>：链只会引用最近 D 内的记录，
+留一倍余量就能保证这些槽在被引用期间不会被覆写（3.3 第一条），代价只是一个常数倍内存。</p>
+
+<h4>为什么用"共享槽位"，而不是按码建表</h4>
+
+<p>要回答"槽位解决什么问题"，先看三条硬约束：</p>
+
+<ol>
+<li><strong>必须存历史位置</strong>：候选距离只能由 <code>d = p − loc</code> 算出来，没有历史就没有候选。</li>
+<li><strong>历史只需保留 D 这么远</strong>：距离超过频带上界的旧记录再也不可能产生候选（4.5 会把它们摘掉）。</li>
+<li><strong>每个码会出现多少次，事先完全不知道</strong>：poly-A 里同一个码每个位置都出现；随机序列里多数码只出现一两次。</li>
+</ol>
+
+<p>三条合起来限定了结构：必须按"<strong>窗口内的总出现次数</strong>"定额，并让<strong>所有码共享</strong>这份额度——
+每个位置对每种 k 最多贡献 1 条记录，所以窗口里最多 <code>D+1</code> 条，容量只与 D 有关，
+与"有多少种码""序列有多长"都无关。槽位就是这个池子的<strong>复用单元</strong>：
+一条记录占一个槽，游标推进时用新记录覆盖最老的槽。</p>
+
+<p>几种替代方案为什么不行：</p>
+
+<table>
+<tr><th>方案</th><th>代价（PM=80，MaxPeriod=2000）</th><th>问题</th></tr>
+<tr><td>每个码一条定长历史（<code>4ᵏ × (D+1)</code> 条）</td><td>k=7：16384 × 2001 × 12 B ≈ <strong>375 MiB</strong></td>
+<td>绝大多数码一辈子只出现一次，等于为最坏情况付钱</td></tr>
+<tr><td>每码一个动态 <code>Vec</code>/<code>VecDeque</code></td><td>活着的最多 D+1 条，但没人回收"不再出现的码"</td>
+<td>内存随序列长度增长；每个新码一次分配，节点分散、缓存不友好</td></tr>
+<tr><td>一条全局 FIFO（位置, 码），每次扫最近 D 条</td><td>内存 O(D)</td>
+<td>每步要扫 ~D 条（k=7 时 2000 条），丢掉了"只看同码"的剪枝</td></tr>
+<tr><td><strong>共享槽位 + 槽号链</strong>（本实现）</td><td>4,388 槽 × 12 B ≈ <strong>51 KiB</strong></td>
+<td>需要额外的惰性淘汰来维护哈希表头（3.3）</td></tr>
+</table>
+
+<p>于是槽位同时买到四件事：<strong>插入 O(1)</strong>（挂到表头）、<strong>摘尾 O(1)</strong>（只改一个
+<code>previous</code>）、<strong>过期零成本</strong>（覆写顺序恰好就是年龄顺序，不需要定时清理或扫描）、
+<strong>索引稳定</strong>（<code>previous</code> 与哈希表都只存 32 位槽号，没有指针、扫描期间没有动态分配，
+同一 k 的记录还连续存放）。代价是必须在覆写前做一次表头检查——这就是 3.3 那条"惰性淘汰"。</p>
+
+<h4>为什么链不做成双向（哈希存头尾、记录存 prev/next）</h4>
+
+<p>既然回溯会"从老的这一头截断"，一个自然的想法是：让 <code>tuple_hash</code> 直接存头尾两个槽号、
+让记录同时带 <code>prev</code> 和 <code>next</code>，这样截断不就 O(1) 了吗？答案是不划算，
+因为<strong>这里没有任何操作需要随机访问链尾</strong>：</p>
+
+<table>
+<tr><th>操作</th><th>需要什么</th><th>单向 + 头指针够不够</th></tr>
+<tr><td>插入新出现</td><td>改一个指针、更新哈希头</td><td>够（1 次写）</td></tr>
+<tr><td>产生候选</td><td>从新到旧<strong>逐条</strong>访问，每条算一个 d</td><td>够——方向本来就只有一个</td></tr>
+<tr><td>截断超距的部分</td><td>走到第一个 <code>d &gt; D_k</code> 的节点</td><td>够，而且这个"走"是产生候选的必经之路，截断只是副产品</td></tr>
+<tr><td>判断整条链是否作废</td><td>看哈希头是否正被覆写</td><td>够（一次比较）</td></tr>
+</table>
+
+<p>换句话说：截断并不需要"先知道尾在哪"，因为链尾只有<strong>走到</strong>才需要被处理，
+而走到那里本来就是为了枚举候选。存尾指针唯一能省的，是一次本来就必须做的遍历。</p>
+
+<p>反过来，双向要付的账不小：</p>
+
+<table>
+<tr><th>项目</th><th>现在（单向）</th><th>改成双向 + 头尾</th></tr>
+<tr><td>每条记录</td><td>3 × i32 = 12 B</td><td>4 × i32 = 16 B（+33%）</td></tr>
+<tr><td>哈希侧</td><td>每码 1 个 i32（头）</td><td>每码 2 个 i32（头 + 尾），k=7 多 64 KiB</td></tr>
+<tr><td>总计（PM=80）</td><td>≈ 120 KiB</td><td>≈ 207 KiB（+71%）</td></tr>
+<tr><td>插入 / 截断</td><td>各写 1 个指针</td><td>要同时维护两侧，漏改一侧就留下悬空 <code>next</code></td></tr>
+<tr><td>覆写一个槽</td><td>只需问"它是不是表头"</td><td>要区分头 / 尾 / 中间三种情形分别接线</td></tr>
+<tr><td>容错性</td><td>脱链节点无人可达，脏数据天然无害</td><td>残留的 <code>next</code> 会把正向遍历带进脏槽</td></tr>
+</table>
+
+<p>对比一下真正需要双端的结构——<code>process_candidate</code> 里按距离记账的
+<code>DistanceList</code>：它要从<strong>前端</strong>按位置淘汰过期条目，又要在<strong>尾端</strong>
+追加新条目、把相邻命中合并（<code>add_tuple_match_to_distance_entry()</code>），所以它确实带了
+<code>low_index</code> / <code>high_index</code> 一对游标（字段在 <code>state.rs</code> 的
+<code>DistanceList</code> 里，用法在 <code>scan.rs</code> 4.4 对应的插入函数里）。
+tuple 链没有"从前端删除"或"正向遍历"的需求，所以只需要一个头指针。</p>
+
+<div class="key">
+<span class="lbl">一句话对照</span>
+<p>哈希表存<strong>索引</strong>（码 → 最近一次出现的槽号）；环形历史链存<strong>事实</strong>
+（某次出现的位置、同码上一条记录在哪、自己的码）。候选距离不是存出来的，是回溯时减出来的。
+槽位本身的存在理由则是：<strong>在"历史必须留"和"不能无限留"之间，用固定容量的复用单元做截断，
+并且让所有码共用同一份额度。</strong></p>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="loop"><span class="badge">04</span>主循环逐步分解</h2>
+
+<pre><code>position ← 0
+while position ≤ length:
+    ① 坏字符跳转      —— 跳过非 ACGT，找到下一段可用的干净碱基
+    ② 构造滚动码      —— 完整重建，或 (旧码 mod 4⁶)·4 + 新碱基
+    ③ 派生小元组码    —— 大码 mod 4^k 得各较短元组的码
+    ④ 逐频带处理      —— 插入哈希/历史，惰性淘汰，回溯链表
+    position += 1</code></pre>
+
+<h3>4.1 坏字符跳转：元组绝不跨越非 ACGT 字符</h3>
+<p>当 <code>position == 0</code> 或 <code>sequence[position]</code> 不是 ACGT 时，
+记 <code>bad_char_index ← position</code>，然后向后推进，直到凑满连续
+<code>min_tuple_size</code>（PM=80 时为 4）个 ACGT 字符；中途每遇一个坏字符就把
+<code>bad_char_index</code> 更新为它、清零已凑长度。若直到序列末尾都凑不满，
+<code>break</code>，整个扫描结束。跳转完成后，position 停在
+<code>bad_char_index + min_tuple_size</code>，也就是"第一个可用元组的结束位置"。</p>
+
+<h3>4.2 滚动编码：何时重建、何时滚动</h3>
+<p>设 <code>bad = bad_char_index</code>，最大元组长度 <code>s_max</code>（PM=80 时为 7）。</p>
+<ul>
+<li><strong>重建模式</strong>（<code>build_entire_code</code> 为真：跳转分支刚触发过——含 <code>position == 0</code>，
+或 <code>position − bad &lt; s_max</code>）：
+从 <code>bad+1</code> 起逐字符重算整段码。位置 p 的码覆盖
+<code>[bad+1, p]</code>。一旦 <code>position − bad ≥ s_max</code>，切换到滚动模式。</li>
+<li><strong>滚动模式</strong>：<code>code ← (code mod 4^(s_max−1))·4 + 编码(新碱基)</code>。
+对 s_max=7 即先丢掉最高一位（mod 4⁶=4096），左移一位（×4），放入新碱基。
+每步 O(1)。</li>
+</ul>
+
+<div class="key">
+<span class="lbl">精确含义</span>
+<p>"重建 vs 滚动"的切换条件是 <code>position − bad ≥ s_max</code>，在重建分支
+<strong>计算出码之后</strong>判定。因此坏字符之后的第 s_max 个位置仍走重建，
+从第 s_max+1 个位置起才滚动。例如坏字符在位置 4、s_max=7：位置 5–11 全部重建，
+位置 12 起滚动。</p>
+</div>
+
+<h3>4.3 派生各元组长度的码：取模即取后缀</h3>
+<p>滚动码本身就是最长元组的码（PM=80 与 PM=75 的最长元组都是 7，故滚动码恒定承载 7 位；
+这里 <code>n</code> 是元组种数，PM=80 时 n=3）。较短元组的码由取模直接得到：</p>
+<pre><code>tuple_code[n]   ← rolling_code                    // 7-元组：全部 7 位
+tuple_code[n−1] ← rolling_code mod 4^5            // 5-元组：低 5 位 = 7-元组的后缀
+tuple_code[n−2] ← rolling_code mod 4^4            // 4-元组：低 4 位</code></pre>
+<p>因为 k-元组码只含最低 k 个 4 进制位，<code>mod 4^k</code> 恰好截取
+"以 p 结尾、长度为 k"的后缀元组——一次滚动，全部长度共享。</p>
+
+<h3>4.4 插入与惰性淘汰</h3>
+<p>对每个满足可用条件 <code>position − bad ≥ size[k]</code> 的元组长度 k（<code>size[k]</code> 即
+<code>tuple_size[k]</code>；长度按升序排列，条件一旦不满足即停止，不是跳过继续）：令
+<code>w ← next_free[k]</code>（本轮写入槽），<code>n ← w+1</code>（回绕则置 1）。</p>
+<ol>
+<li><strong>淘汰检查</strong>：若 <code>history[n].location ≠ 0</code> 且
+<code>tuple_hash[k][history[n].code] == n</code>，则把该哈希表项清零。
+n 正是下一轮的写入槽，所以效果是"旧条目在被覆写的前一轮解除表头登记"。</li>
+<li><strong>登记新出现</strong>：<code>tuple_hash[k][code] ← w</code>；
+<code>history[w] ← {location: position, previous: 旧表头, code}</code>；
+<code>next_free[k] ← n</code>。新位置成为链的新表头。</li>
+</ol>
+
+<h3>4.5 链回溯：产生候选并截断</h3>
+<p>沿新表头的 <code>previous</code> 指针从新到旧遍历，对每个旧出现位置
+<code>loc</code> 计算 <code>d ← position − loc</code>：</p>
+<ul>
+<li><code>d &gt; tuple_max_distance[k]</code>：把<strong>更靠近新表头一侧</strong>那个节点的
+<code>previous</code> 置 0（第一次迭代时它就是刚插入的新表头），当前节点及其更旧的全部节点
+因此整体脱离链表，遍历终止。该距离不属于本频带。</li>
+<li>否则若 <code>d &gt; tuple_max_distance[k−1]</code>：调用
+<strong><code>process_candidate(position, d, size[k])</code></strong>——
+d 落在本频带内，成为一次正式的周期候选。</li>
+<li>否则（d 落在更小频带的区间）：静默跳过。同一对位置由更短的元组负责（见示例三）。</li>
+</ul>
+
+<div class="key">
+<span class="lbl">频带判据</span>
+<p>数对 <code>(p, d)</code> 在且仅在满足
+<code>tuple_max_distance[k−1] &lt; d ≤ tuple_max_distance[k]</code> 的那个 k 上触发
+<code>process_candidate</code>（前提是 p 与 p−d 都已登记为元组结束位置）。
+PM=80 时：d ∈ [1,29] 由 4-元组触发，[30,159] 由 5-元组触发，
+[160, MaxPeriod] 由 7-元组触发。</p>
+</div>
+
+<p>注意回溯访问的是链上<strong>每一个</strong>仍在频带内的旧出现，不只是最近一次——同码多次出现
+会逐一生成候选。重复落到同一距离时由 <code>process_candidate</code> 消化：它先用
+<code>add_tuple_match_to_distance_entry()</code> 把这次匹配累加到该距离名下的
+<code>distance[d].match_count</code>（计分规则见示例一），再看
+<code>distance_seen[d].end ≥ position</code>——成立就直接返回（该距离上一次求解覆盖到的行号
+已包含当前位置，不必重算），不成立才继续做链接、判据与动态规划。</p>
+
+<!-- ============================================================ -->
+<h2 id="ex1"><span class="badge">05</span>示例一：ACGACGACGTT 的完整扫描</h2>
+
+<p>取 PM=80（元组 4/5/7，频带上界 29/159/MaxPeriod），序列（0 起始）：</p>
+
+<div class="seq">位置  0  1  2  3  4  5  6  7  8  9 10
+碱基  A  C  G  A  C  G  A  C  G  T  T</div>
+
+<p><strong>启动。</strong>position=0 触发跳转分支：向前数 ACGT，
+在位置 4 凑满 4 个（字符 1–4 为 C,G,A,C），于是 <code>bad_char_index=0</code>、
+position 一步跳到 4。首个可处理元组是"结束于位置 4 的 4-元组"。</p>
+
+<p>逐步执行（编码 A=0,C=1,G=2,T=3）。动作列里"登记"＝把该码写入哈希表并挂到链头，
+"命中"＝查表发现该码已有登记（随后回溯），"@4"＝该记录的位置是 4；表里的"—"表示该长度的元组
+还没攒够碱基（<code>p − bad</code> 小于该长度），本轮根本不处理，括号里给出算式：</p>
+
+<div class="tbl-scroll">
+<table>
+<tr><th>p</th><th>模式</th><th>4-元组（码）</th><th>5-元组（码）</th><th>7-元组（码）</th><th>动作</th></tr>
+<tr><td>4</td><td>重建 (1..4)</td><td>CGAC (97)</td><td class="new">— (4−0&lt;5)</td><td class="new">— (4−0&lt;7)</td><td class="new">首次登记 97@4</td></tr>
+<tr><td>5</td><td>重建 (1..5)</td><td>GACG (134)</td><td>CGACG (390)</td><td class="new">— (5−0&lt;7)</td><td class="new">首次登记 134@5、390@5</td></tr>
+<tr><td>6</td><td>重建 (1..6)</td><td>ACGA (24)</td><td>GACGA (536)</td><td class="new">— (6−0&lt;7)</td><td class="new">首次登记 24@6、536@6</td></tr>
+<tr><td>7</td><td>重建 (1..7)</td><td>CGAC (97)</td><td>ACGAC (97)</td><td>CGACGAC (6241)</td><td><span class="hit">命中</span> 97@4 → d=3 → <code>process_candidate(7, 3, 4)</code>；5-元组也恰为 97（与 4-元组同值纯属巧合，两张表独立）、7-元组 6241 首次登记；此后切换滚动模式</td></tr>
+<tr><td>8</td><td>滚动</td><td>GACG (134)</td><td>CGACG (390)</td><td>GACGACG (8582)</td><td><span class="hit">命中</span> 134@5 → d=3 → <code>process_candidate(8, 3, 4)</code>；<span class="skip">5-元组也见 390@5, d=3，但 3≤29 不在 5-元组频带 → 跳过</span>；7-元组 8582 首次登记</td></tr>
+<tr><td>9</td><td>滚动</td><td>ACGT (27)</td><td>GACGT (539)</td><td>ACGACGT (1563)</td><td class="new">全部首次登记</td></tr>
+<tr><td>10</td><td>滚动</td><td>CGTT (111)</td><td>ACGTT (111)</td><td>CGACGTT (6255)</td><td class="new">全部首次登记</td></tr>
+</table>
+</div>
+
+<p>逐点核对几个数字：</p>
+<ul>
+<li><strong>p=7 的滚动码</strong>：重建 1..7 得 "CGACGAC" = 6241。
+4-元组码 = 6241 mod 256 = 97 = "CGAC"（位置 4..7），恰与位置 4 登记的 97 相同 → d=3。
+这次匹配直接支持 d=3；按第 1 节的限定，它只是局部证据，结论仍要靠后续累积。</li>
+<li><strong>p=8 的滚动步</strong>：6241 mod 4096 = 2145，2145·4+2(G) = 8582 = "GACGACG"（位置 2..8）。</li>
+<li><strong>p=10 的巧合</strong>：4-元组 "CGTT" 与 5-元组 "ACGTT" 的码同为 111
+（111 &lt; 4⁴=256），但二者分属 256 与 1024 两张不同的哈希表，互不干扰。</li>
+<li><strong>p=6 为何没有命中</strong>："ACGA"（0..3）本身是完整的 4-元组，但它结束于位置 3；
+起点跳转把 position 直接推到 4，位置 <code>0 … min_tuple_size−1 = 0…3</code>
+<strong>从不作为元组结束位置被处理</strong>，所以它与位置 6 的 "ACGA"（同码 24）本可给出的
+d=3 证据被丢掉了。这是设计取舍：只损失序列最前端那几对位置的配对，后续位置仍会给出同一 d 的
+配对（p=7、8 即如此），故不影响对该周期的整体判定。</li>
+</ul>
+
+<p><strong>结果。</strong>d=3 在位置 7、8 各上报一次匹配。这个距离的计数不是简单的匹配次数：
+<code>add_tuple_match_to_distance_entry()</code> 给一条新记录加 <code>tuple_size</code>（本例 4 分），
+与上一条目<strong>相邻</strong>（位置差 1）时只加 1 分并把该记录延长。于是 p=8 的匹配并入 p=7 那条记录，
+<code>match_count = 4+1 = 5</code>，正好等于 PM=80 下 d=3 的阈值 <code>SUMDATA80[3]=5</code>
+（<code>SUMDATA</code>/<code>WAITDATA</code> 是编译进程序的阈值表，下标就是距离，后缀 80/75 对应 PM）；
+等待时间判据（要求该距离的<strong>第一次</strong>匹配出现得足够早：首次匹配位置 ≤
+<code>max(0, 当前位置 − max(d,20)) + waiting_time_criteria</code>，防止一条弱证据在后半段才姗姗来迟）
+也比较 <code>7 ≤ max(0, 8−20) + WAITDATA80[3] = 18</code> 成立。两道判据都过，d=3 就在 p=8 真正进入了
+wraparound 动态规划（把序列首尾视为环绕、按周期 d 逐行推进的带状动态规划，细节见候选教程）。</p>
+
+<p>但"被提交求解"不等于"被报告"：整条序列只有 11 bp（碱基），按匹配得分 <code>match=2</code> 计
+即便全部对上也只有 22 分，远低于默认的最小比对分数 <code>minscore=50</code>，
+因此没有任何输出；把同一序列延长为 <code>ACG</code>×10（30 bp）后，程序报出
+<code>1 30 3 10.0 3 100 0 60</code>——周期 3、10 份拷贝、100% 匹配、得分 60。
+候选门槛（元组证据够不够）与输出门槛（分数、拷贝数）是两道独立的闸门
+（后续步骤见 <a href="candidate-pipeline-tutorial.html">候选产生教程</a>）。</p>
+
+<!-- ============================================================ -->
+<h2 id="ex2"><span class="badge">06</span>示例二：非 ACGT 字符与重建/滚动的切换</h2>
+
+<p>例中的 <code>N</code> 是测序里常见的未知碱基；它和任何非 ACGT 字符一样会切断元组（本文统称"坏字符"）。</p>
+
+<div class="seq">位置  0  1  2  3  4  5  6  7  8  9 10 11 12
+碱基  A  C  G  T  N  A  C  G  T  A  C  G  T
+                  ↑ 坏字符（N），bad=4</div>
+
+<p><strong>位置 0 一步跳到 8。</strong>跳转分支从 0 向后数：1–3 凑了 3 个，位置 4 的
+<code class="seq" style="display:inline;padding:0 4px">N</code> 清零并更新 bad=4，
+位置 5–8 重新凑满 4 个，跳转结束，position=8。位置 0–7 之间没有任何元组被处理。</p>
+
+<div class="tbl-scroll">
+<table>
+<tr><th>p</th><th>码的来源</th><th>滚动/重建</th><th>4-元组（码）</th><th>5-元组（码）</th><th>7-元组（码）</th><th>动作</th></tr>
+<tr><td>8</td><td>重建 5..8 "ACGT"</td><td>重建（8−4=4&lt;7）</td><td>ACGT (27)</td><td class="new">—</td><td class="new">—</td><td class="new">登记 27@8</td></tr>
+<tr><td>9</td><td>重建 5..9 "ACGTA"</td><td>重建（5&lt;7）</td><td>CGTA (108)</td><td>ACGTA (108)</td><td class="new">—</td><td class="new">首次登记</td></tr>
+<tr><td>10</td><td>重建 5..10 "ACGTAC"</td><td>重建（6&lt;7）</td><td>GTAC (177)</td><td>CGTAC (433)</td><td class="new">—</td><td class="new">首次登记</td></tr>
+<tr><td>11</td><td>重建 5..11 "ACGTACG"</td><td>重建后切换（7≥7）</td><td>TACG (198)</td><td>GTACG (710)</td><td>ACGTACG (1734)</td><td class="new">首次登记</td></tr>
+<tr><td>12</td><td>(1734 mod 4096)·4+3</td><td>滚动</td><td>ACGT (27)</td><td>TACGT (795)</td><td>CGTACGT (6939)</td><td><span class="hit">命中</span> 27@8 → d=4 → <code>process_candidate(12, 4, 4)</code></td></tr>
+</table>
+</div>
+
+<p>要点：</p>
+<ul>
+<li><strong>没有任何元组跨越 N</strong>。位置 4 的 N 让跳转把 position 直接推到 8，
+位置 1–7 从未作为元组结束位置登记，所以 5–8 与 9–12 只能彼此给出一次 d=4 的匹配（一个候选），
+而它们与位置 0–3 之间连已登记的元组对都不存在——不是"被过滤"，是压根没登记。
+<strong>但不要把这条推广成"跨 N 的匹配一定不存在"</strong>：<code>tuple_hash</code>/<code>history</code>
+不因坏字符清空，若 N 两侧都已登记过相同元组，它们相距跨过 N 时照样会匹配；
+不可跨越的只是元组自身。</li>
+<li><strong>重建持续到第 7 个干净位置</strong>：p=9、10、11 都是整段重算，
+p=12 才第一次滚动（(1734 mod 4096)·4+3 = 6939）。</li>
+<li><strong>两段相同的 "ACGT" 共用同一个码 27</strong>：p=8 登记 27@8，
+p=12 查表命中，d=4 ≤ 29 且 &gt; tuple_max_distance[0]=0（对 k=1 恒真），进入 4-元组频带。</li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="ex3"><span class="badge">07</span>示例三：一个距离只在一个频带触发</h2>
+
+<p>设某个 30 bp 单元串成重复，并取一对相距 30 的位置，使以 <code>p−30</code> 与 <code>p</code>
+结束的 7-元组相同（真实重复带有错配，但一致的位置大量存在）。由后缀关系，这对位置上的
+5-元组、4-元组也各自相同，于是三条频带的链都"看见"了它，但只有一条会触发：</p>
+
+<table>
+<tr><th>元组 k</th><th>链回溯看到的 d</th><th>关键比较</th><th>动作</th></tr>
+<tr><td>4</td><td>30</td><td>30 &gt; 本链上界 29：超出这条链能保留的范围</td><td>摘链（较新一侧节点 <code>previous←0</code>），不处理</td></tr>
+<tr><td>5</td><td>30</td><td>29 &lt; 30 ≤ 159：正落在本频带</td><td class="hit"><code>process_candidate(p, 30, 5)</code></td></tr>
+<tr><td>7</td><td>30</td><td>30 ≤ 159：不满足 d &gt; 上一频带上界，低于本频带下界</td><td>静默跳过（已由 5-元组频带处理）</td></tr>
+</table>
+
+<p>反过来，周期 3 的重复（示例一）中，(p, 3) 这对位置同样会出现在 5-元组链里
+（3 周期性使相距 3 的 5-元组也相同），但 3 ≤ 29 被 4.5 的第二个分支跳过——因为它已由
+4-元组频带处理。两个方向合起来得到分派的完备与无冗：</p>
+
+<div class="key">
+<span class="lbl">正确性论证</span>
+<p><strong>无冗余</strong>：以 PM=80 为例，频带区间 (0,29] ∪ (29,159] ∪ (159,MaxPeriod]
+两两不交，每个 d 至多属于一个 k；同一位置只有一条 k-元组码，回溯不会对同一 d 重复触发。
+<strong>不遗漏</strong>：若 k-元组在距离 d 处相等，则其 (k−1)-后缀元组也相等（取模截取的正是后缀），
+同一对位置在更短元组的链里同样成立；而包含 d 的那个频带，其 d ≤ 上界，所以配对不会被该频带的
+距离截断摘掉，表头又是当前位置、不会被淘汰。两者合取：只要两处都已被登记，
+<code>(p, d)</code> 就恰好产生一次 <code>process_candidate</code>，且产生它的 k 是包含 d 的最小频带。</p>
+</div>
+
+<p class="note">成本结构：哈希插入与查表各 O(1)；一次回溯的代价等于该码在最近
+<code>tuple_max_distance[k]</code> 个位置内的出现次数——正常序列上是小常数，但低复杂度序列
+（如 poly-A，同一个码在每个位置都出现）会退化到 Θ(D)，最坏总代价 Θ(n·D)。
+所以不宜笼统称它为"线性扫描"：准确说法是"每个位置 × 每个元组长度 × 该码在最近 D 个位置内的出现次数"。
+全序列只扫一遍，各元组长度共享同一次滚动编码。</p>
+
+<!-- ============================================================ -->
+<h2 id="props"><span class="badge">08</span>精确性质清单</h2>
+
+<table>
+<tr><th>#</th><th>性质</th><th>依据</th></tr>
+<tr><td>1</td><td>元组以结束位置索引；位置 p 的 k-元组覆盖 [p−k+1, p]</td><td>滚动码按"左移进新碱基"构造</td></tr>
+<tr><td>2</td><td>首个被处理的位置是 <code>bad_char_index + min_tuple_size</code>（从坏字符后第一个碱基起凑满 min_tuple_size 个 ACGT 之处）；凑不满则扫描直接结束</td><td>4.1 跳转分支的计数与 <code>break</code></td></tr>
+<tr><td>3</td><td>元组自身绝不跨越非 ACGT 字符；但哈希表与历史链表不因坏字符清空，分处两侧的两个元组仍可给出跨过坏字符的匹配</td><td>码的重建始终从 bad+1 开始；<code>tuple_hash</code>/<code>history</code> 只在扫描开始时初始化</td></tr>
+<tr><td>4</td><td>坏字符后重建持续 s_max 个位置，第 s_max+1 个位置起滚动</td><td>切换判定在重建分支末尾</td></tr>
+<tr><td>5</td><td>短元组码 = 滚动码 mod 4^k，即长元组的后缀</td><td>4 进制低位截取</td></tr>
+<tr><td>6</td><td>两处都已被登记时，(p, d) 恰在唯一频带触发一次 process_candidate；未被登记的位置（序列头部、坏字符前后）不产生配对</td><td>频带互斥 + 后缀封闭（示例三、示例一 p=6）</td></tr>
+<tr><td>7</td><td>同一码的近期出现按从新到旧串成单链；表头即最近出现（更老者已被截断或淘汰）</td><td>插入时 previous 指向旧表头</td></tr>
+<tr><td>8</td><td>链上第一个距离超过频带上界的节点被摘链：较新一侧节点的 <code>previous</code> 置 0，更老节点一并脱离</td><td>4.5 回溯</td></tr>
+<tr><td>9</td><td>长期未复现的码，其表头在被环形覆写前一轮被惰性清零，旧链整体废弃</td><td>4.4 淘汰检查</td></tr>
+<tr><td>10</td><td>回溯读到的槽位内容总是有效记录：距离 ≤ D 的节点槽龄 ≤ D；触发截断的节点若间隔已达 <code>2(D+1)+1</code> 轮，早已作为表头被淘汰、不在链上</td><td>性质 8 + 环形长度 2(D+1)+2</td></tr>
+<tr><td>11</td><td><code>location == 0</code> 可安全作空闲标记（槽位 0 为哨兵，真实位置从 ≥3 起）</td><td>min_tuple_size ≥ 3</td></tr>
+</table>
+
+<div class="foot">
+源码：<code>src/scan.rs · scan_sequence()</code>（主循环）、<code>process_candidate()</code>（候选入口）、
+<code>init_criteria_tables()</code>（元组长度与频带）；<code>src/state.rs · HistoryEntry</code>。
+本文只覆盖"扫描 → 产生候选"这一级；候选如何经统计准则、wraparound 动态规划变成报告的重复，
+见 <a href="candidate-pipeline-tutorial.html">候选流水线教程</a> 与
+<a href="trf-algorithm-textbook.html">算法讲义</a>。
+</div>
+
+</div>
+</body>
+</html>
