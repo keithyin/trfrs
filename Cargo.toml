@@ -5,7 +5,13 @@ edition = "2021"
 description = "Tandem Repeats Finder: Rust port of the reference C implementation"
 license = "AGPL-3.0-or-later"
 repository = "https://github.com/keithyin/trfrs"
+documentation = "https://docs.rs/trfrs"
 readme = "README.md"
+keywords = ["bioinformatics", "dna", "tandem-repeats", "trf"]
+
+[lib]
+name = "trfrs"
+path = "src/lib.rs"
 
 [[bin]]
 name = "trfrs"

@@ -37,7 +37,7 @@ License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 
 use clap::Parser;
 
-use crate::print_banner;
+use crate::driver::print_banner;
 
 /// Defaults of the search parameters; the values are the customary human DNA
 /// set `2 5 7 80 10 50 2000`.

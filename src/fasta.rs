@@ -47,6 +47,42 @@ pub struct FastaSequence {
     pub sequence: Vec<u8>,
 }
 
+impl FastaSequence {
+    /// Builds a record from a bare sequence, without a FASTA header line.
+    ///
+    /// The characters are normalized exactly like [`load_sequence`] does: only
+    /// ASCII letters are kept (`A`-`Z`), lower case letters are converted to
+    /// upper case, and the remaining bytes (line breaks, whitespace, `-`, `.`,
+    /// digits, ...) are dropped.
+    pub fn from_bytes(name: &[u8], sequence: &[u8]) -> FastaSequence {
+        let mut composition = [0i32; 26];
+        let mut normalized = Vec::with_capacity(sequence.len());
+        for &byte in sequence {
+            let upper = byte.to_ascii_uppercase();
+            if upper.is_ascii_uppercase() {
+                composition[(upper - b'A') as usize] += 1;
+                normalized.push(upper);
+            }
+        }
+
+        let mut name = name.to_vec();
+        name.truncate(MAX_SEQ_NAME_LEN - 1);
+
+        let nucleotides = composition[base_index(b'A')]
+            + composition[base_index(b'C')]
+            + composition[base_index(b'G')]
+            + composition[base_index(b'T')];
+
+        FastaSequence {
+            length: normalized.len(),
+            composition,
+            nucleotides,
+            name,
+            sequence: normalized,
+        }
+    }
+}
+
 /// Error returned by [`load_sequence`].
 pub enum LoadError {
     /// The file did not start with `>`, or was empty.
