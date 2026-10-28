@@ -30,27 +30,38 @@ License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 //!
 //! `clap` (Derive API) provides the clustering, the abbreviations and the
 //! attached values; a small pre-pass spells single dash long options with
-//! `--` before the vector is handed to clap.  The eight positional
-//! parameters are kept as strings: validating them is the job of the caller,
-//! which reproduces the error messages of the reference program.
+//! `--` before the vector is handed to clap.  The file name is the only
+//! positional parameter; the seven search parameters are key-value options
+//! with defaults.  They are kept as strings: validating them is the job of
+//! the caller, which reproduces the error messages of the reference program.
 
 use clap::Parser;
 
 use crate::print_banner;
 
+/// Defaults of the search parameters; the values are the customary human DNA
+/// set `2 5 7 80 10 50 2000`.
+pub const DEFAULT_MATCH: &str = "2";
+pub const DEFAULT_MISMATCH: &str = "5";
+pub const DEFAULT_INDEL: &str = "7";
+pub const DEFAULT_PM: &str = "80";
+pub const DEFAULT_PI: &str = "10";
+pub const DEFAULT_MINSCORE: &str = "50";
+pub const DEFAULT_MAXPERIOD: &str = "2000";
+
 /// The `usage()` text of the reference program, `%s` being the program name.
-const USAGE_BODY: &str =
-    "\n\nPlease use: %s File Match Mismatch Delta PM PI Minscore MaxPeriod [options]\n\
+const USAGE_BODY: &str = "\n\nPlease use: %s File [options]\n\
 \nWhere: (all weights, penalties, and scores are positive)\
 \n  File = sequences input file\
-\n  Match  = matching weight\
-\n  Mismatch  = mismatching penalty\
-\n  Delta = indel penalty\
-\n  PM = match probability (whole number)\
-\n  PI = indel probability (whole number)\
-\n  Minscore = minimum alignment score to report\
-\n  MaxPeriod = maximum period size to report. Must be between 1 and 2000, inclusive\
 \n  [options] = one or more of the following:\
+\n        --match <n>       matching weight (default 2)\
+\n        --mismatch <n>    mismatching penalty (default 5)\
+\n        --indel <n>       indel penalty (default 7)\
+\n        --pm <n>          match probability (whole number, default 80)\
+\n        --pi <n>          indel probability (whole number, default 10)\
+\n        --minscore <n>    minimum alignment score to report (default 50)\
+\n        --maxperiod <n>   maximum period size to report. Must be between 1 and 2000,\
+\n                          inclusive (default 2000)\
 \n        -m        masked sequence file\
 \n        -f        flanking sequence\
 \n        -d        data file\
@@ -102,6 +113,13 @@ const LONG_OPTIONS: &[(&str, &str)] = &[
     ("Ngs", "ngs"),
     ("NGS", "ngs"),
     ("maxlength", "maxlength"),
+    ("match", "match"),
+    ("mismatch", "mismatch"),
+    ("indel", "indel"),
+    ("pm", "pm"),
+    ("pi", "pi"),
+    ("minscore", "minscore"),
+    ("maxperiod", "maxperiod"),
 ];
 
 /// `getopt_long_only()` lookup: an exact match wins, otherwise a unique
@@ -142,9 +160,12 @@ fn rewrite_long_option(arg: &str) -> Option<String> {
 
 /// The `clap` definition of the command line (Derive API).
 ///
-/// The first eight fields are the positional parameters `av[1]` .. `av[8]`
-/// in order; they are kept as strings, validating them is the job of the
-/// caller, which reproduces the error messages of the reference program.
+/// `File` is the only positional parameter; the seven search parameters are
+/// key-value options (`--match 2`, `--match=2`, or the single dash spelling
+/// `-match 2`) with defaults, so an invocation such as `trf file.fasta`
+/// searches with the customary human DNA parameters.  They are kept as
+/// strings, validating them is the job of the caller, which reproduces the
+/// error messages of the reference program.
 /// Every other behaviour mirrors `getopt_long_only()`: `-h` means
 /// "suppress html output" while help lives on `-u`, `-v` prints the banner,
 /// short option letters are matched case insensitively and the three
@@ -158,21 +179,40 @@ fn rewrite_long_option(arg: &str) -> Option<String> {
     args_override_self = true /* repeated options are accepted */
 )]
 struct Args {
+    /* Optional in `clap` so that option-only command lines such as `trfrs -h`
+    still reach `parse()`, which prints the usage text instead of a clap
+    "missing required <File>" diagnostic. */
     #[arg(value_name = "File")]
-    file: String,
-    #[arg(value_name = "Match")]
+    file: Option<String>,
+    #[arg(
+        long = "match",
+        value_name = "Match",
+        default_value = DEFAULT_MATCH
+    )]
     match_weight: String,
-    #[arg(value_name = "Mismatch")]
+    #[arg(
+        long = "mismatch",
+        value_name = "Mismatch",
+        default_value = DEFAULT_MISMATCH
+    )]
     mismatch: String,
-    #[arg(value_name = "Delta")]
+    #[arg(long = "indel", value_name = "Delta", default_value = DEFAULT_INDEL)]
     indel: String,
-    #[arg(value_name = "PM")]
+    #[arg(long = "pm", value_name = "PM", default_value = DEFAULT_PM)]
     pm: String,
-    #[arg(value_name = "PI")]
+    #[arg(long = "pi", value_name = "PI", default_value = DEFAULT_PI)]
     pi: String,
-    #[arg(value_name = "Minscore")]
+    #[arg(
+        long = "minscore",
+        value_name = "Minscore",
+        default_value = DEFAULT_MINSCORE
+    )]
     minscore: String,
-    #[arg(value_name = "MaxPeriod")]
+    #[arg(
+        long = "maxperiod",
+        value_name = "MaxPeriod",
+        default_value = DEFAULT_MAXPERIOD
+    )]
     maxperiod: String,
 
     #[arg(short = 'd', visible_short_alias = 'D', long = "dat")]
@@ -243,15 +283,10 @@ pub fn parse() -> Result<Cli, i32> {
     let argv: Vec<String> = std::env::args().collect();
 
     /* The reference program inspects the raw argument vector before it looks
-    at any option: a lone -v/-V prints the banner, a short vector the usage
-    message. */
+    at any option: a lone -v/-V prints the banner. */
     if argv.len() == 2 && (argv[1] == "-v" || argv[1] == "-V") {
         print_banner();
         return Err(0);
-    }
-    if argv.len() < 9 {
-        eprint!("{}", usage(&argv[0]));
-        return Err(1);
     }
 
     let args: Vec<String> = argv
@@ -283,6 +318,16 @@ pub fn parse() -> Result<Cli, i32> {
         return Err(0);
     }
 
+    /* No file name: print the usage text, as the reference program does for a
+    command line without arguments (this covers e.g. a lone `-h`). */
+    let file = match args.file {
+        Some(file) => file,
+        None => {
+            eprint!("{}", usage(&argv[0]));
+            return Err(1);
+        }
+    };
+
     let maxlength = match args.maxlength {
         Some(value) if !value.is_empty() => MaxLength::Value(value),
         Some(_) => MaxLength::MissingValue,
@@ -290,7 +335,7 @@ pub fn parse() -> Result<Cli, i32> {
     };
 
     Ok(Cli {
-        file: args.file,
+        file,
         match_weight: args.match_weight,
         mismatch: args.mismatch,
         indel: args.indel,

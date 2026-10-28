@@ -166,7 +166,9 @@ fn real_main() -> i32 {
         MaxLength::Absent => {}
         MaxLength::MissingValue => {
             /* getopt reports the missing value and the program keeps going.
-            `&av[8]` is the program name the reference program reports. */
+            The reference implementation prints `&av[8]` here, i.e. the
+            MaxPeriod argument, which is what `cli.maxperiod` holds (its
+            default when the option is omitted). */
             eprintln!("{}: option requires an argument -- 'l'", cli.maxperiod);
         }
         MaxLength::Value(value) => {

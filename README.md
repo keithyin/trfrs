@@ -40,49 +40,56 @@ cargo build --release
 
 ## 运行
 
-参数格式与 C 版完全一致，前 8 个参数是必需的：
+`File` 是唯一必需的位置参数，7 个搜索参数都是带默认值的 key-value 选项：
 
 ```bash
-trfrs File Match Mismatch Delta PM PI Minscore MaxPeriod [options]
+trfrs File [--match n] [--mismatch n] [--indel n] [--pm n] [--pi n] [--minscore n] [--maxperiod n] [options]
 ```
 
-| 参数 | 含义 |
-| --- | --- |
-| `File` | 输入序列文件（FASTA 格式）；`-` 表示从标准输入读取（需配合 `-ngs`） |
-| `Match` | 匹配得分（正整数） |
-| `Mismatch` | 错配罚分（正整数） |
-| `Delta` | 插入/缺失罚分（正整数） |
-| `PM` | 匹配概率（整数，通常 80） |
-| `PI` | 插入/缺失概率（整数，通常 10） |
-| `Minscore` | 报告重复所需的最小比对分数（通常 50） |
-| `MaxPeriod` | 最大重复单元长度，1–2000（通常 2000） |
+| 参数 | 含义 | 默认值 |
+| --- | --- | --- |
+| `File` | 输入序列文件（FASTA 格式）；`-` 表示从标准输入读取（需配合 `-ngs`） | 必需 |
+| `--match` | 匹配得分（正整数） | `2` |
+| `--mismatch` | 错配罚分（正整数） | `5` |
+| `--indel` | 插入/缺失罚分（正整数） | `7` |
+| `--pm` | 匹配概率（整数） | `80` |
+| `--pi` | 插入/缺失概率（整数） | `10` |
+| `--minscore` | 报告重复所需的最小比对分数 | `50` |
+| `--maxperiod` | 最大重复单元长度，1–2000 | `2000` |
 
-常用人类 DNA 参数组合：`2 5 7 80 10 50 2000`。
+默认值即常用的人类 DNA 参数组合 `2 5 7 80 10 50 2000`，因此只给文件名即可运行。
+
+如果检测 repeats 少的，比如 unit2 * 2. 那么要调整 --minscore 为 8 。
+
 
 ### 示例
 
 ```bash
-# 使用仓库自带测试数据
-./target/release/trfrs tests/data/small_test.fasta 2 5 7 80 10 50 2000
+# 使用仓库自带测试数据（全部参数取默认值）
+./target/release/trfrs tests/data/small_test.fasta
+
+# 显式给出全部搜索参数（key-value 形式，也支持 --match=2 与 -match 2）
+./target/release/trfrs tests/data/small_test.fasta \
+    --match 2 --mismatch 5 --indel 7 --pm 80 --pi 10 --minscore 50 --maxperiod 2000
 
 # 同时生成 .dat 数据文件
-./target/release/trfrs tests/data/multi.fasta 2 5 7 80 10 50 2000 -d
+./target/release/trfrs tests/data/multi.fasta -d
 
 # 紧凑 .dat 格式直接输出到屏幕（适合流程管道）
-./target/release/trfrs tests/data/small_test.fasta 2 5 7 80 10 50 2000 -ngs
+./target/release/trfrs tests/data/small_test.fasta -ngs
 
 # 从标准输入读取
-cat tests/data/small_test.fasta | ./target/release/trfrs - 2 5 7 80 10 50 2000 -ngs
+cat tests/data/small_test.fasta | ./target/release/trfrs - -ngs
 
 # 版本信息 / 用法
 ./target/release/trfrs -v
-./target/release/trfrs            # 参数不足时打印用法
+./target/release/trfrs -u         # 无参数时也会打印用法
 ```
 
 也可以用 `cargo run` 运行，注意用 `--` 分隔 cargo 与程序参数：
 
 ```bash
-cargo run --release -- tests/data/small_test.fasta 2 5 7 80 10 50 2000 -ngs
+cargo run --release -- tests/data/small_test.fasta -ngs
 ```
 
 ### 选项
@@ -97,18 +104,19 @@ cargo run --release -- tests/data/small_test.fasta 2 5 7 80 10 50 2000 -ngs
 | `-l <n>` | 预期的最大 TR 长度，单位百万（如 `-l 3` 表示 300 万；HG38 需 `-l 6`） |
 | `-ngs` | 多序列文件使用紧凑 `.dat` 输出到 stdout，成功返回 0 |
 
-长选项同样可用且接受唯一前缀缩写：`--dat`、`--mask`、`--flank`、`--html-off`、`--redund-off`、`--ngs`、`--maxlength`、`--version`、`--help`。
+长选项同样可用且接受唯一前缀缩写：`--dat`、`--mask`、`--flank`、`--html-off`、`--redund-off`、`--ngs`、`--maxlength`、`--match`、`--mismatch`、`--indel`、`--pm`、`--pi`、`--minscore`、`--maxperiod`、`--version`、`--help`。
 
 短选项可以合并，选项值可以紧邻或使用 `=`；短选项字母不区分大小写（`-D` 与 `-d` 相同），
 单短横线的长选项写法（`-ngs`、`-maxlength 3`）也照旧可用：
 
 ```bash
-trfrs input.fasta 2 5 7 80 10 50 2000 -df      # 等价于 -d -f
-trfrs input.fasta 2 5 7 80 10 50 2000 -l3      # 等价于 -l 3 或 -l=3
-trfrs input.fasta 2 5 7 80 10 50 2000 -ngs     # 等价于 --ngs
+trfrs input.fasta -df                           # 等价于 -d -f
+trfrs input.fasta -l3                           # 等价于 -l 3 或 -l=3
+trfrs input.fasta -ngs                          # 等价于 --ngs
+trfrs input.fasta -match 2 -minscore 50         # 等价于 --match 2 --minscore 50
 ```
 
-命令行解析由 `clap` 完成；选项写在 8 个位置参数之前或之后均可，
+命令行解析由 `clap` 完成；选项与文件名位置任意，
 未知选项按 `clap` 的格式报错并以状态码 2 退出。
 
 ## 输出文件

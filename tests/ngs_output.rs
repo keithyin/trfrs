@@ -27,7 +27,24 @@ License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 
-const PARAMS: [&str; 7] = ["2", "5", "7", "80", "10", "50", "2000"];
+/// The search parameters as key-value options; every test below exercises
+/// this spelling.
+const PARAMS: [&str; 14] = [
+    "--match",
+    "2",
+    "--mismatch",
+    "5",
+    "--indel",
+    "7",
+    "--pm",
+    "80",
+    "--pi",
+    "10",
+    "--minscore",
+    "50",
+    "--maxperiod",
+    "2000",
+];
 
 fn temp_dir(tag: &str) -> PathBuf {
     let dir = std::env::temp_dir().join(format!("trf-rs-test-{}-{}", tag, std::process::id()));
@@ -92,6 +109,59 @@ fn diff_cn_ngs() {
 #[test]
 fn multi_ngs() {
     assert_ngs("multi.fasta", "multi.fasta.out", "multings");
+}
+
+/// A command line without a file name prints the usage text instead of a clap
+/// diagnostic.  A lone `-h` only means "suppress html output", so the run
+/// reports the usage and exits with 1; `-u` is the help option and exits 0.
+#[test]
+fn usage_without_file() {
+    let output = Command::new(env!("CARGO_BIN_EXE_trfrs"))
+        .arg("-h")
+        .output()
+        .expect("run trf");
+    assert_eq!(output.status.code(), Some(1));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("Please use:"),
+        "usage text missing: {stderr}"
+    );
+    assert!(
+        stderr.contains("--maxperiod"),
+        "parameter options missing: {stderr}"
+    );
+
+    let output = Command::new(env!("CARGO_BIN_EXE_trfrs"))
+        .arg("-u")
+        .output()
+        .expect("run trf");
+    assert_eq!(output.status.code(), Some(0));
+    assert!(String::from_utf8_lossy(&output.stdout).contains("Please use:"));
+}
+
+/// The search parameters default to `2 5 7 80 10 50 2000`, so a run that
+/// only names the file produces the same output as an explicit one.
+#[test]
+fn default_parameters() {
+    let dir = temp_dir("defaults");
+    std::fs::copy(
+        data_dir().join("small_test.fasta"),
+        dir.join("small_test.fasta"),
+    )
+    .expect("copy fixture");
+    let output = Command::new(env!("CARGO_BIN_EXE_trfrs"))
+        .current_dir(&dir)
+        .args(["small_test.fasta", "-ngs"])
+        .output()
+        .expect("run trf");
+    assert!(output.status.success(), "trf failed: {:?}", output.status);
+    let actual = String::from_utf8(output.stdout).expect("stdout is utf8");
+    assert_eq!(
+        actual,
+        golden("small_test.fasta.out"),
+        "default parameters differ"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
