@@ -26,6 +26,7 @@ License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 //! The library therefore has to reproduce them field by field.
 
 use std::path::{Path, PathBuf};
+use std::process::Command;
 
 use trfrs::{Error, Params, Repeat, TrfFinder};
 
@@ -286,7 +287,7 @@ fn finder_can_be_reused() {
 fn invalid_parameters_are_rejected() {
     let too_large = i32::MAX as u32 + 1;
 
-    let cases: [(&str, Params); 9] = [
+    let cases: [(&str, Params); 11] = [
         (
             "match_weight",
             Params {
@@ -349,6 +350,21 @@ fn invalid_parameters_are_rejected() {
             "minscore",
             Params {
                 minscore: too_large,
+                ..Params::default()
+            },
+        ),
+        (
+            "min_period",
+            Params {
+                min_period: 0,
+                ..Params::default()
+            },
+        ),
+        (
+            "min_period",
+            Params {
+                min_period: 16,
+                maxperiod: 15,
                 ..Params::default()
             },
         ),
@@ -431,6 +447,102 @@ fn empty_sequence_is_rejected() {
         finder.find(" \n\r\t-12.3").unwrap_err(),
         Error::EmptySequence
     );
+}
+
+/// The STR preset only narrows the period range; it must stay equal to the
+/// explicit parameters, and be accepted by the finder.
+#[test]
+fn str_preset_values() {
+    let preset = Params::str_preset();
+    assert_eq!(preset.min_period, 1);
+    assert_eq!(preset.maxperiod, 15);
+    assert_eq!(preset.minscore, 50);
+    assert_eq!(
+        preset,
+        Params {
+            min_period: 1,
+            maxperiod: 15,
+            ..Params::default()
+        }
+    );
+    assert!(TrfFinder::new(&preset).is_ok());
+}
+
+/// The default scan finds period 16 in the fixture, the STR preset does not,
+/// and the records it keeps are exactly the ones the command line reports.
+#[test]
+fn str_preset_matches_command_line() {
+    let (_, sequence) = parse_fasta(&read_fixture("str_short.fasta"))
+        .into_iter()
+        .next()
+        .expect("fixture sequence");
+
+    let default = TrfFinder::new(&Params::default())
+        .unwrap()
+        .find(&sequence)
+        .unwrap();
+    assert!(
+        default.iter().any(|repeat| repeat.period == 16),
+        "the fixture should contain a period 16 repeat"
+    );
+
+    let repeats = TrfFinder::new(&Params::str_preset())
+        .unwrap()
+        .find(&sequence)
+        .unwrap();
+    assert!(!repeats.is_empty(), "fixture should contain STRs");
+    assert!(repeats
+        .iter()
+        .all(|repeat| (1..=15).contains(&repeat.period)));
+
+    let output = Command::new(env!("CARGO_BIN_EXE_trfrs"))
+        .arg(data_dir().join("str_short.fasta"))
+        .args(["--str", "-ngs"])
+        .output()
+        .expect("run trf");
+    assert!(output.status.success(), "trf failed: {:?}", output.status);
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    let rows: Vec<&str> = stdout
+        .lines()
+        .filter(|line| !line.trim().is_empty() && !line.starts_with('@'))
+        .collect();
+
+    assert_eq!(rows.len(), repeats.len(), "number of records");
+    for (row, repeat) in rows.iter().zip(&repeats) {
+        let fields: Vec<&str> = row.split_whitespace().collect();
+        assert_eq!(fields[0].parse::<usize>().unwrap(), repeat.start + 1);
+        assert_eq!(fields[1].parse::<usize>().unwrap(), repeat.end);
+        assert_eq!(fields[2].parse::<usize>().unwrap(), repeat.period);
+        assert_eq!(fields[7].parse::<i32>().unwrap(), repeat.score);
+        assert_eq!(fields[13], repeat.pattern);
+    }
+}
+
+/// A lower period bound removes single base repeats, while the default keeps
+/// them (the fixture starts with a poly-A run).
+#[test]
+fn min_period_filters_lower_periods() {
+    let (_, sequence) = parse_fasta(&read_fixture("str_short.fasta"))
+        .into_iter()
+        .next()
+        .expect("fixture sequence");
+
+    let default = TrfFinder::new(&Params::default())
+        .unwrap()
+        .find(&sequence)
+        .unwrap();
+    assert!(default.iter().any(|repeat| repeat.period == 1));
+
+    let from_two = TrfFinder::new(&Params {
+        min_period: 2,
+        maxperiod: 15,
+        ..Params::default()
+    })
+    .unwrap()
+    .find(&sequence)
+    .unwrap();
+    assert!(!from_two.is_empty());
+    assert!(from_two.iter().all(|repeat| repeat.period >= 2));
 }
 
 #[test]

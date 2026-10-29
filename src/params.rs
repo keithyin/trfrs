@@ -26,6 +26,12 @@ pub const MAX_SEQ_NAME_LEN: usize = 200;
 /// Version reported by the program.
 pub const VERSION: &str = "4.10.0";
 
+/// Lower bound of the period range selected by the STR mode (`--str`).
+pub const STR_MIN_PERIOD: u32 = 1;
+
+/// Upper bound of the period range selected by the STR mode (`--str`).
+pub const STR_MAX_PERIOD: u32 = 15;
+
 /// Global knobs controlling the algorithm and the output.
 #[derive(Clone, Debug)]
 pub struct ParamSet {
@@ -33,6 +39,8 @@ pub struct ParamSet {
     pub mismatch: u32,
     pub indel: u32,
     pub minscore: u32,
+    /// Lower bound of the reported repeat unit length (period).
+    pub min_period: u32,
     pub maxperiod: u32,
     pub match_probability_percent: u32,
     pub indel_probability_percent: u32,
@@ -75,6 +83,7 @@ impl Default for ParamSet {
             mismatch: 0,
             indel: 0,
             minscore: 0,
+            min_period: STR_MIN_PERIOD,
             maxperiod: 0,
             match_probability_percent: 0,
             indel_probability_percent: 0,
@@ -104,6 +113,10 @@ impl Default for ParamSet {
 
 impl ParamSet {
     /// `"%d.%d.%d.%d.%d.%d.%d"` parameter string used in output file names.
+    ///
+    /// The lower period bound of the STR mode is not part of the string: the
+    /// reference implementation has no such parameter and both header and file
+    /// names have to stay byte identical to the C program.
     pub fn param_string(&self) -> String {
         format!(
             "{}.{}.{}.{}.{}.{}.{}",

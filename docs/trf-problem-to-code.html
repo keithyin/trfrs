@@ -1179,7 +1179,7 @@ newwrap 或 narrowbandwrap(..., with_consensus = true, ...);</pre>
 <h3>Q8.1 四步</h3>
 
 <pre><i>// src/clean.rs:491</i>
-remove_by_size(maxperiod);    <i>// 1. 周期超过 MaxPeriod 的记录删除</i>
+remove_by_period(min_period, maxperiod);  <i>// 1. 周期不在 [MinPeriod, MaxPeriod] 的记录删除</i>
 sort_by_index();              <i>// 2. 按 first 升序</i>
 if !redundoff { remove_redundancy(); }   <i>// 3. 去冗余（-r 可关）</i>
 sort_by_count();              <i>// 4. 按发现顺序，输出编号用</i></pre>

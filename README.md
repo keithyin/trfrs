@@ -40,10 +40,10 @@ cargo build --release
 
 ## 运行
 
-`File` 是唯一必需的位置参数，7 个搜索参数都是带默认值的 key-value 选项：
+`File` 是唯一必需的位置参数，搜索参数都是带默认值的 key-value 选项：
 
 ```bash
-trfrs File [--match n] [--mismatch n] [--indel n] [--pm n] [--pi n] [--minscore n] [--maxperiod n] [options]
+trfrs File [--match n] [--mismatch n] [--indel n] [--pm n] [--pi n] [--minscore n] [--minperiod n] [--maxperiod n] [options]
 ```
 
 | 参数 | 含义 | 默认值 |
@@ -55,9 +55,12 @@ trfrs File [--match n] [--mismatch n] [--indel n] [--pm n] [--pi n] [--minscore 
 | `--pm` | 匹配概率（整数） | `80` |
 | `--pi` | 插入/缺失概率（整数） | `10` |
 | `--minscore` | 报告重复所需的最小比对分数 | `50` |
+| `--minperiod` | 最小重复单元长度，1 到 MaxPeriod | `1` |
 | `--maxperiod` | 最大重复单元长度，1–2000 | `2000` |
 
 默认值即常用的人类 DNA 参数组合 `2 5 7 80 10 50 2000`，因此只给文件名即可运行。
+`--minperiod` 是本移植新增的扩展，不写入 `.dat` 的 `Parameters:` 头部与输出文件名，
+因此默认值下与 C 版输出仍逐字节相同。
 
 如果检测 repeats 少的，比如 unit2 * 2. 那么要调整 --minscore 为 8 。
 
@@ -103,8 +106,11 @@ cargo run --release -- tests/data/small_test.fasta -ngs
 | `-r` | 关闭冗余重复剔除 |
 | `-l <n>` | 预期的最大 TR 长度，单位百万（如 `-l 3` 表示 300 万；HG38 需 `-l 6`） |
 | `-ngs` | 多序列文件使用紧凑 `.dat` 输出到 stdout，成功返回 0 |
+| `--str` | STR 模式：等价于 `--minperiod 1 --maxperiod 15`，显式区间参数优先 |
 
-长选项同样可用且接受唯一前缀缩写：`--dat`、`--mask`、`--flank`、`--html-off`、`--redund-off`、`--ngs`、`--maxlength`、`--match`、`--mismatch`、`--indel`、`--pm`、`--pi`、`--minscore`、`--maxperiod`、`--version`、`--help`。
+长选项同样可用且接受唯一前缀缩写：`--dat`、`--mask`、`--flank`、`--html-off`、`--redund-off`、`--ngs`、`--maxlength`、`--match`、`--mismatch`、`--indel`、`--pm`、`--pi`、`--minscore`、`--minperiod`、`--maxperiod`、`--str`、`--version`、`--help`。
+缩写按“唯一前缀”判定（与 `getopt_long_only()` 一致）：新增 `--minperiod` 后，`--min`/`-min`
+同时匹配 `--minscore` 与 `--minperiod`，不再唯一，会按歧义报错；请至少写到 `--minsc`。
 
 短选项可以合并，选项值可以紧邻或使用 `=`；短选项字母不区分大小写（`-D` 与 `-d` 相同），
 单短横线的长选项写法（`-ngs`、`-maxlength 3`）也照旧可用：
@@ -118,6 +124,40 @@ trfrs input.fasta -match 2 -minscore 50         # 等价于 --match 2 --minscore
 
 命令行解析由 `clap` 完成；选项与文件名位置任意，
 未知选项按 `clap` 的格式报错并以状态码 2 退出。
+
+## STR 模式（period 1–15）
+
+只关心短串联重复（STR）时，用 `--str` 把报告的重复单元长度限制在 1–15 bp（包含
+period=1 的单碱基重复）：
+
+```bash
+trfrs sample.fasta --str -ngs
+# 等价于
+trfrs sample.fasta --minperiod 1 --maxperiod 15 -ngs
+```
+
+`--str` 只提供 period 区间的默认值，不改变打分参数；显式写出的
+`--minperiod` / `--maxperiod` 优先生效：
+
+```bash
+trfrs sample.fasta --str --maxperiod 2000 -ngs   # 仍按 1–2000 报告
+```
+
+区间过滤发生在冗余剔除之前（与 C 版 `RemoveBySize()` 的时机相同），因此
+30 bp 这类 period 为 15 倍数的重复会先被移除，15 bp 的 STR 不会因为
+“冗余”而丢失。同一组参数下输出与 C 版逐字节一致。
+
+使用该模式时需要注意：
+
+- 默认 `--minscore 50` 要求约 25 个匹配碱基，`(AC)5` 这类短 STR 不会被报告。
+  检测短 STR 通常要把阈值调低，例如 `--minscore 20`（更短的重复可用 8）：
+  `trfrs sample.fasta --str --minscore 20 -ngs`。
+- 默认开启的冗余剔除会去掉与更大周期重复重叠的较短 STR；需要完整目录时加 `-r`。
+- 该模式只做精确过滤，**不会**降低扫描量：内部 `max_distance` 仍有 500 的下限，
+  因此 `--str` 的耗时与 `--maxperiod 500` 相当；打分矩阵仍约为 604 B/碱基，
+  百万碱基级序列需要数百 MB，大基因组请配合 `-l` 估算或分块处理。
+- `--minperiod` 不参与 `.dat` 头部、参数串（仍为 7 个参数）和输出文件名，
+  所以仅下限不同的两次运行会写入同名文件，需要自行分目录保存。
 
 ## 作为库使用
 
@@ -154,9 +194,25 @@ fn main() -> Result<(), trfrs::Error> {
 ### 参数
 
 `Params` 的字段与命令行一一对应（`match_weight`、`mismatch`、`indel`、
-`match_probability_percent`、`indel_probability_percent`、`minscore`、`maxperiod`），
-另加 `remove_redundancy`（默认 `true`，等价于命令行未加 `-r`）。
-`TrfFinder::new` 做与命令行相同的校验，非法值返回 `Error::InvalidParam`，不会退出进程；
+`match_probability_percent`、`indel_probability_percent`、`minscore`、`min_period`、
+`maxperiod`），另加 `remove_redundancy`（默认 `true`，等价于命令行未加 `-r`）。
+只检测 STR 时用 `Params::str_preset()`，它等价于
+`Params { min_period: 1, maxperiod: 15, ..Params::default() }`，与命令行 `--str` 语义一致：
+
+```rust
+use trfrs::{Params, TrfFinder};
+
+let finder = TrfFinder::new(&Params::str_preset())?;
+// 需要更短/更低拷贝数的 STR 时同时降低 minscore，与命令行一样：
+let sensitive = TrfFinder::new(&Params {
+    minscore: 20,
+    ..Params::str_preset()
+})?;
+# Ok::<(), trfrs::Error>(())
+```
+
+`TrfFinder::new` 做与命令行相同的校验，非法值返回 `Error::InvalidParam`，不会退出进程：
+`min_period` 必须为正且不大于 `maxperiod`，`maxperiod` 必须在 1–2000 之间；
 `match_probability_percent` 仅支持 75 与 80（上游只提供这两种统计表）。
 
 ### 结果字段
@@ -185,8 +241,11 @@ fn main() -> Result<(), trfrs::Error> {
   超出返回 `Error::InvalidParam`（算法内部以 `i32` 参与打分，不做静默截断）。
 - 参数层面的错误始终以 `Err` 返回；内部算法不变式失败或大块内存分配失败为不可恢复错误，
   与 C 版本一致会终止进程，调用方应按 abort 对待。
-- 内存：与 C 实现相同，打分矩阵约 604 字节/碱基，百万碱基级序列需要数百 MB；
-  超大序列请自行分块，跨块的重复会被截断。
+- `min_period` 只做输出阶段的区间过滤，不影响打分，也不写入 `.dat` 头部与参数串；
+  period 区间过滤在冗余剔除之前完成，因此 period 为其倍数的更长重复不会挤掉目标 STR。
+- 内存：与 C 实现相同，打分矩阵约 604 字节/碱基，且与 `maxperiod` 无关；百万碱基级
+  序列需要数百 MB；超大序列请自行分块，跨块的重复会被截断。`str_preset()` 只缩小报告
+  范围，不会降低扫描量与内存占用。
 - `TrfFinder` 只保存参数，自动 `Send + Sync`，可在多线程中共享 `&TrfFinder` 并发调用 `find`，
   每次调用独立分配扫描状态。
 
@@ -221,10 +280,14 @@ cargo test
 
 覆盖 `-ngs` 输出、`.dat` 与 summary 输出、短选项合并、缺少 `-l` 参数、
 非 UTF-8 序列描述的字节保留、管道提前关闭时的 `SIGPIPE` 行为等场景。
+`tests/data/str_short.fasta` 是专用于 STR 区间的夹具（period 1、2、3、5、15、16），
+验证 `--str` 与 `--minperiod 1 --maxperiod 15`、`--maxperiod 15` 输出逐字节一致，
+16 bp 单元被过滤、显式区间参数覆盖预设，以及非法 `--minperiod` 的报错与退出码。
 
 `tests/lib_api.rs` 校验库接口：把 `TrfFinder::find` 的结果与 `tests/data/*.out`
 （C 参考程序的 `-ngs` 输出）逐字段比对，并覆盖坐标换算、输入归一化、参数校验、
-空序列、finder 复用与冗余剔除开关。
+空序列、finder 复用与冗余剔除开关。`Params::str_preset()` 的结果同时与
+命令行 `--str` 的记录逐字段比对，`min_period` 的过滤与校验也在其中。
 
 ## 代码结构
 

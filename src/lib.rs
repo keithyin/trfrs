@@ -51,6 +51,24 @@ License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 //! }
 //! ```
 //!
+//! Short tandem repeats only?  [`Params::str_preset`] narrows the reported
+//! period to 1–15 bp, the usual STR range, without touching the scoring
+//! parameters:
+//!
+//! ```
+//! use trfrs::{Params, TrfFinder};
+//!
+//! fn main() -> Result<(), trfrs::Error> {
+//!     let finder = TrfFinder::new(&Params::str_preset())?;
+//!     let repeats = finder.find("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")?;
+//!     assert!(!repeats.is_empty());
+//!     assert!(repeats
+//!         .iter()
+//!         .all(|repeat| (1..=15).contains(&repeat.period)));
+//!     Ok(())
+//! }
+//! ```
+//!
 //! Module map (reference C source -> Rust module):
 //!
 //! | C source                | Rust module                                   |

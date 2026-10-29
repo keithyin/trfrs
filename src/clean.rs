@@ -111,9 +111,15 @@ impl Trf {
     /* list handling                                                       */
     /* ------------------------------------------------------------------ */
 
-    /// `RemoveBySize()`.
-    fn remove_by_size(&mut self, maxsize: i32) {
-        self.records.retain(|r| r.period <= maxsize);
+    /// `RemoveBySize()`, extended with a lower period bound (`--minperiod`).
+    ///
+    /// Runs before [`Trf::remove_redundancy`]: a repeat that is a multiple of a
+    /// reported period (for example a 30 bp repeat in a 15 bp STR search) has to
+    /// be dropped first, otherwise the shorter repeat would be discarded as
+    /// redundant with a period that is not reported at all.
+    fn remove_by_period(&mut self, min_period: i32, max_period: i32) {
+        self.records
+            .retain(|r| r.period >= min_period && r.period <= max_period);
     }
 
     /// `SortByIndex()`.
@@ -491,8 +497,14 @@ impl Trf {
     }
 
     /// `TRFClean()`: removes redundancy and writes the HTML/data output.
-    pub fn trf_clean(&mut self, tablefile: &str, alignmentfile: &str, maxsize: i32) {
-        self.remove_by_size(maxsize);
+    ///
+    /// The reported period range (`min_period` ..= `maxperiod`) is taken from
+    /// the parameters, so the command line and the library apply exactly the
+    /// same filter.
+    pub fn trf_clean(&mut self, tablefile: &str, alignmentfile: &str) {
+        let min_period = self.params.min_period as i32;
+        let max_period = self.maxperiod;
+        self.remove_by_period(min_period, max_period);
         self.sort_by_index();
         if !self.params.redundancy_removal_off {
             self.remove_redundancy();

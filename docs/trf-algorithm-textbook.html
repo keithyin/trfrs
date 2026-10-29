@@ -1365,7 +1365,7 @@ score = 35 × 2 − 0 × 5 − 0 × 7 = 70</div>
 <h3>13.1 四个步骤</h3>
 
 <div class="src">src/clean.rs:490–506 · <code>trf_clean()</code></div>
-<pre><code>self.remove_by_size(maxsize);       // 1. 丢掉周期超过 MaxPeriod 的记录
+<pre><code>self.remove_by_period(min_period, maxperiod);  // 1. 丢掉周期不在 [MinPeriod, MaxPeriod] 的记录
 self.sort_by_index();               // 2. 按起点排序
 if !self.params.redundoff {
     self.remove_redundancy();       // 3. 删除冗余

@@ -178,6 +178,12 @@ pub fn run_cli() -> i32 {
             "Error parsing MaxPeriod parameter. Value must be between 1 and 2000, inclusive."
                 .into(),
         );
+    } else if !parse_uint(&cli.minperiod, &mut paramset.min_period) || paramset.min_period == 0 {
+        paramset.end_status =
+            Some("Error parsing MinPeriod parameter. Value must be a positive integer.".into());
+    } else if paramset.min_period > paramset.maxperiod {
+        paramset.end_status =
+            Some("Error parsing MinPeriod parameter. Value must not exceed MaxPeriod.".into());
     }
 
     /* error if any validation failed */

@@ -38,6 +38,10 @@ License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 //! }
 //! ```
 //!
+//! For short tandem repeats use [`Params::str_preset`], which reports only
+//! repeats with a unit length of 1–15 bp.  Combine it with a lower `minscore`
+//! when short or low copy number repeats should be found.
+//!
 //! The search runs entirely in memory: no files are written and nothing is
 //! printed.  Results are the same as the `.dat` records of the command line
 //! program, in the same order.
@@ -67,13 +71,16 @@ use std::fmt;
 
 use crate::clean::RepeatRecord;
 use crate::fasta::FastaSequence;
-use crate::params::ParamSet;
+use crate::params::{ParamSet, STR_MAX_PERIOD, STR_MIN_PERIOD};
 use crate::state::Trf;
 
 /// Search parameters.
 ///
 /// The defaults are the customary human DNA values of the command line program:
 /// `2 5 7 80 10 50 2000` (match, mismatch, indel, Pm, Pi, minscore, maxperiod).
+///
+/// [`Params::str_preset`] narrows the reported period to 1–15 bp, the usual
+/// range of short tandem repeats (STRs).
 ///
 /// Scaling all weights by the same factor leaves the consensus pattern and the
 /// percentage statistics unchanged, but `score` and the `minscore` threshold are
@@ -98,7 +105,11 @@ pub struct Params {
     /// Minimum alignment score a repeat must reach to be reported (`--minscore`).
     /// Must be at least 1 and fit in a 32-bit signed integer.
     pub minscore: u32,
-    /// Maximum repeat unit length (`--maxperiod`), between 1 and 2000.
+    /// Lower bound of the reported repeat unit length (`--minperiod`).
+    /// Must be at least 1 and must not exceed `maxperiod`.
+    pub min_period: u32,
+    /// Maximum repeat unit length (`--maxperiod`), between 1 and 2000 and not
+    /// smaller than `min_period`.
     pub maxperiod: u32,
     /// Remove repeats that are redundant with a higher scoring one.  The
     /// command line program does this unless `-r` is given.
@@ -114,8 +125,26 @@ impl Default for Params {
             match_probability_percent: 80,
             indel_probability_percent: 10,
             minscore: 50,
+            min_period: STR_MIN_PERIOD,
             maxperiod: 2000,
             remove_redundancy: true,
+        }
+    }
+}
+
+impl Params {
+    /// Parameters for a search restricted to short tandem repeats (STRs).
+    ///
+    /// Identical to [`Params::default`] except that only repeats whose unit
+    /// length (period) is between [`STR_MIN_PERIOD`] and [`STR_MAX_PERIOD`]
+    /// (1–15 bp, single base repeats included) are reported.  The scoring
+    /// parameters are left untouched, so `minscore` still has to be lowered by
+    /// the caller when short or low copy number STRs should be found.
+    pub fn str_preset() -> Self {
+        Params {
+            min_period: STR_MIN_PERIOD,
+            maxperiod: STR_MAX_PERIOD,
+            ..Params::default()
         }
     }
 }
@@ -254,8 +283,9 @@ impl TrfFinder {
     ///
     /// Returns [`Error::InvalidParam`] when a weight or penalty is zero, when a
     /// weight, penalty or `minscore` does not fit in a 32-bit signed integer,
-    /// when `maxperiod` is outside `1..=2000`, when `indel_probability_percent`
-    /// exceeds 100, or when `match_probability_percent` is neither 75 nor 80.
+    /// when `min_period` is zero or larger than `maxperiod`, when `maxperiod` is
+    /// outside `1..=2000`, when `indel_probability_percent` exceeds 100, or when
+    /// `match_probability_percent` is neither 75 nor 80.
     pub fn new(params: &Params) -> Result<Self, Error> {
         validate(params)?;
         Ok(TrfFinder {
@@ -341,6 +371,20 @@ fn validate(params: &Params) -> Result<(), Error> {
         });
     }
 
+    if params.min_period == 0 {
+        return Err(Error::InvalidParam {
+            name: "min_period",
+            reason: "must be a positive integer".to_string(),
+        });
+    }
+
+    if params.min_period > params.maxperiod {
+        return Err(Error::InvalidParam {
+            name: "min_period",
+            reason: format!("must not exceed maxperiod ({})", params.maxperiod),
+        });
+    }
+
     if params.match_probability_percent != 75 && params.match_probability_percent != 80 {
         return Err(Error::InvalidParam {
             name: "match_probability_percent",
@@ -367,6 +411,7 @@ fn silent_paramset(params: &Params) -> ParamSet {
         mismatch: params.mismatch,
         indel: params.indel,
         minscore: params.minscore,
+        min_period: params.min_period,
         maxperiod: params.maxperiod,
         match_probability_percent: params.match_probability_percent,
         indel_probability_percent: params.indel_probability_percent,

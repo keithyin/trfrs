@@ -152,8 +152,7 @@ impl Trf {
         self.progress("Freeing Memory...");
         self.progress("Resolving output...");
 
-        let maxperiod = self.maxperiod;
-        self.trf_clean(&htmlstring, &txtstring, maxperiod);
+        self.trf_clean(&htmlstring, &txtstring);
 
         self.params.output_file_name = make_file_name(&htmlstring, 1);
 

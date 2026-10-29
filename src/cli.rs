@@ -31,13 +31,16 @@ License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 //! `clap` (Derive API) provides the clustering, the abbreviations and the
 //! attached values; a small pre-pass spells single dash long options with
 //! `--` before the vector is handed to clap.  The file name is the only
-//! positional parameter; the seven search parameters are key-value options
-//! with defaults.  They are kept as strings: validating them is the job of
-//! the caller, which reproduces the error messages of the reference program.
+//! positional parameter; the search parameters are key-value options with
+//! defaults.  They are kept as strings: validating them is the job of the
+//! caller, which reproduces the error messages of the reference program.
+//! `--str` is an extension of this port: it only provides defaults for the
+//! period range (1–15 bp) and can be overridden by `--minperiod`/`--maxperiod`.
 
 use clap::Parser;
 
 use crate::driver::print_banner;
+use crate::params::{STR_MAX_PERIOD, STR_MIN_PERIOD};
 
 /// Defaults of the search parameters; the values are the customary human DNA
 /// set `2 5 7 80 10 50 2000`.
@@ -47,6 +50,7 @@ pub const DEFAULT_INDEL: &str = "7";
 pub const DEFAULT_PM: &str = "80";
 pub const DEFAULT_PI: &str = "10";
 pub const DEFAULT_MINSCORE: &str = "50";
+pub const DEFAULT_MINPERIOD: &str = "1";
 pub const DEFAULT_MAXPERIOD: &str = "2000";
 
 /// The `usage()` text of the reference program, `%s` being the program name.
@@ -60,8 +64,13 @@ const USAGE_BODY: &str = "\n\nPlease use: %s File [options]\n\
 \n        --pm <n>          match probability (whole number, default 80)\
 \n        --pi <n>          indel probability (whole number, default 10)\
 \n        --minscore <n>    minimum alignment score to report (default 50)\
+\n        --minperiod <n>   minimum period size to report. Must be between 1 and\
+\n                          MaxPeriod, inclusive (default 1)\
 \n        --maxperiod <n>   maximum period size to report. Must be between 1 and 2000,\
 \n                          inclusive (default 2000)\
+\n        --str             STR mode: shorthand for --minperiod 1 --maxperiod 15,\
+\n                          i.e. report short tandem repeats of 1-15 bp units.\
+\n                          Explicit --minperiod/--maxperiod take precedence.\
 \n        -m        masked sequence file\
 \n        -f        flanking sequence\
 \n        -d        data file\
@@ -119,7 +128,9 @@ const LONG_OPTIONS: &[(&str, &str)] = &[
     ("pm", "pm"),
     ("pi", "pi"),
     ("minscore", "minscore"),
+    ("minperiod", "minperiod"),
     ("maxperiod", "maxperiod"),
+    ("str", "str"),
 ];
 
 /// `getopt_long_only()` lookup: an exact match wins, otherwise a unique
@@ -160,7 +171,7 @@ fn rewrite_long_option(arg: &str) -> Option<String> {
 
 /// The `clap` definition of the command line (Derive API).
 ///
-/// `File` is the only positional parameter; the seven search parameters are
+/// `File` is the only positional parameter; the search parameters are
 /// key-value options (`--match 2`, `--match=2`, or the single dash spelling
 /// `-match 2`) with defaults, so an invocation such as `trf file.fasta`
 /// searches with the customary human DNA parameters.  They are kept as
@@ -208,12 +219,14 @@ struct Args {
         default_value = DEFAULT_MINSCORE
     )]
     minscore: String,
-    #[arg(
-        long = "maxperiod",
-        value_name = "MaxPeriod",
-        default_value = DEFAULT_MAXPERIOD
-    )]
-    maxperiod: String,
+    #[arg(long = "minperiod", value_name = "MinPeriod")]
+    minperiod: Option<String>,
+    #[arg(long = "maxperiod", value_name = "MaxPeriod")]
+    maxperiod: Option<String>,
+    /// `--str`: shorthand for `--minperiod 1 --maxperiod 15`.  Values given
+    /// explicitly on the command line take precedence.
+    #[arg(long = "str")]
+    str_mode: bool,
 
     #[arg(short = 'd', visible_short_alias = 'D', long = "dat")]
     dat: bool,
@@ -263,6 +276,7 @@ pub struct Cli {
     pub pm: String,
     pub pi: String,
     pub minscore: String,
+    pub minperiod: String,
     pub maxperiod: String,
 
     pub data_file: bool,
@@ -334,6 +348,20 @@ pub fn parse() -> Result<Cli, i32> {
         None => MaxLength::Absent,
     };
 
+    /* Period range: an explicit option wins, then the `--str` preset, then the
+    built in default.  Keeping the preset values as strings lets the driver
+    validate them through the very same path as a user supplied value. */
+    let minperiod = match args.minperiod {
+        Some(value) => value,
+        None if args.str_mode => STR_MIN_PERIOD.to_string(),
+        None => DEFAULT_MINPERIOD.to_string(),
+    };
+    let maxperiod = match args.maxperiod {
+        Some(value) => value,
+        None if args.str_mode => STR_MAX_PERIOD.to_string(),
+        None => DEFAULT_MAXPERIOD.to_string(),
+    };
+
     Ok(Cli {
         file,
         match_weight: args.match_weight,
@@ -342,7 +370,8 @@ pub fn parse() -> Result<Cli, i32> {
         pm: args.pm,
         pi: args.pi,
         minscore: args.minscore,
-        maxperiod: args.maxperiod,
+        minperiod,
+        maxperiod,
         data_file: args.dat,
         masked_file: args.mask,
         flanking_sequence: args.flank,
