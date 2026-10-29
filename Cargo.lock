@@ -96,7 +96,7 @@ dependencies = [
 
 [[package]]
 name = "trfrs"
-version = "4.12.0"
+version = "5.0.0"
 dependencies = [
  "clap",
  "libc",
