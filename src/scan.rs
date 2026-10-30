@@ -26,9 +26,9 @@ use std::collections::VecDeque;
 use crate::clean::RepeatRecord;
 use crate::fasta::base_index;
 use crate::state::{
-    BestPeriodElement, HistoryEntry, Trf, DASH, FOUR_TO_THE, MAX_PATTERN_SIZE_CONSTANT,
-    MIN_BAND_RADIUS, NUMBER_OF_PERIODS, NUMBER_OF_PERIODS_INTO_SORTMULTIPLES,
-    NUMBER_OF_PERIODS_TO_TEST, RECENTER_CRITERION, SMALL_DISTANCE, TAG_SEPARATION,
+    BestPeriodElement, Trf, DASH, FOUR_TO_THE, MAX_PATTERN_SIZE_CONSTANT, MIN_BAND_RADIUS,
+    NUMBER_OF_PERIODS, NUMBER_OF_PERIODS_INTO_SORTMULTIPLES, NUMBER_OF_PERIODS_TO_TEST,
+    RECENTER_CRITERION, SMALL_DISTANCE, TAG_SEPARATION,
 };
 use crate::tables::{SUMDATA75, SUMDATA80, WAITDATA75, WAITDATA80};
 
@@ -756,17 +756,7 @@ impl Trf {
         let min_tuple_size = self.tuple_sizes[1];
         let max_tuple_size = self.tuple_sizes[self.num_tuple_sizes as usize];
 
-        let num_tuple_sizes = self.num_tuple_sizes as usize;
-        self.tuple_hashes = vec![Vec::new(); num_tuple_sizes + 1];
-        self.histories = vec![Vec::new(); num_tuple_sizes + 1];
-        for tuple_index in 1..=num_tuple_sizes {
-            let num_codes = FOUR_TO_THE[self.tuple_sizes[tuple_index] as usize] as usize;
-            let history_capacity = 2 * (self.tuple_max_distances[tuple_index] + 1) + 2;
-            self.tuple_hashes[tuple_index] = vec![0i32; num_codes];
-            self.history_sizes[tuple_index] = history_capacity;
-            self.histories[tuple_index] = vec![HistoryEntry::default(); history_capacity as usize];
-            self.next_free_history_indices[tuple_index] = 1;
-        }
+        self.init_tuple_tables();
 
         self.sort_multiples = vec![0i32; self.max_distance as usize + 1];
 
@@ -838,40 +828,21 @@ impl Trf {
             while tuple_index <= self.num_tuple_sizes as usize
                 && position - bad_char_index >= self.tuple_sizes[tuple_index]
             {
-                let node = self.tuple_hashes[tuple_index][self.tuple_codes[tuple_index] as usize];
-                let write_slot = self.next_free_history_indices[tuple_index];
-                let mut next_free_slot = write_slot + 1;
-                if next_free_slot == self.history_sizes[tuple_index] {
-                    next_free_slot = 1;
-                }
-
-                if self.histories[tuple_index][next_free_slot as usize].location != 0
-                    && next_free_slot
-                        == self.tuple_hashes[tuple_index]
-                            [self.histories[tuple_index][next_free_slot as usize].code as usize]
-                {
-                    let evicted_code =
-                        self.histories[tuple_index][next_free_slot as usize].code as usize;
-                    self.tuple_hashes[tuple_index][evicted_code] = 0;
-                }
-                self.next_free_history_indices[tuple_index] = next_free_slot;
-
-                self.tuple_hashes[tuple_index][self.tuple_codes[tuple_index] as usize] = write_slot;
-                self.histories[tuple_index][write_slot as usize].location = position;
-                self.histories[tuple_index][write_slot as usize].previous = node;
-                self.histories[tuple_index][write_slot as usize].code =
-                    self.tuple_codes[tuple_index];
+                let code = self.tuple_codes[tuple_index];
+                let (write_slot, previous_head) =
+                    self.tuple_histories[tuple_index].push(position, code);
 
                 let mut prev_node = write_slot;
-                let mut node = node;
+                let mut node = previous_head;
                 while node != 0 {
-                    let distance = position - self.histories[tuple_index][node as usize].location;
+                    let distance = position
+                        - self.tuple_histories[tuple_index].entries[node as usize].location;
                     if distance > self.tuple_max_distances[tuple_index] {
-                        self.histories[tuple_index][prev_node as usize].previous = 0;
+                        self.tuple_histories[tuple_index].entries[prev_node as usize].previous = 0;
                         node = 0;
                     } else {
                         prev_node = node;
-                        node = self.histories[tuple_index][node as usize].previous;
+                        node = self.tuple_histories[tuple_index].entries[node as usize].previous;
                         if distance > self.tuple_max_distances[tuple_index - 1] {
                             let tuple_size = self.tuple_sizes[tuple_index];
                             self.process_candidate(position, distance, tuple_size);
