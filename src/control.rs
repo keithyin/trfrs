@@ -28,15 +28,74 @@ use crate::fasta::{load_sequence, ByteReader, FastaSequence, LoadError};
 use crate::params::{ParamSet, VERSION};
 use crate::state::{format_c_float, Trf, SMALL_DISTANCE};
 
+/// The output files derived from one prefix: `<prefix>.<paramstring>.<ext>`.
+///
+/// `prefix` is the input file name without its directory part (single sequence
+/// and the root of a multi-sequence run), or `<prefix>.s<ordinal>` for one
+/// sequence of a multi-sequence run.
+struct OutputPaths {
+    /// Prefix written back to `ParamSet` for a sequence of a multi-sequence run.
+    prefix: String,
+    /// `<prefix>.<paramstring>.html` (page 1 is derived by [`Self::html_page`]).
+    html: String,
+    /// `<prefix>.<paramstring>.txt.html` (the alignment file).
+    txt: String,
+    /// `<prefix>.<paramstring>.dat`.
+    dat: String,
+    /// `<prefix>.<paramstring>.mask`.
+    mask: String,
+    /// `<prefix>.<paramstring>.summary.html` (only read from the root paths).
+    summary: String,
+}
+
+impl OutputPaths {
+    fn new(prefix: &str, paramstring: &str) -> OutputPaths {
+        OutputPaths {
+            prefix: prefix.to_string(),
+            html: format!("{prefix}.{paramstring}.html"),
+            txt: format!("{prefix}.{paramstring}.txt.html"),
+            dat: format!("{prefix}.{paramstring}.dat"),
+            mask: format!("{prefix}.{paramstring}.mask"),
+            summary: format!("{prefix}.{paramstring}.summary.html"),
+        }
+    }
+
+    /// Paths of sequence `ordinal` of a multi-sequence run.
+    fn for_ordinal(prefix: &str, ordinal: i32, paramstring: &str) -> OutputPaths {
+        OutputPaths::new(&format!("{prefix}.s{ordinal}"), paramstring)
+    }
+
+    /// Table page name, using the same rule as `clean::make_file_name`.
+    fn html_page(&self, page: i32) -> String {
+        make_file_name(&self.html, page)
+    }
+
+    /// Alignment page name, using the same rule as `clean::make_file_name`.
+    fn txt_page(&self, page: i32) -> String {
+        make_file_name(&self.txt, page)
+    }
+}
+
 impl Trf {
     /// `TRF()`: runs the algorithm on a single sequence and writes the output.
     pub fn run(&mut self) {
         let paramstring = self.param_string();
-        let htmlstring = format!("{}.{}.html", self.params.output_prefix, paramstring);
-        let txtstring = format!("{}.{}.txt.html", self.params.output_prefix, paramstring);
-        let _datstring = format!("{}.{}.dat", self.params.output_prefix, paramstring);
-        let _maskstring = format!("{}.{}.mask", self.params.output_prefix, paramstring);
+        let paths = OutputPaths::new(&self.params.output_prefix, &paramstring);
 
+        self.prepare_sequence();
+        self.open_alignment_output(&paths);
+        self.initialize_tables();
+        self.write_sequence_statistics();
+        self.scan_sequence_with_progress();
+        self.accumulate_statistics();
+        self.close_alignment_output();
+        self.resolve_output(&paths);
+
+        self.progress("Done.");
+    }
+
+    /// Resets the per-run counters before the scan.
+    fn prepare_sequence(&mut self) {
         self.init_best_period_list();
         self.print_flanking = self.params.flanking_sequence;
         self.progress("Allocating Memory...");
@@ -44,71 +103,84 @@ impl Trf {
         self.report_min = 0;
         self.rows = 0.0;
         self.total_characters = 0.0;
+    }
 
-        /* start the alignment (txt) file */
-        if !self.params.html_output_off {
-            match File::create(&txtstring) {
-                Ok(f) => self.alignment_file = Some(BufWriter::new(f)),
-                Err(_) => {
-                    self.print_error("Unable to open alignment file for writing in TRF() routine!");
-                    std::process::exit(-1);
-                }
-            }
-            let mut head: Vec<u8> = Vec::new();
-            head.extend_from_slice(b"<HTML>");
-            head.extend_from_slice(b"<HEAD>");
-            head.extend_from_slice(format!("<TITLE>{}</TITLE>", txtstring).as_bytes());
-            head.extend_from_slice(b"</HEAD>");
-            head.extend_from_slice(b"<BODY bgcolor=\"#FBF8BC\">");
-            head.extend_from_slice(b"<PRE>");
-            head.extend_from_slice(b"\nTandem Repeats Finder Program written by:");
-            head.extend_from_slice(b"\n\n                 Gary Benson");
-            head.extend_from_slice(b"\n      Program in Bioinformatics");
-            head.extend_from_slice(b"\n          Boston University");
-            head.extend_from_slice(format!("\n\nVersion {}", VERSION).as_bytes());
-            head.extend_from_slice(b"\n\nSequence: ");
-            head.extend_from_slice(&self.fasta.name);
-            head.extend_from_slice(
-                format!(
-                    "\n\nParameters: {} {} {} {} {} {} {}\n",
-                    self.params.match_weight,
-                    self.params.mismatch,
-                    self.params.indel,
-                    self.params.match_probability_percent,
-                    self.params.indel_probability_percent,
-                    self.params.minscore,
-                    self.params.maxperiod
-                )
-                .as_bytes(),
-            );
-            self.write_bytes_to_alignment_file(&head);
+    /// Starts the alignment (txt) file and writes the HTML header.
+    fn open_alignment_output(&mut self, paths: &OutputPaths) {
+        if self.params.html_output_off {
+            return;
         }
+        match File::create(&paths.txt) {
+            Ok(f) => self.alignment_file = Some(BufWriter::new(f)),
+            Err(_) => {
+                self.print_error("Unable to open alignment file for writing in TRF() routine!");
+                std::process::exit(-1);
+            }
+        }
+        let mut head: Vec<u8> = Vec::new();
+        head.extend_from_slice(b"<HTML>");
+        head.extend_from_slice(b"<HEAD>");
+        head.extend_from_slice(format!("<TITLE>{}</TITLE>", paths.txt).as_bytes());
+        head.extend_from_slice(b"</HEAD>");
+        head.extend_from_slice(b"<BODY bgcolor=\"#FBF8BC\">");
+        head.extend_from_slice(b"<PRE>");
+        head.extend_from_slice(b"\nTandem Repeats Finder Program written by:");
+        head.extend_from_slice(b"\n\n                 Gary Benson");
+        head.extend_from_slice(b"\n      Program in Bioinformatics");
+        head.extend_from_slice(b"\n          Boston University");
+        head.extend_from_slice(format!("\n\nVersion {}", VERSION).as_bytes());
+        head.extend_from_slice(b"\n\nSequence: ");
+        head.extend_from_slice(&self.fasta.name);
+        head.extend_from_slice(
+            format!(
+                "\n\nParameters: {} {} {} {} {} {} {}\n",
+                self.params.match_weight,
+                self.params.mismatch,
+                self.params.indel,
+                self.params.match_probability_percent,
+                self.params.indel_probability_percent,
+                self.params.minscore,
+                self.params.maxperiod
+            )
+            .as_bytes(),
+        );
+        self.write_bytes_to_alignment_file(&head);
+    }
 
+    /// Initializes the criteria tables used by the scan.
+    fn initialize_tables(&mut self) {
         self.progress("Initializing data structures...");
 
         self.progress("Computing TR Model Statistics...");
         self.init_criteria_tables();
+    }
 
-        if !self.params.html_output_off {
-            let text = format!("\n\nLength: {}", self.length);
-            self.write_to_alignment_file(&text);
+    /// Writes the sequence length and base composition to the alignment file.
+    fn write_sequence_statistics(&mut self) {
+        if self.params.html_output_off {
+            return;
+        }
+        let text = format!("\n\nLength: {}", self.length);
+        self.write_to_alignment_file(&text);
+        let text = format!(
+            "\nACGTcount: A:{}, C:{}, G:{}, T:{}\n\n",
+            format_c_float(self.fasta.composition[0] as f64 / self.length as f64, 3, 2),
+            format_c_float(self.fasta.composition[2] as f64 / self.length as f64, 3, 2),
+            format_c_float(self.fasta.composition[6] as f64 / self.length as f64, 3, 2),
+            format_c_float(self.fasta.composition[19] as f64 / self.length as f64, 3, 2)
+        );
+        self.write_to_alignment_file(&text);
+        if self.fasta.length as i32 - self.fasta.nucleotides > 0 {
             let text = format!(
-                "\nACGTcount: A:{}, C:{}, G:{}, T:{}\n\n",
-                format_c_float(self.fasta.composition[0] as f64 / self.length as f64, 3, 2),
-                format_c_float(self.fasta.composition[2] as f64 / self.length as f64, 3, 2),
-                format_c_float(self.fasta.composition[6] as f64 / self.length as f64, 3, 2),
-                format_c_float(self.fasta.composition[19] as f64 / self.length as f64, 3, 2)
+                "Warning! {} characters in sequence are not A, C, G, or T\n\n",
+                self.fasta.length as i32 - self.fasta.nucleotides
             );
             self.write_to_alignment_file(&text);
-            if self.fasta.length as i32 - self.fasta.nucleotides > 0 {
-                let text = format!(
-                    "Warning! {} characters in sequence are not A, C, G, or T\n\n",
-                    self.fasta.length as i32 - self.fasta.nucleotides
-                );
-                self.write_to_alignment_file(&text);
-            }
         }
+    }
 
+    /// Updates the per-run character counters and scans the sequence.
+    fn scan_sequence_with_progress(&mut self) {
         self.total_characters += self.length as f64;
         self.wraparound_dp_count = 0.0;
 
@@ -120,7 +192,10 @@ impl Trf {
         }
 
         self.scan_sequence();
+    }
 
+    /// Aggregates the cell and wasted-cell counters of the scan.
+    fn accumulate_statistics(&mut self) {
         self.cell_total = 0.0;
         let mut distance = self.max_distance;
         while distance >= 1 {
@@ -140,7 +215,10 @@ impl Trf {
             }
             distance -= 1;
         }
+    }
 
+    /// Writes the closing HTML tags and drops the alignment writer.
+    fn close_alignment_output(&mut self) {
         if !self.params.html_output_off {
             self.write_to_alignment_file("Done.\n");
             self.write_to_alignment_file("</PRE>");
@@ -148,15 +226,16 @@ impl Trf {
             self.write_to_alignment_file("</HTML>");
         }
         self.alignment_file = None;
+    }
 
+    /// Removes redundant repeats and writes the table files.
+    fn resolve_output(&mut self, paths: &OutputPaths) {
         self.progress("Freeing Memory...");
         self.progress("Resolving output...");
 
-        self.trf_clean(&htmlstring, &txtstring);
+        self.trf_clean(&paths.html, &paths.txt);
 
-        self.params.output_file_name = make_file_name(&htmlstring, 1);
-
-        self.progress("Done.");
+        self.params.output_file_name = paths.html_page(1);
     }
 }
 
@@ -355,6 +434,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
     let (mut seq, mut more) = loaded;
 
     let paramstring = params.param_string();
+    let root_paths = OutputPaths::new(&prefix, &paramstring);
     let header_parameters = params.parameters_header();
 
     if !more {
@@ -393,14 +473,14 @@ pub fn trf_control_routine(params: &mut ParamSet) {
             let dest = if params.ngs {
                 None
             } else {
-                Some(format!("{}.{}.dat", prefix, paramstring))
+                Some(root_paths.dat.clone())
             };
             emit_dat(dest.as_deref(), &content, params);
         }
 
         /* masked file is written after the .dat output so that the sequence is
         not "ruined" by Ns beforehand */
-        let maskstring = format!("{}.{}.mask", params.output_prefix, paramstring);
+        let maskstring = root_paths.mask.clone();
         trf.make_masked_file(params.masked_file, &maskstring);
 
         params.end_status = None;
@@ -414,7 +494,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
     /*********************************************************
      * more than one sequence: produce summary-style output
      **********************************************************/
-    let desth = format!("{}.{}.summary.html", prefix, paramstring);
+    let desth = root_paths.summary.clone();
 
     /* The reference implementation opens the summary, masked and data files
     before the first sequence is processed and writes to them incrementally.
@@ -438,7 +518,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
 
     let mut mask_fp: Option<File> = None;
     if params.masked_file {
-        match File::create(format!("{}.{}.mask", prefix, paramstring)) {
+        match File::create(&root_paths.mask) {
             Ok(f) => mask_fp = Some(f),
             Err(_) => {
                 eprintln!(
@@ -451,7 +531,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
 
     let mut dat_fp: Option<File> = None;
     if params.data_file && !params.ngs {
-        match File::create(format!("{}.{}.dat", prefix, paramstring)) {
+        match File::create(&root_paths.dat) {
             Ok(f) => dat_fp = Some(f),
             Err(_) => {
                 eprintln!(
@@ -467,9 +547,9 @@ pub fn trf_control_routine(params: &mut ParamSet) {
 
     loop {
         /* prefix used for the output files of this sequence */
-        let input = format!("{}.s{}", prefix, ordinal);
-        params.input_file_name = input.clone();
-        params.output_prefix = input.clone();
+        let seq_paths = OutputPaths::for_ordinal(&prefix, ordinal, &paramstring);
+        params.input_file_name = seq_paths.prefix.clone();
+        params.output_prefix = seq_paths.prefix.clone();
 
         let mut trf = Trf::new(params.clone(), &seq);
         trf.header_sequence = sequence_header(&seq);
@@ -508,7 +588,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
         }
 
         if let Some(f) = summary_fp.as_mut() {
-            let outh = format!("{}.{}.1.html", input, paramstring);
+            let outh = seq_paths.html_page(1);
             if params.output_count > 0 {
                 let mut row: Vec<u8> = Vec::new();
                 row.extend_from_slice(
@@ -531,12 +611,12 @@ pub fn trf_control_routine(params: &mut ParamSet) {
             } else {
                 /* remove html files that contain no output */
                 let _ = std::fs::remove_file(&outh);
-                let line = format!("{}.{}.1.txt.html", input, paramstring);
+                let line = seq_paths.txt_page(1);
                 let _ = std::fs::remove_file(&line);
             }
         }
 
-        let maskstring = format!("{}.s{}.{}.mask", prefix, ordinal, paramstring);
+        let maskstring = seq_paths.mask.clone();
         trf.make_masked_file(params.masked_file, &maskstring);
 
         if params.masked_file {
@@ -595,4 +675,42 @@ pub fn trf_control_routine(params: &mut ParamSet) {
     params.output_file_name = desth;
     params.end_status = None;
     params.running = false;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const PARAMSTRING: &str = "2.5.7.80.10.50.2000";
+
+    #[test]
+    fn output_paths_match_the_reference_names() {
+        let paths = OutputPaths::new("seq.fasta", PARAMSTRING);
+        assert_eq!(paths.prefix, "seq.fasta");
+        assert_eq!(paths.html, "seq.fasta.2.5.7.80.10.50.2000.html");
+        assert_eq!(paths.txt, "seq.fasta.2.5.7.80.10.50.2000.txt.html");
+        assert_eq!(paths.dat, "seq.fasta.2.5.7.80.10.50.2000.dat");
+        assert_eq!(paths.mask, "seq.fasta.2.5.7.80.10.50.2000.mask");
+        assert_eq!(paths.summary, "seq.fasta.2.5.7.80.10.50.2000.summary.html");
+        assert_eq!(paths.html_page(1), "seq.fasta.2.5.7.80.10.50.2000.1.html");
+        assert_eq!(
+            paths.txt_page(1),
+            "seq.fasta.2.5.7.80.10.50.2000.1.txt.html"
+        );
+    }
+
+    #[test]
+    fn sequence_paths_carry_the_multi_sequence_prefix() {
+        let paths = OutputPaths::for_ordinal("multi.fasta", 3, PARAMSTRING);
+        assert_eq!(paths.prefix, "multi.fasta.s3");
+        assert_eq!(
+            paths.html_page(1),
+            "multi.fasta.s3.2.5.7.80.10.50.2000.1.html"
+        );
+        assert_eq!(
+            paths.txt_page(1),
+            "multi.fasta.s3.2.5.7.80.10.50.2000.1.txt.html"
+        );
+        assert_eq!(paths.mask, "multi.fasta.s3.2.5.7.80.10.50.2000.mask");
+    }
 }
