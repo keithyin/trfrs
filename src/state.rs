@@ -104,7 +104,11 @@ pub struct DistanceList {
 }
 
 impl DistanceList {
-    fn new(capacity: usize) -> Self {
+    /// `new_DistanceList()` + `clear_DistanceList()`: the ring holds
+    /// `max(distance, 20) + 1` entries.  `high_index` starts on the last slot so
+    /// the first recorded match lands in slot 0; `low_index` starts at slot 0.
+    fn new(distance: i32) -> Self {
+        let window_size = distance.max(20) + 1;
         DistanceList {
             k_run_sums_criteria: 0,
             waiting_time_criteria: 0,
@@ -113,12 +117,73 @@ impl DistanceList {
             entry_count: 0,
             match_count: 0,
             low_index: 0,
-            high_index: 0,
+            high_index: window_size - 1,
             linked: false,
             link_down: 0,
             link_up: 0,
-            entries: vec![DistanceEntry::default(); capacity],
+            entries: vec![DistanceEntry::default(); window_size as usize],
         }
+    }
+
+    /// Drops entries that have left the trailing window ending at `location`
+    /// and advances `low_index` around the ring.
+    ///
+    /// This is the eviction loop the reference implementation repeats at the
+    /// start of `add_tuple_match_to_Distance_entry()` and
+    /// `no_matches_so_unlink_Distance()`; the statement order mirrors it.  The
+    /// modulus is the allocated ring capacity, `max(distance, 20) + 1`.
+    #[inline]
+    pub fn evict_outside_window(&mut self, location: i32, distance: i32) {
+        let window_size = self.entries.len() as i32;
+        let window_left_end = std::cmp::min(location - distance, location - 20) + 1;
+        while self.entry_count != 0 {
+            let lo = self.low_index as usize;
+            if self.entries[lo].location >= window_left_end {
+                break;
+            }
+            let entry_size = self.entries[lo].size;
+            self.entry_count -= 1;
+            self.match_count -= entry_size;
+            self.low_index += 1;
+            self.low_index %= window_size;
+        }
+    }
+
+    /// `add_tuple_match_to_Distance_entry()`: records one tuple occurrence
+    /// ending at `location`.
+    ///
+    /// Expired entries are dropped first.  If the newest surviving entry ends
+    /// at `location - 1`, the occurrence extends it by one tuple; otherwise a
+    /// new entry holding `tuple_size` tuples is written at `high_index`,
+    /// wrapping around the ring.
+    #[inline]
+    pub fn record_match(&mut self, location: i32, tuple_size: i32, distance: i32) {
+        self.evict_outside_window(location, distance);
+
+        let hi = self.high_index as usize;
+        if self.entry_count != 0 && self.entries[hi].location == location - 1 {
+            /* adjacent tuple: extend the last entry */
+            self.entries[hi].location += 1;
+            self.entries[hi].size += 1;
+            self.match_count += 1;
+        } else {
+            self.entry_count += 1;
+            self.high_index += 1;
+            self.high_index %= self.entries.len() as i32;
+            let hi = self.high_index as usize;
+            self.entries[hi].location = location;
+            self.entries[hi].size = tuple_size;
+            self.match_count += tuple_size;
+        }
+    }
+
+    /// Start of the oldest match kept by this list:
+    /// `entries[low_index].location - entries[low_index].size + tuple_size`.
+    /// Only meaningful while `entry_count != 0`.
+    #[inline]
+    pub fn first_match_location(&self, tuple_size: i32) -> i32 {
+        let entry = self.entries[self.low_index as usize];
+        entry.location - entry.size + tuple_size
     }
 }
 
@@ -428,19 +493,10 @@ impl Trf {
         nucleotide_index[b'G' as usize] = 2;
         nucleotide_index[b'T' as usize] = 3;
 
-        // new_distancelist()
+        // new_distancelist() + clear_distancelist()
         let mut distances = Vec::with_capacity(max_distance as usize + 1);
         for distance_value in 0..=max_distance {
-            let capacity = std::cmp::max(distance_value, 20) as usize + 1;
-            distances.push(DistanceList::new(capacity));
-        }
-        // clear_distancelist()
-        for distance_value in 1..=max_distance {
-            let list = &mut distances[distance_value as usize];
-            list.low_index = 0;
-            list.high_index = std::cmp::max(distance_value, 20);
-            list.entry_count = 0;
-            list.match_count = 0;
+            distances.push(DistanceList::new(distance_value));
         }
         // init_links()
         distances[0].link_up = max_distance + 1;
@@ -717,5 +773,130 @@ mod tests {
         assert!(trf.tuple_histories[1..]
             .iter()
             .all(|history| history.next_free == 1));
+    }
+
+    #[test]
+    fn distance_list_new_initializes_ring_cursors() {
+        let list = DistanceList::new(4);
+        assert_eq!(list.entries.len(), 21);
+        assert_eq!(list.low_index, 0);
+        assert_eq!(list.high_index, 20);
+        assert_eq!(list.entry_count, 0);
+        assert_eq!(list.match_count, 0);
+
+        let list = DistanceList::new(30);
+        assert_eq!(list.entries.len(), 31);
+        assert_eq!(list.high_index, 30);
+    }
+
+    #[test]
+    fn record_match_places_first_entry_in_wrapped_slot() {
+        let mut list = DistanceList::new(30);
+        list.record_match(100, 5, 30);
+        assert_eq!(list.entry_count, 1);
+        assert_eq!(list.match_count, 5);
+        assert_eq!(list.low_index, 0);
+        assert_eq!(list.high_index, 0);
+        assert_eq!((list.entries[0].location, list.entries[0].size), (100, 5));
+    }
+
+    #[test]
+    fn record_match_extends_adjacent_entry() {
+        let mut list = DistanceList::new(30);
+        list.record_match(100, 5, 30);
+        list.record_match(101, 5, 30);
+        list.record_match(102, 5, 30);
+        assert_eq!(list.entry_count, 1);
+        assert_eq!(list.match_count, 7);
+        assert_eq!(list.high_index, 0);
+        assert_eq!((list.entries[0].location, list.entries[0].size), (102, 7));
+    }
+
+    #[test]
+    fn record_match_starts_new_entry_after_gap() {
+        let mut list = DistanceList::new(30);
+        list.record_match(100, 5, 30);
+        list.record_match(120, 4, 30);
+        assert_eq!(list.entry_count, 2);
+        assert_eq!(list.match_count, 9);
+        assert_eq!(list.low_index, 0);
+        assert_eq!(list.high_index, 1);
+        assert_eq!((list.entries[0].location, list.entries[0].size), (100, 5));
+        assert_eq!((list.entries[1].location, list.entries[1].size), (120, 4));
+    }
+
+    #[test]
+    fn record_match_evicts_entries_outside_window() {
+        let mut list = DistanceList::new(30);
+        list.record_match(100, 5, 30);
+        list.record_match(120, 4, 30);
+        list.record_match(140, 3, 30); // window_left_end = 111 drops location 100
+        assert_eq!(list.entry_count, 2);
+        assert_eq!(list.match_count, 7);
+        assert_eq!(list.low_index, 1);
+        assert_eq!(list.high_index, 2);
+        assert_eq!((list.entries[2].location, list.entries[2].size), (140, 3));
+        // Eviction only moves the counters and cursors; it never clears the slot.
+        assert_eq!((list.entries[0].location, list.entries[0].size), (100, 5));
+    }
+
+    #[test]
+    fn record_match_evicts_to_empty_then_writes() {
+        let mut list = DistanceList::new(30);
+        list.record_match(100, 5, 30);
+        list.record_match(200, 4, 30); // window_left_end = 171 drops the only entry
+        assert_eq!(list.entry_count, 1);
+        assert_eq!(list.match_count, 4);
+        assert_eq!(list.low_index, 1);
+        assert_eq!(list.high_index, 1);
+        assert_eq!((list.entries[1].location, list.entries[1].size), (200, 4));
+        assert_eq!((list.entries[0].location, list.entries[0].size), (100, 5));
+    }
+
+    #[test]
+    fn short_distances_use_twenty_position_window() {
+        let mut list = DistanceList::new(5);
+        list.record_match(100, 2, 5);
+        list.record_match(105, 2, 5);
+        list.record_match(120, 1, 5); // window_left_end = 101: 100 goes, 105 stays
+        assert_eq!(list.entry_count, 2);
+        assert_eq!(list.match_count, 3);
+        assert_eq!(list.low_index, 1);
+        assert_eq!(list.high_index, 2);
+        assert_eq!((list.entries[1].location, list.entries[1].size), (105, 2));
+        assert_eq!((list.entries[2].location, list.entries[2].size), (120, 1));
+    }
+
+    #[test]
+    fn record_match_wraps_high_index() {
+        let mut list = DistanceList::new(5); // 21 slots; the first write lands in slot 0
+        for step in 0..22 {
+            list.record_match(100 + 2 * step, 2, 5); // gap 2: never adjacent
+        }
+        assert_eq!(list.high_index, 0); // slot 0 again after 22 inserts
+        assert_eq!(list.low_index, 12);
+        assert_eq!(list.entry_count, 10);
+        assert_eq!(list.match_count, 20);
+        assert_eq!((list.entries[0].location, list.entries[0].size), (142, 2));
+
+        list.record_match(143, 2, 5); // adjacent to the entry in wrapped slot 0
+        assert_eq!(list.high_index, 0);
+        assert_eq!(list.low_index, 12);
+        assert_eq!(list.entry_count, 10);
+        assert_eq!(list.match_count, 21);
+        assert_eq!((list.entries[0].location, list.entries[0].size), (143, 3));
+    }
+
+    #[test]
+    fn first_match_location_returns_oldest_entry_start() {
+        let mut list = DistanceList::new(30);
+        list.record_match(100, 5, 30);
+        list.record_match(120, 4, 30);
+        assert_eq!(list.first_match_location(5), 100);
+        assert_eq!(list.first_match_location(4), 99);
+
+        list.record_match(140, 3, 30);
+        assert_eq!(list.low_index, 1);
+        assert_eq!(list.first_match_location(3), 119);
     }
 }

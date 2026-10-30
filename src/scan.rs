@@ -129,52 +129,6 @@ impl Trf {
     /* distance lists                                                      */
     /* ------------------------------------------------------------------ */
 
-    /// `add_tuple_match_to_Distance_entry()`.
-    pub fn add_tuple_match_to_distance_entry(
-        &mut self,
-        location: i32,
-        tuple_size: i32,
-        distance: i32,
-    ) {
-        let window_size = max2(distance, 20) + 1;
-        let list = &mut self.distances[distance as usize];
-
-        if list.entry_count != 0 {
-            let window_left_end = min2(location - distance, location - 20) + 1;
-            loop {
-                if list.entry_count == 0 {
-                    break;
-                }
-                let lo = list.low_index as usize;
-                if list.entries[lo].location < window_left_end {
-                    let entry_size = list.entries[lo].size;
-                    list.entry_count -= 1;
-                    list.match_count -= entry_size;
-                    list.low_index += 1;
-                    list.low_index %= window_size;
-                } else {
-                    break;
-                }
-            }
-        }
-
-        let hi = list.high_index as usize;
-        if list.entry_count != 0 && list.entries[hi].location == location - 1 {
-            /* adjacent tuple: extend the last entry */
-            list.entries[hi].location += 1;
-            list.entries[hi].size += 1;
-            list.match_count += 1;
-        } else {
-            list.entry_count += 1;
-            list.high_index += 1;
-            list.high_index %= window_size;
-            let hi = list.high_index as usize;
-            list.entries[hi].location = location;
-            list.entries[hi].size = tuple_size;
-            list.match_count += tuple_size;
-        }
-    }
-
     /// `link_Distance_window()`.
     pub fn link_distance_window(&mut self, distance: i32) {
         /* the reference implementation applies ceil() to an integer division */
@@ -231,28 +185,7 @@ impl Trf {
 
     /// `no_matches_so_unlink_Distance()`; returns 1 when the distance was unlinked.
     pub fn no_matches_so_unlink_distance(&mut self, distance: i32, location: i32) -> i32 {
-        let window_size = max2(distance, 20) + 1;
-        let mut entry_count = self.distances[distance as usize].entry_count;
-        if entry_count != 0 {
-            let window_left_end = min2(location - distance, location - 20) + 1;
-            loop {
-                if entry_count == 0 {
-                    break;
-                }
-                let list = &mut self.distances[distance as usize];
-                let lo = list.low_index as usize;
-                if list.entries[lo].location < window_left_end {
-                    let entry_size = list.entries[lo].size;
-                    list.entry_count -= 1;
-                    list.match_count -= entry_size;
-                    list.low_index += 1;
-                    list.low_index %= window_size;
-                    entry_count = list.entry_count;
-                } else {
-                    break;
-                }
-            }
-        }
+        self.distances[distance as usize].evict_outside_window(location, distance);
         if self.distances[distance as usize].entry_count == 0 {
             let lower_distance = self.distances[distance as usize].link_down;
             let higher_distance = self.distances[distance as usize].link_up;
@@ -419,9 +352,7 @@ impl Trf {
         let main_d_matches = info.match_count;
         let range_d_min_for_waiting_time_test =
             (0.35 * min2(min_krun_matches, main_d_matches) as f64) as i32;
-        let main_d_first_match_location = info.entries[info.low_index as usize].location
-            - info.entries[info.low_index as usize].size
-            + tuple_size;
+        let main_d_first_match_location = info.first_match_location(tuple_size);
 
         let mut waiting_time_ok = false;
         let mut waiting_time_d = 0;
@@ -451,9 +382,7 @@ impl Trf {
                     accumulated_matches += range_d_matches;
                     if !waiting_time_ok && range_d_matches >= range_d_min_for_waiting_time_test {
                         let info = &self.distances[candidate as usize];
-                        let loc = info.entries[info.low_index as usize].location
-                            - info.entries[info.low_index as usize].size
-                            + tuple_size;
+                        let loc = info.first_match_location(tuple_size);
                         if loc <= max_first_match_location {
                             waiting_time_ok = true;
                             waiting_time_d = candidate;
@@ -510,9 +439,7 @@ impl Trf {
             }
             if range_d_matches >= range_d_min_for_waiting_time_test {
                 let info = &self.distances[candidate as usize];
-                let loc = info.entries[info.low_index as usize].location
-                    - info.entries[info.low_index as usize].size
-                    + tuple_size;
+                let loc = info.first_match_location(tuple_size);
                 if loc <= max_first_match_location {
                     waiting_time_ok = true;
                     waiting_time_d = candidate;
@@ -615,7 +542,7 @@ impl Trf {
 
     /// Handles one candidate distance found while scanning tuples.
     fn process_candidate(&mut self, position: i32, distance: i32, tuple_size: i32) {
-        self.add_tuple_match_to_distance_entry(position, tuple_size, distance);
+        self.distances[distance as usize].record_match(position, tuple_size, distance);
 
         let found = self.search_for_distance_match_in_distance_seen(distance, position);
         if found {
