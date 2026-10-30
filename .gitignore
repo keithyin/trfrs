@@ -12,3 +12,4 @@
 !tests/data/*.dat
 !tests/data/*.summary.html
 
+/.codebuddy

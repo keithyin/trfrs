@@ -426,3 +426,58 @@ fn silent_paramset(params: &Params) -> ParamSet {
         ..ParamSet::default()
     }
 }
+
+#[cfg(test)]
+mod test {
+    use std::println;
+
+    use crate::{Params, TrfFinder};
+
+    #[test]
+    fn test_trf() {
+        let seq = "TTTCTATCCGTCTTAGACATAATAATCATTTTAGCCAAAGAACATGTTATGGTAAGAGAA
+TAATAATAATAATAATAATAATAATAATAATAATAATAATAATAATAATAATACACGTTT
+TTTAACATTTTTATTTACCTTTAGATAAAACTTATGAAAAGCATGTTGAATAAAAGTAGG
+ACTCATTAAACAATAAGTGGTGGAAGAATCATATCATTTATTGAGACCTACATATATATC
+TAATAACAGATTTTGTTAGAGACGACAGTTGCTATGTTTT";
+        let seq = seq.replace("\r\n", "");
+        let seq = seq.replace("\n", "");
+
+        let finder = TrfFinder::new(&Params {
+            min_period: 1,
+            maxperiod: 10,
+            minscore: 8,
+            ..Default::default()
+        })
+        .unwrap();
+
+        let result = finder.find(seq).unwrap();
+        for repeat in &result {
+            println!("{:?}", repeat);
+        }
+    }
+
+    #[test]
+    fn test_trf2() {
+        let seq = "TTTCTATCCGTCTTAGACATAATAATCATTTTAGCCAAAGAACATGTTATGGTAAGAGAA
+TAATAATAATAATAATAATAATAACAATAATAATAATAATAATAATAATAATAATACACGTTT
+TTTAACATTTTTATTTACCTTTAGATAAAACTTATGAAAAGCATGTTGAATAAAAGTAGG
+ACTCATTAAACAATAAGTGGTGGAAGAATCATATCATTTATTGAGACCTACATATATATC
+TAATAACAGATTTTGTTAGAGACGACAGTTGCTATGTTTT";
+        let seq = seq.replace("\r\n", "");
+        let seq = seq.replace("\n", "");
+
+        let finder = TrfFinder::new(&Params {
+            min_period: 1,
+            maxperiod: 10,
+            minscore: 8,
+            ..Default::default()
+        })
+        .unwrap();
+
+        let result = finder.find(seq).unwrap();
+        for repeat in &result {
+            println!("{:?}", repeat);
+        }
+    }
+}
