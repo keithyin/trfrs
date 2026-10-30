@@ -203,21 +203,6 @@ impl Trf {
     }
 
     /* ------------------------------------------------------------------ */
-    /* distances seen                                                      */
-    /* ------------------------------------------------------------------ */
-
-    pub fn add_to_distance_seen(&mut self, location: i32, distance: i32, end: i32, score: i32) {
-        let ptr = &mut self.distance_seen_entries[distance as usize];
-        ptr.location = location;
-        ptr.end = end;
-        ptr.score = score;
-    }
-
-    pub fn search_for_distance_match_in_distance_seen(&self, distance: i32, start: i32) -> bool {
-        self.distance_seen_entries[distance as usize].end >= start
-    }
-
-    /* ------------------------------------------------------------------ */
     /* best period list                                                    */
     /* ------------------------------------------------------------------ */
 
@@ -544,8 +529,7 @@ impl Trf {
     fn process_candidate(&mut self, position: i32, distance: i32, tuple_size: i32) {
         self.distances[distance as usize].record_match(position, tuple_size, distance);
 
-        let found = self.search_for_distance_match_in_distance_seen(distance, position);
-        if found {
+        if self.distance_seen.covers(distance, position) {
             return;
         }
 
@@ -589,7 +573,8 @@ impl Trf {
                 crate::state::LOCAL,
             );
         }
-        self.add_to_distance_seen(position, distance, self.max_real_row, self.max_score);
+        self.distance_seen
+            .record(position, distance, self.max_real_row, self.max_score);
 
         /* number of copies required, less restrictive for larger patterns */
         let copynumber = self.copynumber;
@@ -645,7 +630,8 @@ impl Trf {
                 crate::state::LOCAL,
             );
         }
-        self.add_to_distance_seen(position, distance, self.max_real_row, self.max_score);
+        self.distance_seen
+            .record(position, distance, self.max_real_row, self.max_score);
         self.adjust_best_period_entry(distance);
 
         let class_length = self.class_length;
