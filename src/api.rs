@@ -67,8 +67,6 @@ License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 //! Those paths cannot be triggered by valid parameters and normal input, but a
 //! caller embedding the library should treat them like an abort.
 
-use std::fmt;
-
 use crate::clean::RepeatRecord;
 use crate::fasta::FastaSequence;
 use crate::params::{ParamSet, STR_MAX_PERIOD, STR_MIN_PERIOD};
@@ -150,9 +148,10 @@ impl Params {
 }
 
 /// Errors returned by [`TrfFinder::new`] and [`TrfFinder::find`].
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
 pub enum Error {
     /// A search parameter is out of range.
+    #[error("invalid parameter `{name}`: {reason}")]
     InvalidParam {
         /// Name of the offending field of [`Params`].
         name: &'static str,
@@ -160,21 +159,9 @@ pub enum Error {
         reason: String,
     },
     /// The sequence contains no letters, so there is nothing to scan.
+    #[error("the sequence is empty")]
     EmptySequence,
 }
-
-impl fmt::Display for Error {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Error::InvalidParam { name, reason } => {
-                write!(f, "invalid parameter `{}`: {}", name, reason)
-            }
-            Error::EmptySequence => f.write_str("the sequence is empty"),
-        }
-    }
-}
-
-impl std::error::Error for Error {}
 
 /// One reported tandem repeat.
 ///
