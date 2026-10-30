@@ -23,8 +23,8 @@ License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 /// Maximum length of a FASTA sequence name, as stored in the C struct.
 pub const MAX_SEQ_NAME_LEN: usize = 200;
 
-/// Version reported by the program.
-pub const VERSION: &str = "4.10.0";
+/// Version reported by the program, taken from `Cargo.toml`.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// Lower bound of the period range selected by the STR mode (`--str`).
 pub const STR_MIN_PERIOD: u32 = 1;
