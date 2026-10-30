@@ -22,6 +22,8 @@ License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 
 use std::io::{BufRead, Read};
 
+use thiserror::Error;
+
 use crate::params::MAX_SEQ_NAME_LEN;
 
 /// Index of a base in the `ACGTcount[letter - 'A']` tables of the reference
@@ -84,10 +86,13 @@ impl FastaSequence {
 }
 
 /// Error returned by [`load_sequence`].
+#[derive(Debug, Error)]
 pub enum LoadError {
     /// The file did not start with `>`, or was empty.
+    #[error("empty file or bad format")]
     Silent,
     /// An error message that has to be printed through `PrintError()`.
+    #[error("{0}")]
     Message(String),
 }
 

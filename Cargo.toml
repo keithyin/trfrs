@@ -27,6 +27,9 @@ clap = { version = "4.5", default-features = false, features = [
     "suggestions",
 ] }
 
+# Derives Display and std::error::Error for the crate's error types.
+thiserror = "2.0"
+
 # Used only to restore the default SIGPIPE disposition (see `main()`); the
 # reference implementation does not ignore SIGPIPE.
 [target.'cfg(unix)'.dependencies]

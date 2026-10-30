@@ -10,7 +10,7 @@
 `trfrs` 是 Tandem Repeats Finder (TRF) 参考 C 实现 4.10.0 的 Rust 移植版本。
 命令行接口、控制流程与输出文件均与 C 版本保持一致，输出逐字节相同。
 
-- 依赖只有 `clap`（命令行解析）与 `libc`（Unix 下恢复 `SIGPIPE` 默认处理），产物为单个可执行文件
+- 依赖只有 `clap`（命令行解析）、`thiserror`（错误类型派生）与 `libc`（Unix 下恢复 `SIGPIPE` 默认处理），产物为单个可执行文件
 - 支持 FASTA 单序列/多序列文件、标准输入管道
 - 保留上游全部选项与退出码（含 `getopt_long_only` 风格的长选项与短选项合并）
 
