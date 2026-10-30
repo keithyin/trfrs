@@ -97,6 +97,20 @@ fn golden(name: &str) -> String {
         .replace("\r\n", "\n")
 }
 
+/// Version of the reference C program whose output the golden files hold.
+const REFERENCE_VERSION: &str = "4.10.0";
+
+/// The `.dat` and `.summary.html` headers carry the program version.  The
+/// golden files were produced by the reference program, while trfrs reports
+/// its own version from `Cargo.toml`; rewrite that line so the comparison
+/// covers the report and not the version number.
+fn golden_with_program_version(name: &str) -> String {
+    golden(name).replace(
+        &format!("Version {}", REFERENCE_VERSION),
+        &format!("Version {}", env!("CARGO_PKG_VERSION")),
+    )
+}
+
 fn assert_ngs(fasta: &str, golden_file: &str, tag: &str) {
     let (dir, output) = run_fixture(fasta, &["-ngs"], tag);
     assert!(output.status.success(), "trf failed: {:?}", output.status);
@@ -185,13 +199,17 @@ fn multi_dat_and_summary() {
 
     let dat = std::fs::read_to_string(dir.join("multi.fasta.2.5.7.80.10.50.2000.dat"))
         .expect("read .dat output");
-    assert_eq!(dat, golden("multi.fasta.dat"), ".dat output differs");
+    assert_eq!(
+        dat,
+        golden_with_program_version("multi.fasta.dat"),
+        ".dat output differs"
+    );
 
     let summary = std::fs::read_to_string(dir.join("multi.fasta.2.5.7.80.10.50.2000.summary.html"))
         .expect("read summary output");
     assert_eq!(
         summary,
-        golden("multi.fasta.summary.html"),
+        golden_with_program_version("multi.fasta.summary.html"),
         "summary output differs"
     );
 
