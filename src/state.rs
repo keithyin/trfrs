@@ -273,29 +273,29 @@ pub struct Trf {
     pub max_col: i32,
     pub max_score: i32,
 
-    pub tag: Vec<i32>,
+    pub tags: Vec<i32>,
     pub top_tag: i32,
-    pub distance: Vec<DistanceList>,
-    pub distance_seen: Vec<DistanceSeenEntry>,
+    pub distances: Vec<DistanceList>,
+    pub distance_seen_entries: Vec<DistanceSeenEntry>,
     pub best_period_list: VecDeque<BestPeriodElement>,
 
-    pub criteria_count: Vec<i32>,
-    pub consensus_count: Vec<i32>,
-    pub output_size_count: Vec<i32>,
-    pub cell_count: Vec<f64>,
-    pub statistics_distance: Vec<i32>,
+    pub criteria_counts: Vec<i32>,
+    pub consensus_counts: Vec<i32>,
+    pub output_size_counts: Vec<i32>,
+    pub cell_counts: Vec<f64>,
+    pub distance_statistics: Vec<i32>,
     pub sort_multiples: Vec<i32>,
 
     pub num_tuple_sizes: i32,
-    pub tuple_size: [i32; MAX_TUPLE_SIZES + 1],
-    pub tuple_max_distance: [i32; MAX_TUPLE_SIZES + 1],
-    pub tuple_code: [i32; MAX_TUPLE_SIZES + 1],
-    pub tuple_hash: Vec<Vec<i32>>,
-    pub history: Vec<Vec<HistoryEntry>>,
-    pub history_size: [i32; MAX_TUPLE_SIZES + 1],
-    pub next_free_history_index: [i32; MAX_TUPLE_SIZES + 1],
+    pub tuple_sizes: [i32; MAX_TUPLE_SIZES + 1],
+    pub tuple_max_distances: [i32; MAX_TUPLE_SIZES + 1],
+    pub tuple_codes: [i32; MAX_TUPLE_SIZES + 1],
+    pub tuple_hashes: Vec<Vec<i32>>,
+    pub histories: Vec<Vec<HistoryEntry>>,
+    pub history_sizes: [i32; MAX_TUPLE_SIZES + 1],
+    pub next_free_history_indices: [i32; MAX_TUPLE_SIZES + 1],
 
-    pub band_center: Vec<i32>,
+    pub band_centers: Vec<i32>,
 
     pub copynumber: f64,
     pub wraparound_dp_count: f64,
@@ -361,21 +361,21 @@ impl Trf {
         nucleotide_index[b'T' as usize] = 3;
 
         // new_distancelist()
-        let mut distance = Vec::with_capacity(max_distance as usize + 1);
+        let mut distances = Vec::with_capacity(max_distance as usize + 1);
         for distance_value in 0..=max_distance {
             let capacity = std::cmp::max(distance_value, 20) as usize + 1;
-            distance.push(DistanceList::new(capacity));
+            distances.push(DistanceList::new(capacity));
         }
         // clear_distancelist()
         for distance_value in 1..=max_distance {
-            let list = &mut distance[distance_value as usize];
+            let list = &mut distances[distance_value as usize];
             list.low_index = 0;
             list.high_index = std::cmp::max(distance_value, 20);
             list.entry_count = 0;
             list.match_count = 0;
         }
         // init_links()
-        distance[0].link_up = max_distance + 1;
+        distances[0].link_up = max_distance + 1;
 
         let top_tag = max_distance / TAG_SEPARATION;
 
@@ -404,26 +404,29 @@ impl Trf {
             max_row: 0,
             max_col: 0,
             max_score: 0,
-            tag: vec![0; (max_distance / TAG_SEPARATION) as usize + 1],
+            tags: vec![0; (max_distance / TAG_SEPARATION) as usize + 1],
             top_tag,
-            distance,
-            distance_seen: vec![DistanceSeenEntry::default(); MAX_PATTERN_SIZE_CONSTANT + 1],
+            distances,
+            distance_seen_entries: vec![
+                DistanceSeenEntry::default();
+                MAX_PATTERN_SIZE_CONSTANT + 1
+            ],
             best_period_list: VecDeque::new(),
-            criteria_count: vec![0; 2 * (max_distance as usize + 1)],
-            consensus_count: vec![0; 2 * (max_distance as usize + 1)],
-            output_size_count: vec![0; 2 * (max_distance as usize + 1)],
-            cell_count: vec![0.0; 2 * (max_distance as usize + 1)],
-            statistics_distance: vec![0; 4 * max_distance as usize],
+            criteria_counts: vec![0; 2 * (max_distance as usize + 1)],
+            consensus_counts: vec![0; 2 * (max_distance as usize + 1)],
+            output_size_counts: vec![0; 2 * (max_distance as usize + 1)],
+            cell_counts: vec![0.0; 2 * (max_distance as usize + 1)],
+            distance_statistics: vec![0; 4 * max_distance as usize],
             sort_multiples: vec![0; max_distance as usize + 1],
             num_tuple_sizes: 0,
-            tuple_size: [0; MAX_TUPLE_SIZES + 1],
-            tuple_max_distance: [0; MAX_TUPLE_SIZES + 1],
-            tuple_code: [0; MAX_TUPLE_SIZES + 1],
-            tuple_hash: Vec::new(),
-            history: Vec::new(),
-            history_size: [0; MAX_TUPLE_SIZES + 1],
-            next_free_history_index: [0; MAX_TUPLE_SIZES + 1],
-            band_center: vec![0; band_width + 1],
+            tuple_sizes: [0; MAX_TUPLE_SIZES + 1],
+            tuple_max_distances: [0; MAX_TUPLE_SIZES + 1],
+            tuple_codes: [0; MAX_TUPLE_SIZES + 1],
+            tuple_hashes: Vec::new(),
+            histories: Vec::new(),
+            history_sizes: [0; MAX_TUPLE_SIZES + 1],
+            next_free_history_indices: [0; MAX_TUPLE_SIZES + 1],
+            band_centers: vec![0; band_width + 1],
             copynumber: 0.0,
             wraparound_dp_count: 0.0,
             output_count: 0.0,

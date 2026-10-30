@@ -137,7 +137,7 @@ impl Trf {
         distance: i32,
     ) {
         let window_size = max2(distance, 20) + 1;
-        let list = &mut self.distance[distance as usize];
+        let list = &mut self.distances[distance as usize];
 
         if list.entry_count != 0 {
             let window_left_end = min2(location - distance, location - 20) + 1;
@@ -180,19 +180,19 @@ impl Trf {
         /* the reference implementation applies ceil() to an integer division */
         let tag_bucket = distance / TAG_SEPARATION;
         let mut lower_distance;
-        if self.tag[tag_bucket as usize] < distance {
-            lower_distance = self.tag[tag_bucket as usize];
+        if self.tags[tag_bucket as usize] < distance {
+            lower_distance = self.tags[tag_bucket as usize];
             let mut tag_bucket_cursor = tag_bucket;
             while tag_bucket_cursor <= self.top_tag
-                && self.tag[tag_bucket_cursor as usize] < distance
+                && self.tags[tag_bucket_cursor as usize] < distance
             {
-                self.tag[tag_bucket_cursor as usize] = distance;
+                self.tags[tag_bucket_cursor as usize] = distance;
                 tag_bucket_cursor += 1;
             }
-        } else if self.tag[tag_bucket as usize] > distance {
-            lower_distance = self.tag[tag_bucket as usize];
+        } else if self.tags[tag_bucket as usize] > distance {
+            lower_distance = self.tags[tag_bucket as usize];
             while lower_distance > distance {
-                lower_distance = self.distance[lower_distance as usize].link_down;
+                lower_distance = self.distances[lower_distance as usize].link_down;
             }
             if lower_distance == distance {
                 let text = format!("\nTag error following links.  f==d={}", distance);
@@ -205,26 +205,26 @@ impl Trf {
         }
 
         /* link in distance */
-        self.distance[distance as usize].link_down = lower_distance;
-        let higher_distance = self.distance[lower_distance as usize].link_up;
-        self.distance[distance as usize].link_up = higher_distance;
-        self.distance[lower_distance as usize].link_up = distance;
+        self.distances[distance as usize].link_down = lower_distance;
+        let higher_distance = self.distances[lower_distance as usize].link_up;
+        self.distances[distance as usize].link_up = higher_distance;
+        self.distances[lower_distance as usize].link_up = distance;
         if higher_distance <= self.max_distance {
-            self.distance[higher_distance as usize].link_down = distance;
+            self.distances[higher_distance as usize].link_down = distance;
         }
-        self.distance[distance as usize].linked = true;
+        self.distances[distance as usize].linked = true;
     }
 
     /// `untag_Distance_window()`.
     pub fn untag_distance_window(&mut self, distance: i32, link_down: i32) {
         let tag_bucket = distance / TAG_SEPARATION;
-        if self.tag[tag_bucket as usize] != distance {
+        if self.tags[tag_bucket as usize] != distance {
             return;
         }
         let mut tag_bucket_cursor = tag_bucket;
-        while tag_bucket_cursor <= self.top_tag && self.tag[tag_bucket_cursor as usize] == distance
+        while tag_bucket_cursor <= self.top_tag && self.tags[tag_bucket_cursor as usize] == distance
         {
-            self.tag[tag_bucket_cursor as usize] = link_down;
+            self.tags[tag_bucket_cursor as usize] = link_down;
             tag_bucket_cursor += 1;
         }
     }
@@ -232,14 +232,14 @@ impl Trf {
     /// `no_matches_so_unlink_Distance()`; returns 1 when the distance was unlinked.
     pub fn no_matches_so_unlink_distance(&mut self, distance: i32, location: i32) -> i32 {
         let window_size = max2(distance, 20) + 1;
-        let mut entry_count = self.distance[distance as usize].entry_count;
+        let mut entry_count = self.distances[distance as usize].entry_count;
         if entry_count != 0 {
             let window_left_end = min2(location - distance, location - 20) + 1;
             loop {
                 if entry_count == 0 {
                     break;
                 }
-                let list = &mut self.distance[distance as usize];
+                let list = &mut self.distances[distance as usize];
                 let lo = list.low_index as usize;
                 if list.entries[lo].location < window_left_end {
                     let entry_size = list.entries[lo].size;
@@ -253,15 +253,15 @@ impl Trf {
                 }
             }
         }
-        if self.distance[distance as usize].entry_count == 0 {
-            let lower_distance = self.distance[distance as usize].link_down;
-            let higher_distance = self.distance[distance as usize].link_up;
+        if self.distances[distance as usize].entry_count == 0 {
+            let lower_distance = self.distances[distance as usize].link_down;
+            let higher_distance = self.distances[distance as usize].link_up;
 
-            self.distance[lower_distance as usize].link_up = higher_distance;
+            self.distances[lower_distance as usize].link_up = higher_distance;
             if higher_distance <= self.max_distance {
-                self.distance[higher_distance as usize].link_down = lower_distance;
+                self.distances[higher_distance as usize].link_down = lower_distance;
             }
-            self.distance[distance as usize].linked = false;
+            self.distances[distance as usize].linked = false;
 
             self.untag_distance_window(distance, lower_distance);
             return 1;
@@ -274,14 +274,14 @@ impl Trf {
     /* ------------------------------------------------------------------ */
 
     pub fn add_to_distance_seen(&mut self, location: i32, distance: i32, end: i32, score: i32) {
-        let ptr = &mut self.distance_seen[distance as usize];
+        let ptr = &mut self.distance_seen_entries[distance as usize];
         ptr.location = location;
         ptr.end = end;
         ptr.score = score;
     }
 
     pub fn search_for_distance_match_in_distance_seen(&self, distance: i32, start: i32) -> bool {
-        self.distance_seen[distance as usize].end >= start
+        self.distance_seen_entries[distance as usize].end >= start
     }
 
     /* ------------------------------------------------------------------ */
@@ -331,7 +331,7 @@ impl Trf {
                 if entry.index_low
                     <= start - 2 * distance
                         + 1
-                        + self.distance[distance as usize].waiting_time_criteria
+                        + self.distances[distance as usize].waiting_time_criteria
                     && entry.index_high >= start
                 {
                     range_covered = true;
@@ -410,7 +410,7 @@ impl Trf {
         location: i32,
         tuple_size: i32,
     ) -> bool {
-        let info = &self.distance[distance as usize];
+        let info = &self.distances[distance as usize];
         let min_krun_matches = info.k_run_sums_criteria;
         let max_first_match_location =
             max2(0, location - max2(distance, 20)) + info.waiting_time_criteria;
@@ -437,20 +437,20 @@ impl Trf {
         /* look in the low range to see if distance has the most matches */
         let mut high_pointer;
         let mut low_pointer = distance;
-        let mut candidate = self.distance[distance as usize].link_down;
+        let mut candidate = self.distances[distance as usize].link_down;
         let mut accumulated_matches = main_d_matches;
         let mut d_still_best = true;
         while candidate >= low_end_of_range && d_still_best {
-            let next_candidate = self.distance[candidate as usize].link_down;
+            let next_candidate = self.distances[candidate as usize].link_down;
             if self.no_matches_so_unlink_distance(candidate, location) == 0 {
-                let range_d_matches = self.distance[candidate as usize].match_count;
+                let range_d_matches = self.distances[candidate as usize].match_count;
                 if range_d_matches > main_d_matches {
                     d_still_best = false;
                 } else {
                     low_pointer = candidate;
                     accumulated_matches += range_d_matches;
                     if !waiting_time_ok && range_d_matches >= range_d_min_for_waiting_time_test {
-                        let info = &self.distance[candidate as usize];
+                        let info = &self.distances[candidate as usize];
                         let loc = info.entries[info.low_index as usize].location
                             - info.entries[info.low_index as usize].size
                             + tuple_size;
@@ -469,11 +469,11 @@ impl Trf {
         }
 
         /* now check that distance is the best in the upper range */
-        candidate = self.distance[distance as usize].link_up;
+        candidate = self.distances[distance as usize].link_up;
         while candidate <= high_end_of_range && d_still_best {
-            let next_candidate = self.distance[candidate as usize].link_up;
+            let next_candidate = self.distances[candidate as usize].link_up;
             if self.no_matches_so_unlink_distance(candidate, location) == 0
-                && self.distance[candidate as usize].match_count > main_d_matches
+                && self.distances[candidate as usize].match_count > main_d_matches
             {
                 d_still_best = false;
             }
@@ -490,14 +490,14 @@ impl Trf {
 
         /* lower range didn'candidate work, now test higher ranges */
         let indel_random_walk_range = distance - low_end_of_range + 1;
-        candidate = self.distance[distance as usize].link_up;
+        candidate = self.distances[distance as usize].link_up;
         while candidate <= high_end_of_range {
-            let next_candidate = self.distance[candidate as usize].link_up;
+            let next_candidate = self.distances[candidate as usize].link_up;
             high_pointer = candidate;
-            let range_d_matches = self.distance[candidate as usize].match_count;
+            let range_d_matches = self.distances[candidate as usize].match_count;
             accumulated_matches += range_d_matches;
             while low_pointer < high_pointer - indel_random_walk_range + 1 {
-                accumulated_matches -= self.distance[low_pointer as usize].match_count;
+                accumulated_matches -= self.distances[low_pointer as usize].match_count;
                 if accumulated_matches <= 0 {
                     self.write_to_alignment_file("\n*** error in meet crieria, m<=0");
                     self.fatal(-16);
@@ -506,10 +506,10 @@ impl Trf {
                     waiting_time_ok = false;
                     waiting_time_d = 0;
                 }
-                low_pointer = self.distance[low_pointer as usize].link_up;
+                low_pointer = self.distances[low_pointer as usize].link_up;
             }
             if range_d_matches >= range_d_min_for_waiting_time_test {
-                let info = &self.distance[candidate as usize];
+                let info = &self.distances[candidate as usize];
                 let loc = info.entries[info.low_index as usize].location
                     - info.entries[info.low_index as usize].size
                     + tuple_size;
@@ -544,12 +544,12 @@ impl Trf {
 
         for distance in 1..=self.max_distance {
             if distance <= SMALL_DISTANCE {
-                self.distance[distance as usize].min_distance_range = distance;
-                self.distance[distance as usize].max_distance_range = distance;
+                self.distances[distance as usize].min_distance_range = distance;
+                self.distances[distance as usize].max_distance_range = distance;
             } else {
-                self.distance[distance as usize].min_distance_range =
+                self.distances[distance as usize].min_distance_range =
                     max2(distance - self.indel_random_walk_range(distance), 1);
-                self.distance[distance as usize].max_distance_range = min2(
+                self.distances[distance as usize].max_distance_range = min2(
                     distance + self.indel_random_walk_range(distance),
                     self.max_distance,
                 );
@@ -560,32 +560,32 @@ impl Trf {
         let sumdata: &[i32; 2001];
         if self.match_probability_percent == 80 {
             self.num_tuple_sizes = 3;
-            self.tuple_size[0] = 0;
-            self.tuple_size[1] = 4;
-            self.tuple_size[2] = 5;
-            self.tuple_size[3] = 7;
+            self.tuple_sizes[0] = 0;
+            self.tuple_sizes[1] = 4;
+            self.tuple_sizes[2] = 5;
+            self.tuple_sizes[3] = 7;
             self.write_to_alignment_file("\ntuple sizes 0,4,5,7");
-            self.tuple_max_distance[0] = 0;
-            self.tuple_max_distance[1] = 29;
-            self.tuple_max_distance[2] = 159;
-            self.tuple_max_distance[3] = self.max_distance;
+            self.tuple_max_distances[0] = 0;
+            self.tuple_max_distances[1] = 29;
+            self.tuple_max_distances[2] = 159;
+            self.tuple_max_distances[3] = self.max_distance;
             let text = format!("\ntuple distances 0, 29, 159, {}", self.max_distance);
             self.write_to_alignment_file(&text);
             waitdata = &WAITDATA80;
             sumdata = &SUMDATA80;
         } else if self.match_probability_percent == 75 {
             self.num_tuple_sizes = 4;
-            self.tuple_size[0] = 0;
-            self.tuple_size[1] = 3;
-            self.tuple_size[2] = 4;
-            self.tuple_size[3] = 5;
-            self.tuple_size[4] = 7;
+            self.tuple_sizes[0] = 0;
+            self.tuple_sizes[1] = 3;
+            self.tuple_sizes[2] = 4;
+            self.tuple_sizes[3] = 5;
+            self.tuple_sizes[4] = 7;
             self.write_to_alignment_file("\ntuple sizes 0,3,4,5,7");
-            self.tuple_max_distance[0] = 0;
-            self.tuple_max_distance[1] = 29;
-            self.tuple_max_distance[2] = 43;
-            self.tuple_max_distance[3] = 159;
-            self.tuple_max_distance[4] = self.max_distance;
+            self.tuple_max_distances[0] = 0;
+            self.tuple_max_distances[1] = 29;
+            self.tuple_max_distances[2] = 43;
+            self.tuple_max_distances[3] = 159;
+            self.tuple_max_distances[4] = self.max_distance;
             let text = format!("\ntuple distances 0, 29, 43, 159, {}", self.max_distance);
             self.write_to_alignment_file(&text);
             waitdata = &WAITDATA75;
@@ -605,11 +605,11 @@ impl Trf {
 
         for distance in 1..=self.max_distance {
             let idx = std::cmp::min(MAX_PATTERN_SIZE_CONSTANT as i32, distance) as usize;
-            self.distance[distance as usize].waiting_time_criteria = waitdata[idx];
+            self.distances[distance as usize].waiting_time_criteria = waitdata[idx];
         }
         for distance in 1..=self.max_distance {
             let idx = std::cmp::min(MAX_PATTERN_SIZE_CONSTANT as i32, distance) as usize;
-            self.distance[distance as usize].k_run_sums_criteria = sumdata[idx];
+            self.distances[distance as usize].k_run_sums_criteria = sumdata[idx];
         }
     }
 
@@ -622,7 +622,7 @@ impl Trf {
             return;
         }
 
-        if !self.distance[distance as usize].linked {
+        if !self.distances[distance as usize].linked {
             self.link_distance_window(distance);
         }
 
@@ -633,11 +633,11 @@ impl Trf {
         }
 
         self.wraparound_dp_count += 1.0;
-        self.criteria_count[distance as usize] += 1;
+        self.criteria_counts[distance as usize] += 1;
         self.rows = 0.0;
         if distance <= SMALL_DISTANCE {
             self.wraparound_dp(position, distance, false);
-            self.cell_count[distance as usize] += self.rows * distance as f64;
+            self.cell_counts[distance as usize] += self.rows * distance as f64;
             self.get_pair_alignment_with_copynumber(distance);
         } else {
             let band_radius = max2(MIN_BAND_RADIUS, self.indel_random_walk_range(distance));
@@ -650,7 +650,7 @@ impl Trf {
                 false,
                 RECENTER_CRITERION,
             );
-            self.cell_count[distance as usize] += self.rows
+            self.cell_counts[distance as usize] += self.rows
                 * (2 * max2(MIN_BAND_RADIUS, self.indel_random_walk_range(distance)) + 1) as f64;
             let trace_band_radius = min2(
                 2 * max2(MIN_BAND_RADIUS, self.indel_random_walk_range(distance)),
@@ -687,11 +687,11 @@ impl Trf {
         if self.consensus_class_length != self.class_length {
             self.class_length = self.consensus_class_length;
         }
-        self.consensus_count[self.class_length as usize] += 1;
+        self.consensus_counts[self.class_length as usize] += 1;
         self.rows = 0.0;
         if self.class_length <= SMALL_DISTANCE {
             self.wraparound_dp(position, self.class_length, true);
-            self.cell_count[self.class_length as usize] += self.rows * distance as f64;
+            self.cell_counts[self.class_length as usize] += self.rows * distance as f64;
             self.get_pair_alignment_with_copynumber(self.class_length);
         } else {
             let class_length = self.class_length;
@@ -705,7 +705,7 @@ impl Trf {
                 true,
                 RECENTER_CRITERION,
             );
-            self.cell_count[class_length as usize] += self.rows
+            self.cell_counts[class_length as usize] += self.rows
                 * (2 * max2(MIN_BAND_RADIUS, self.indel_random_walk_range(class_length)) + 1)
                     as f64;
             let trace_band_radius = min2(
@@ -734,7 +734,7 @@ impl Trf {
 
         if class_length >= self.minsize && self.align_pair.score >= self.minscore {
             self.output_count += 1.0;
-            self.output_size_count[class_length as usize] += 1;
+            self.output_size_counts[class_length as usize] += 1;
             let text = format!(
                 "\nFound at i:{} original size:{} final size:{}",
                 position, distance, class_length
@@ -753,19 +753,19 @@ impl Trf {
 
         self.output_count = 0.0;
 
-        let min_tuple_size = self.tuple_size[1];
-        let max_tuple_size = self.tuple_size[self.num_tuple_sizes as usize];
+        let min_tuple_size = self.tuple_sizes[1];
+        let max_tuple_size = self.tuple_sizes[self.num_tuple_sizes as usize];
 
         let num_tuple_sizes = self.num_tuple_sizes as usize;
-        self.tuple_hash = vec![Vec::new(); num_tuple_sizes + 1];
-        self.history = vec![Vec::new(); num_tuple_sizes + 1];
+        self.tuple_hashes = vec![Vec::new(); num_tuple_sizes + 1];
+        self.histories = vec![Vec::new(); num_tuple_sizes + 1];
         for tuple_index in 1..=num_tuple_sizes {
-            let num_codes = FOUR_TO_THE[self.tuple_size[tuple_index] as usize] as usize;
-            let history_capacity = 2 * (self.tuple_max_distance[tuple_index] + 1) + 2;
-            self.tuple_hash[tuple_index] = vec![0i32; num_codes];
-            self.history_size[tuple_index] = history_capacity;
-            self.history[tuple_index] = vec![HistoryEntry::default(); history_capacity as usize];
-            self.next_free_history_index[tuple_index] = 1;
+            let num_codes = FOUR_TO_THE[self.tuple_sizes[tuple_index] as usize] as usize;
+            let history_capacity = 2 * (self.tuple_max_distances[tuple_index] + 1) + 2;
+            self.tuple_hashes[tuple_index] = vec![0i32; num_codes];
+            self.history_sizes[tuple_index] = history_capacity;
+            self.histories[tuple_index] = vec![HistoryEntry::default(); history_capacity as usize];
+            self.next_free_history_indices[tuple_index] = 1;
         }
 
         self.sort_multiples = vec![0i32; self.max_distance as usize + 1];
@@ -822,57 +822,58 @@ impl Trf {
                 }
             } else {
                 rolling_code = (rolling_code
-                    % FOUR_TO_THE[(self.tuple_size[self.num_tuple_sizes as usize] - 1) as usize])
+                    % FOUR_TO_THE[(self.tuple_sizes[self.num_tuple_sizes as usize] - 1) as usize])
                     * 4
                     + self.nucleotide_index[self.sequence[position as usize] as usize];
             }
 
-            self.tuple_code[self.num_tuple_sizes as usize] = rolling_code;
+            self.tuple_codes[self.num_tuple_sizes as usize] = rolling_code;
             for smaller_tuple_index in (1..self.num_tuple_sizes as usize).rev() {
-                self.tuple_code[smaller_tuple_index] =
-                    rolling_code % FOUR_TO_THE[self.tuple_size[smaller_tuple_index] as usize];
+                self.tuple_codes[smaller_tuple_index] =
+                    rolling_code % FOUR_TO_THE[self.tuple_sizes[smaller_tuple_index] as usize];
             }
 
             /* process this position using all the tuple sizes */
             let mut tuple_index = 1usize;
             while tuple_index <= self.num_tuple_sizes as usize
-                && position - bad_char_index >= self.tuple_size[tuple_index]
+                && position - bad_char_index >= self.tuple_sizes[tuple_index]
             {
-                let node = self.tuple_hash[tuple_index][self.tuple_code[tuple_index] as usize];
-                let write_slot = self.next_free_history_index[tuple_index];
+                let node = self.tuple_hashes[tuple_index][self.tuple_codes[tuple_index] as usize];
+                let write_slot = self.next_free_history_indices[tuple_index];
                 let mut next_free_slot = write_slot + 1;
-                if next_free_slot == self.history_size[tuple_index] {
+                if next_free_slot == self.history_sizes[tuple_index] {
                     next_free_slot = 1;
                 }
 
-                if self.history[tuple_index][next_free_slot as usize].location != 0
+                if self.histories[tuple_index][next_free_slot as usize].location != 0
                     && next_free_slot
-                        == self.tuple_hash[tuple_index]
-                            [self.history[tuple_index][next_free_slot as usize].code as usize]
+                        == self.tuple_hashes[tuple_index]
+                            [self.histories[tuple_index][next_free_slot as usize].code as usize]
                 {
                     let evicted_code =
-                        self.history[tuple_index][next_free_slot as usize].code as usize;
-                    self.tuple_hash[tuple_index][evicted_code] = 0;
+                        self.histories[tuple_index][next_free_slot as usize].code as usize;
+                    self.tuple_hashes[tuple_index][evicted_code] = 0;
                 }
-                self.next_free_history_index[tuple_index] = next_free_slot;
+                self.next_free_history_indices[tuple_index] = next_free_slot;
 
-                self.tuple_hash[tuple_index][self.tuple_code[tuple_index] as usize] = write_slot;
-                self.history[tuple_index][write_slot as usize].location = position;
-                self.history[tuple_index][write_slot as usize].previous = node;
-                self.history[tuple_index][write_slot as usize].code = self.tuple_code[tuple_index];
+                self.tuple_hashes[tuple_index][self.tuple_codes[tuple_index] as usize] = write_slot;
+                self.histories[tuple_index][write_slot as usize].location = position;
+                self.histories[tuple_index][write_slot as usize].previous = node;
+                self.histories[tuple_index][write_slot as usize].code =
+                    self.tuple_codes[tuple_index];
 
                 let mut prev_node = write_slot;
                 let mut node = node;
                 while node != 0 {
-                    let distance = position - self.history[tuple_index][node as usize].location;
-                    if distance > self.tuple_max_distance[tuple_index] {
-                        self.history[tuple_index][prev_node as usize].previous = 0;
+                    let distance = position - self.histories[tuple_index][node as usize].location;
+                    if distance > self.tuple_max_distances[tuple_index] {
+                        self.histories[tuple_index][prev_node as usize].previous = 0;
                         node = 0;
                     } else {
                         prev_node = node;
-                        node = self.history[tuple_index][node as usize].previous;
-                        if distance > self.tuple_max_distance[tuple_index - 1] {
-                            let tuple_size = self.tuple_size[tuple_index];
+                        node = self.histories[tuple_index][node as usize].previous;
+                        if distance > self.tuple_max_distances[tuple_index - 1] {
+                            let tuple_size = self.tuple_sizes[tuple_index];
                             self.process_candidate(position, distance, tuple_size);
                         }
                     }
@@ -894,7 +895,7 @@ impl Trf {
     /// to the output file and appends one [`RepeatRecord`] to `self.records`.
     pub fn report_repeat(&mut self, consensus_size: i32) {
         for distance in 1..=self.max_distance + self.indel_random_walk_range(self.max_distance) {
-            self.statistics_distance[distance as usize] = 0;
+            self.distance_statistics[distance as usize] = 0;
         }
 
         let mut match_count = 0i32;
@@ -992,7 +993,7 @@ impl Trf {
                             - self.align_pair.sequence_index[left_col as usize])
                             .abs();
                         if distance < 4 * self.max_distance {
-                            self.statistics_distance[distance as usize] += 1;
+                            self.distance_statistics[distance as usize] += 1;
                             if distance < min_distance {
                                 min_distance = distance;
                             }
@@ -1069,7 +1070,7 @@ impl Trf {
                         - self.align_pair.sequence_index[left_col as usize])
                         .abs();
                     if distance < 4 * self.max_distance {
-                        self.statistics_distance[distance as usize] += 1;
+                        self.distance_statistics[distance as usize] += 1;
                         if distance < min_distance {
                             min_distance = distance;
                         }
@@ -1101,10 +1102,10 @@ impl Trf {
         let mut best_match_distance = 0;
         let mut best_match_count = 0;
         for distance in min_distance..=max_distance {
-            if self.statistics_distance[distance as usize] != 0
-                && self.statistics_distance[distance as usize] > best_match_count
+            if self.distance_statistics[distance as usize] != 0
+                && self.distance_statistics[distance as usize] > best_match_count
             {
-                best_match_count = self.statistics_distance[distance as usize];
+                best_match_count = self.distance_statistics[distance as usize];
                 best_match_distance = distance;
             }
         }
@@ -1143,12 +1144,12 @@ impl Trf {
             out.push('\n');
             out.push_str("\nMatches are distributed among these distances:");
             for distance in min_distance..=max_distance {
-                if self.statistics_distance[distance as usize] != 0 {
+                if self.distance_statistics[distance as usize] != 0 {
                     out.push_str(&format!(
                         "\n {:3}  {:3}  {:0.2}",
                         distance,
-                        self.statistics_distance[distance as usize],
-                        self.statistics_distance[distance as usize] as f32 / match_count as f32
+                        self.distance_statistics[distance as usize],
+                        self.distance_statistics[distance as usize] as f32 / match_count as f32
                     ));
                 }
             }

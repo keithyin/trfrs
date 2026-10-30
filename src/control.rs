@@ -199,15 +199,15 @@ impl Trf {
         self.cell_total = 0.0;
         let mut distance = self.max_distance;
         while distance >= 1 {
-            self.cell_total += self.cell_count[distance as usize];
+            self.cell_total += self.cell_counts[distance as usize];
             if distance <= SMALL_DISTANCE {
-                self.wasted_total += (self.criteria_count[distance as usize]
-                    + self.consensus_count[distance as usize])
+                self.wasted_total += (self.criteria_counts[distance as usize]
+                    + self.consensus_counts[distance as usize])
                     as f64
                     * (distance * distance * 2) as f64;
             } else {
-                self.wasted_total += (self.criteria_count[distance as usize]
-                    + self.consensus_count[distance as usize])
+                self.wasted_total += (self.criteria_counts[distance as usize]
+                    + self.consensus_counts[distance as usize])
                     as f64
                     * distance as f64
                     * (2 * self.indel_random_walk_range(distance) + 1) as f64

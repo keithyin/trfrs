@@ -124,7 +124,7 @@ impl Trf {
             trace.max_score = *cell_score;
             trace.min_real_row = real_row;
             trace.min_col = pattern_col;
-            trace.min_col_band_center = self.band_center[row as usize];
+            trace.min_col_band_center = self.band_centers[row as usize];
             trace.min_col_position = col;
         }
         if *cell_score > trace.max_row_score {
@@ -220,7 +220,7 @@ impl Trf {
         };
         let mut real_row = start + 1;
         let mut row = self.band_width as i32;
-        self.band_center[row as usize] = 0;
+        self.band_centers[row as usize] = 0;
         trace.matches_in_diagonal = 0;
 
         for col in 0..=band_radius {
@@ -255,7 +255,7 @@ impl Trf {
         let mut row = 0i32;
         let mut real_row = trace.min_real_row - 1;
 
-        self.band_center[0] = (trace.min_col_band_center - 1 + size) % size;
+        self.band_centers[0] = (trace.min_col_band_center - 1 + size) % size;
         trace.matches_in_diagonal = 0;
         trace.match_at_max_col = -2;
         trace.max_score = 0;
@@ -359,18 +359,18 @@ impl Trf {
         let current_base = self.sequence[real_row as usize];
 
         if trace.matches_in_diagonal >= recenter_criterion {
-            self.band_center[row as usize] = (trace.match_at_max_col - 1 + size) % size;
+            self.band_centers[row as usize] = (trace.match_at_max_col - 1 + size) % size;
         } else {
-            self.band_center[row as usize] =
-                (self.band_center[(row + 1) as usize] - 1 + size) % size;
+            self.band_centers[row as usize] =
+                (self.band_centers[(row + 1) as usize] - 1 + size) % size;
         }
 
         let mut band_shift =
-            (self.band_center[row as usize] - self.band_center[(row + 1) as usize] + size) % size;
+            (self.band_centers[row as usize] - self.band_centers[(row + 1) as usize] + size) % size;
         if size - band_shift <= band_shift {
             band_shift = -(size - band_shift);
         }
-        let pattern_col = (self.band_center[row as usize] + band_radius) % size;
+        let pattern_col = (self.band_centers[row as usize] + band_radius) % size;
 
         if band_shift <= -1 {
             /* band shifts left */
@@ -603,17 +603,17 @@ impl Trf {
         let current_base = self.sequence[real_row as usize];
 
         if trace.matches_in_diagonal >= recenter_criterion {
-            self.band_center[row as usize] = (trace.match_at_max_col + 1) % size;
+            self.band_centers[row as usize] = (trace.match_at_max_col + 1) % size;
         } else {
-            self.band_center[row as usize] = (self.band_center[(row - 1) as usize] + 1) % size;
+            self.band_centers[row as usize] = (self.band_centers[(row - 1) as usize] + 1) % size;
         }
 
         let mut band_shift =
-            (self.band_center[row as usize] - self.band_center[(row - 1) as usize] + size) % size;
+            (self.band_centers[row as usize] - self.band_centers[(row - 1) as usize] + size) % size;
         if size - band_shift <= band_shift {
             band_shift = -(size - band_shift);
         }
-        let pattern_col = (self.band_center[row as usize] - band_radius + size) % size;
+        let pattern_col = (self.band_centers[row as usize] - band_radius + size) % size;
 
         if band_shift >= 1 {
             /* band shifts right */
@@ -1183,7 +1183,7 @@ impl Trf {
         let mut real_row = self.max_real_row;
         let mut row = self.max_row;
         let mut pattern_col = self.max_col;
-        let mut band_shift = (self.max_col - self.band_center[row as usize] + size) % size;
+        let mut band_shift = (self.max_col - self.band_centers[row as usize] + size) % size;
         if size - band_shift <= band_shift {
             band_shift = -(size - band_shift);
         }
@@ -1201,14 +1201,15 @@ impl Trf {
             if option == LOCAL && cell_score == 0 && row != 0 {
                 /* check to see if the LOCAL zero score is a legitimate zero */
                 let mut column_shift =
-                    (pattern_col - self.band_center[(row - 1) as usize] + size) % size;
+                    (pattern_col - self.band_centers[(row - 1) as usize] + size) % size;
                 if size - column_shift <= column_shift {
                     column_shift = -(size - column_shift);
                 }
                 let up_col = band_radius + column_shift;
-                let mut center_shift =
-                    (self.band_center[row as usize] - self.band_center[(row - 1) as usize] + size)
-                        % size;
+                let mut center_shift = (self.band_centers[row as usize]
+                    - self.band_centers[(row - 1) as usize]
+                    + size)
+                    % size;
                 if size - center_shift <= center_shift {
                     center_shift = -(size - center_shift);
                 }
@@ -1271,7 +1272,7 @@ impl Trf {
             }
 
             let mut column_shift =
-                (pattern_col - self.band_center[(row - 1) as usize] + size) % size;
+                (pattern_col - self.band_centers[(row - 1) as usize] + size) % size;
             if size - column_shift <= column_shift {
                 column_shift = -(size - column_shift);
             }
@@ -1280,9 +1281,10 @@ impl Trf {
             /* try the three predecessors: diagonal, up, left */
             let mut advanced = false;
             if !(option == GLOBAL && pattern_col == -1) {
-                let mut center_shift =
-                    (self.band_center[row as usize] - self.band_center[(row - 1) as usize] + size)
-                        % size;
+                let mut center_shift = (self.band_centers[row as usize]
+                    - self.band_centers[(row - 1) as usize]
+                    + size)
+                    % size;
                 if size - center_shift <= center_shift {
                     center_shift = -(size - center_shift);
                 }
