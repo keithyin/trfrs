@@ -148,6 +148,75 @@ pub struct HistoryEntry {
     pub code: i32,
 }
 
+/// The rolling tuple-hash machinery for one tuple size: `tuple_hash[k]`,
+/// `history[k]`, `history_size[k]` and `next_free_history_index[k]` in the
+/// reference implementation.
+///
+/// `hash[code]` points into `entries`; slot/location `0` is the null sentinel
+/// (`location == 0` marks a free slot, `previous == 0` ends a code's chain).
+/// When [`Self::push`] recycles a slot it also clears the hash entry that still
+/// points at it, so the two arrays are only consistent when mutated together.
+#[derive(Default)]
+pub struct TupleHistory {
+    /// `tuple_hash[k]`: slot of the newest occurrence of each `4^tuple_size` code.
+    pub hash: Vec<i32>,
+    /// `history[k]`: ring of occurrences; slot 0 is never written.
+    pub entries: Vec<HistoryEntry>,
+    /// `history_size[k]`: `entries.len()` as an `i32`, mirroring the C comparison.
+    pub size: i32,
+    /// `next_free_history_index[k]`: slot written by the next `push`, wrapping to 1.
+    pub next_free: i32,
+}
+
+impl TupleHistory {
+    /// Capacities exactly as allocated by the reference `scan_sequence`:
+    /// `4^tuple_size` hash entries and `2 * (max_distance + 1) + 2` slots.
+    /// Private: only [`Trf::init_tuple_tables`] (same module) creates these.
+    fn new(tuple_size: i32, max_distance: i32) -> Self {
+        let size = 2 * (max_distance + 1) + 2;
+        TupleHistory {
+            hash: vec![0; FOUR_TO_THE[tuple_size as usize] as usize],
+            entries: vec![HistoryEntry::default(); size as usize],
+            size,
+            next_free: 1,
+        }
+    }
+
+    /// Records the occurrence of `code` ending at `position`, evicting the slot
+    /// about to be recycled when it is still its code's chain head.
+    ///
+    /// Returns `(write_slot, previous_head)`: the slot just written (the walk's
+    /// `prev_node`) and the head to start the distance walk from.  The statement
+    /// order mirrors `scan_sequence`; in particular the eviction check inspects
+    /// `next_free_slot`, not `write_slot`.
+    #[inline]
+    pub fn push(&mut self, position: i32, code: i32) -> (i32, i32) {
+        let previous_head = self.hash[code as usize];
+        let write_slot = self.next_free;
+        let mut next_free_slot = write_slot + 1;
+        if next_free_slot == self.size {
+            next_free_slot = 1;
+        }
+
+        // HistoryEntry is Copy, so this value read holds no borrow across the
+        // hash update below.
+        let evicted = self.entries[next_free_slot as usize];
+        if evicted.location != 0 && next_free_slot == self.hash[evicted.code as usize] {
+            self.hash[evicted.code as usize] = 0;
+        }
+        self.next_free = next_free_slot;
+
+        self.hash[code as usize] = write_slot;
+        self.entries[write_slot as usize] = HistoryEntry {
+            location: position,
+            previous: previous_head,
+            code,
+        };
+
+        (write_slot, previous_head)
+    }
+}
+
 /// Working copy of the consensus pattern plus the nucleotide counters.
 pub struct Consensus {
     pub pattern: Vec<u8>,
@@ -290,10 +359,9 @@ pub struct Trf {
     pub tuple_sizes: [i32; MAX_TUPLE_SIZES + 1],
     pub tuple_max_distances: [i32; MAX_TUPLE_SIZES + 1],
     pub tuple_codes: [i32; MAX_TUPLE_SIZES + 1],
-    pub tuple_hashes: Vec<Vec<i32>>,
-    pub histories: Vec<Vec<HistoryEntry>>,
-    pub history_sizes: [i32; MAX_TUPLE_SIZES + 1],
-    pub next_free_history_indices: [i32; MAX_TUPLE_SIZES + 1],
+    /// Per tuple size `k`: hash table and rolling history.  Index 0 is an unused
+    /// sentinel so `k` stays 1-based; live entries are `1..=num_tuple_sizes`.
+    pub tuple_histories: Vec<TupleHistory>,
 
     pub band_centers: Vec<i32>,
 
@@ -422,10 +490,7 @@ impl Trf {
             tuple_sizes: [0; MAX_TUPLE_SIZES + 1],
             tuple_max_distances: [0; MAX_TUPLE_SIZES + 1],
             tuple_codes: [0; MAX_TUPLE_SIZES + 1],
-            tuple_hashes: Vec::new(),
-            histories: Vec::new(),
-            history_sizes: [0; MAX_TUPLE_SIZES + 1],
-            next_free_history_indices: [0; MAX_TUPLE_SIZES + 1],
+            tuple_histories: Vec::new(),
             band_centers: vec![0; band_width + 1],
             copynumber: 0.0,
             wraparound_dp_count: 0.0,
@@ -458,6 +523,22 @@ impl Trf {
         };
         trf.score_matrix[0] = 1; // S[0][0]=1
         trf
+    }
+
+    /// Allocates [`Self::tuple_histories`] from the configured tuple sizes.
+    /// Index 0 is left as an inert sentinel so every tuple loop keeps the
+    /// reference implementation's 1-based indexing.
+    pub fn init_tuple_tables(&mut self) {
+        let num_tuple_sizes = self.num_tuple_sizes as usize;
+        self.tuple_histories = Vec::with_capacity(num_tuple_sizes + 1);
+        self.tuple_histories.push(TupleHistory::default());
+        for tuple_index in 1..=num_tuple_sizes {
+            self.tuple_histories.push(TupleHistory::new(
+                self.tuple_sizes[tuple_index],
+                self.tuple_max_distances[tuple_index],
+            ));
+        }
+        debug_assert_eq!(self.tuple_histories.len(), num_tuple_sizes + 1);
     }
 
     #[inline]
@@ -559,5 +640,82 @@ impl Trf {
             print!(".");
             let _ = std::io::stdout().flush();
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn tuple_history_capacities_match_reference() {
+        let history = TupleHistory::new(4, 29);
+        assert_eq!(history.hash.len(), FOUR_TO_THE[4] as usize);
+        assert_eq!(history.size, 2 * (29 + 1) + 2);
+        assert_eq!(history.entries.len(), history.size as usize);
+        assert_eq!(history.next_free, 1);
+        assert!(history.entries.iter().all(|entry| entry.location == 0));
+    }
+
+    #[test]
+    fn push_links_new_entry_to_previous_head() {
+        let mut history = TupleHistory::new(4, 3);
+        assert_eq!(history.push(10, 2), (1, 0));
+        assert_eq!(history.hash[2], 1);
+        assert_eq!(history.push(20, 2), (2, 1));
+        assert_eq!(history.hash[2], 2);
+        assert_eq!(history.entries[2].location, 20);
+        assert_eq!(history.entries[2].previous, 1);
+        assert_eq!(history.entries[2].code, 2);
+    }
+
+    #[test]
+    fn push_wraps_and_clears_evicted_hash_entries() {
+        // size = 2 * (1 + 1) + 2 = 6, usable slots 1..=5.
+        let mut history = TupleHistory::new(1, 1);
+        for (position, code) in (1..=4).zip(0..=3) {
+            history.push(position, code);
+        }
+        // Writing slot 5 inspects slot 1, which is still code 0's chain head.
+        assert_eq!(history.push(5, 0), (5, 1));
+        assert_eq!(history.hash[0], 5);
+        // The next write recycles slot 1 and clears slot 2's stale head entry.
+        assert_eq!(history.push(6, 2), (1, 3));
+        assert_eq!(history.hash[2], 1);
+        assert_eq!(history.hash[1], 0);
+        assert_eq!(history.hash[0], 5);
+    }
+
+    #[test]
+    fn default_tuple_history_is_an_inert_sentinel() {
+        let history = TupleHistory::default();
+        assert!(history.hash.is_empty());
+        assert!(history.entries.is_empty());
+        assert_eq!(history.size, 0);
+        assert_eq!(history.next_free, 0);
+    }
+
+    #[test]
+    fn init_tuple_tables_keeps_index_zero_as_sentinel() {
+        let fasta = FastaSequence::from_bytes(b"t", b"ACGTACGT");
+        let mut trf = Trf::new(ParamSet::default(), &fasta);
+        trf.num_tuple_sizes = 3;
+        trf.tuple_sizes[1] = 4;
+        trf.tuple_sizes[2] = 5;
+        trf.tuple_sizes[3] = 7;
+        trf.tuple_max_distances[1] = 29;
+        trf.tuple_max_distances[2] = 159;
+        trf.tuple_max_distances[3] = trf.max_distance;
+
+        trf.init_tuple_tables();
+
+        assert_eq!(trf.tuple_histories.len(), 4);
+        assert!(trf.tuple_histories[0].entries.is_empty());
+        assert_eq!(trf.tuple_histories[1].hash.len(), FOUR_TO_THE[4] as usize);
+        assert_eq!(trf.tuple_histories[2].size, 2 * (159 + 1) + 2);
+        assert_eq!(trf.tuple_histories[3].size, 2 * (trf.max_distance + 1) + 2);
+        assert!(trf.tuple_histories[1..]
+            .iter()
+            .all(|history| history.next_free == 1));
     }
 }
