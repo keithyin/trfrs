@@ -189,10 +189,50 @@ impl DistanceList {
 
 #[derive(Clone, Copy, Default)]
 pub struct DistanceSeenEntry {
-    /// Location in the sequence where the distance was last seen.
+    /// Location in the sequence where the distance was last seen.  Written by
+    /// [`DistanceSeen::record`] but never read, exactly as in the reference
+    /// implementation; kept to mirror the C `distance_seen` struct.
+    #[allow(dead_code)]
     pub location: i32,
+    /// Row reached by the most recent DP run for this distance.
     pub end: i32,
+    /// Score of the most recent DP run.  Written but never read, as in C.
+    #[allow(dead_code)]
     pub score: i32,
+}
+
+/// `distance_seen[]` from the reference implementation: for each distance, the
+/// outcome of the last wraparound DP run, used to skip candidates it covered.
+pub struct DistanceSeen {
+    /// One slot per distance, indexed exactly as the C array (`0..=2000`).
+    pub entries: Vec<DistanceSeenEntry>,
+}
+
+impl DistanceSeen {
+    /// Allocates `distance_seen[MAX_PATTERN_SIZE_CONSTANT + 1]`, zeroed as in
+    /// the reference implementation.  Private: only [`Trf::new`] creates it.
+    fn new() -> Self {
+        DistanceSeen {
+            entries: vec![DistanceSeenEntry::default(); MAX_PATTERN_SIZE_CONSTANT + 1],
+        }
+    }
+
+    /// `add_to_distance_seen()`: records the result of the DP run for
+    /// `distance`.  Argument order follows the C function.
+    #[inline]
+    pub fn record(&mut self, location: i32, distance: i32, end: i32, score: i32) {
+        let entry = &mut self.entries[distance as usize];
+        entry.location = location;
+        entry.end = end;
+        entry.score = score;
+    }
+
+    /// `search_for_distance_match_in_distance_seen()`: true when the last run
+    /// for `distance` already reached `start` (`end >= start`).
+    #[inline]
+    pub fn covers(&self, distance: i32, start: i32) -> bool {
+        self.entries[distance as usize].end >= start
+    }
 }
 
 #[derive(Clone, Copy, Default)]
@@ -410,7 +450,8 @@ pub struct Trf {
     pub tags: Vec<i32>,
     pub top_tag: i32,
     pub distances: Vec<DistanceList>,
-    pub distance_seen_entries: Vec<DistanceSeenEntry>,
+    /// `distance_seen[]`: per-distance DP coverage bookkeeping.
+    pub distance_seen: DistanceSeen,
     pub best_period_list: VecDeque<BestPeriodElement>,
 
     pub criteria_counts: Vec<i32>,
@@ -531,10 +572,7 @@ impl Trf {
             tags: vec![0; (max_distance / TAG_SEPARATION) as usize + 1],
             top_tag,
             distances,
-            distance_seen_entries: vec![
-                DistanceSeenEntry::default();
-                MAX_PATTERN_SIZE_CONSTANT + 1
-            ],
+            distance_seen: DistanceSeen::new(),
             best_period_list: VecDeque::new(),
             criteria_counts: vec![0; 2 * (max_distance as usize + 1)],
             consensus_counts: vec![0; 2 * (max_distance as usize + 1)],
@@ -898,5 +936,74 @@ mod tests {
         list.record_match(140, 3, 30);
         assert_eq!(list.low_index, 1);
         assert_eq!(list.first_match_location(3), 119);
+    }
+
+    #[test]
+    fn distance_seen_new_allocates_one_zeroed_slot_per_distance() {
+        let seen = DistanceSeen::new();
+        assert_eq!(seen.entries.len(), MAX_PATTERN_SIZE_CONSTANT + 1);
+        assert!(seen
+            .entries
+            .iter()
+            .all(|entry| entry.location == 0 && entry.end == 0 && entry.score == 0));
+    }
+
+    #[test]
+    fn record_writes_all_fields_at_distance_index() {
+        let mut seen = DistanceSeen::new();
+        seen.record(10, 3, 42, 7);
+        assert_eq!(
+            (
+                seen.entries[3].location,
+                seen.entries[3].end,
+                seen.entries[3].score
+            ),
+            (10, 42, 7)
+        );
+        assert_eq!((seen.entries[2].end, seen.entries[4].end), (0, 0));
+    }
+
+    #[test]
+    fn record_overwrites_the_entry_for_the_same_distance() {
+        let mut seen = DistanceSeen::new();
+        seen.record(10, 3, 42, 7);
+        seen.record(20, 3, 60, 9);
+        assert_eq!(
+            (
+                seen.entries[3].location,
+                seen.entries[3].end,
+                seen.entries[3].score
+            ),
+            (20, 60, 9)
+        );
+    }
+
+    #[test]
+    fn covers_compares_end_with_start() {
+        let mut seen = DistanceSeen::new();
+        assert!(!seen.covers(5, 100));
+        seen.record(50, 5, 100, 3);
+        assert!(seen.covers(5, 100)); // equality counts
+        assert!(seen.covers(5, 99));
+        assert!(!seen.covers(5, 101));
+        assert!(!seen.covers(4, 100)); // slots are independent
+    }
+
+    #[test]
+    fn zeroed_slot_covers_only_non_positive_starts() {
+        // `end` starts at 0, so `end >= start` holds for start <= 0; candidate
+        // positions are >= 1, so the sentinel is inert in the scan.
+        let seen = DistanceSeen::new();
+        assert!(seen.covers(7, 0));
+        assert!(!seen.covers(7, 1));
+    }
+
+    #[test]
+    fn record_accepts_max_pattern_size_index() {
+        let mut seen = DistanceSeen::new();
+        let max = MAX_PATTERN_SIZE_CONSTANT as i32;
+        seen.record(500, max, 520, 11);
+        assert_eq!(seen.entries[MAX_PATTERN_SIZE_CONSTANT].end, 520);
+        assert!(seen.covers(max, 520));
     }
 }
