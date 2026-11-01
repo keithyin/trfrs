@@ -1,0 +1,1440 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>环绕动态规划（WDP） · 算法专题教材</title>
+<style>
+:root{
+  --bg:#fbfaf6; --panel:#ffffff; --fg:#1c222a; --muted:#5d6875; --line:#ddd8c9;
+  --accent:#8a5a1f; --accent-soft:#f6edda;
+  --blue:#1f5f8a; --blue-soft:#eaf2f8;
+  --green:#1f6f43; --green-soft:#e9f4ee;
+  --red:#a03a2a; --red-soft:#fbece8;
+  --code-bg:#f4f2ea; --code-line:#e3dfd2;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#14171b; --panel:#1a1e23; --fg:#e6e4dc; --muted:#9aa4b0; --line:#2e343c;
+    --accent:#d8a75a; --accent-soft:#2a2417;
+    --blue:#7fb4d8; --blue-soft:#17222b;
+    --green:#7fc39a; --green-soft:#16241c;
+    --red:#e0917f; --red-soft:#2a1a17;
+    --code-bg:#1e2329; --code-line:#2c3139;
+  }
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0; background:var(--bg); color:var(--fg);
+  font:16px/1.85 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","Source Han Sans SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.wrap{display:grid;grid-template-columns:248px minmax(0,1fr);gap:52px;max-width:1240px;margin:0 auto;padding:44px 30px 140px}
+nav.toc{position:sticky;top:26px;align-self:start;font-size:13.5px;line-height:1.75;border-left:2px solid var(--line);padding-left:16px;max-height:calc(100vh - 52px);overflow:auto}
+nav.toc .cap{display:block;font-size:11px;letter-spacing:.14em;color:var(--muted);margin:0 0 10px}
+nav.toc a{display:block;color:var(--fg);text-decoration:none;padding:2px 0}
+nav.toc a:hover{color:var(--accent);text-decoration:underline}
+nav.toc a.sub{color:var(--muted);font-size:12.5px;padding-left:14px}
+
+header.title{border-bottom:2px solid var(--line);padding-bottom:26px;margin-bottom:38px}
+header.title .kicker{font-size:12px;letter-spacing:.16em;color:var(--accent);margin:0 0 10px}
+h1{font-size:33px;line-height:1.32;margin:0 0 10px;letter-spacing:-.01em}
+header.title .sub{font-size:17px;color:var(--muted);margin:0 0 18px}
+header.title .meta{font-size:12.5px;color:var(--muted)}
+header.title .meta span{white-space:nowrap;margin-right:18px}
+
+h2{font-size:24px;line-height:1.4;margin:56px 0 16px;padding-top:10px;border-top:1px solid var(--line);letter-spacing:-.01em}
+h2 .num{display:inline-block;min-width:1.9em;color:var(--accent);font-variant-numeric:tabular-nums}
+h3{font-size:17.5px;margin:32px 0 10px}
+h4{font-size:15.5px;margin:22px 0 8px;color:var(--muted);font-weight:600}
+p{margin:0 0 14px}
+ul,ol{margin:0 0 16px;padding-left:24px}
+li{margin:4px 0}
+li::marker{color:var(--accent)}
+a{color:var(--blue)}
+strong{font-weight:650}
+code{font-family:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;font-size:.88em;background:var(--code-bg);border:1px solid var(--code-line);border-radius:4px;padding:.08em .34em}
+pre{margin:0 0 18px;background:var(--code-bg);border:1px solid var(--code-line);border-radius:8px;padding:14px 16px;overflow:auto;font-size:13px;line-height:1.65}
+pre code{background:none;border:0;padding:0;font-size:1em}
+.src{font-size:12px;color:var(--muted);font-family:ui-monospace,monospace;margin:0 0 8px}
+
+.box{border-radius:8px;padding:14px 18px;margin:0 0 20px;border:1px solid;font-size:15px}
+.box>p:last-child,.box>ul:last-child,.box>ol:last-child{margin-bottom:0}
+.box .tag{display:block;font-size:11.5px;letter-spacing:.13em;margin-bottom:6px;font-weight:700}
+.key{background:var(--green-soft);border-color:color-mix(in srgb,var(--green) 35%,transparent)}
+.key .tag{color:var(--green)}
+.why{background:var(--blue-soft);border-color:color-mix(in srgb,var(--blue) 35%,transparent)}
+.why .tag{color:var(--blue)}
+.note{background:var(--accent-soft);border-color:color-mix(in srgb,var(--accent) 35%,transparent)}
+.note .tag{color:var(--accent)}
+.warn{background:var(--red-soft);border-color:color-mix(in srgb,var(--red) 35%,transparent)}
+.warn .tag{color:var(--red)}
+
+table{width:100%;border-collapse:collapse;margin:0 0 20px;font-size:14px}
+th,td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top;overflow-wrap:anywhere}
+th{font-size:12.5px;letter-spacing:.04em;color:var(--muted);font-weight:600;border-bottom:1.5px solid var(--line)}
+tbody tr:hover{background:color-mix(in srgb,var(--accent) 5%,transparent)}
+td.num,th.num{text-align:right;font-variant-numeric:tabular-nums}
+
+.formula{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin:0 0 18px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;line-height:2;overflow-x:auto}
+.formula .lbl{display:block;font-family:inherit;font-size:12px;color:var(--muted);margin-top:10px;line-height:1.7;border-top:1px dashed var(--line);padding-top:8px}
+
+figure{margin:0 0 22px}
+figure pre{background:var(--panel);margin:0}
+figcaption{font-size:12.5px;color:var(--muted);margin-top:8px}
+
+.pipeline{display:grid;gap:10px;margin:0 0 22px}
+.pstep{display:grid;grid-template-columns:34px 1fr;gap:14px;align-items:start;background:var(--panel);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:6px;padding:11px 14px}
+.pstep .n{font-family:ui-monospace,monospace;font-size:13px;color:var(--accent);text-align:right;padding-top:2px}
+.pstep b{display:block;font-size:15px}
+.pstep small{display:block;color:var(--muted);font-size:13px;line-height:1.6}
+
+details{border:1px solid var(--line);border-radius:8px;padding:10px 16px;margin:0 0 12px;background:var(--panel)}
+details summary{cursor:pointer;font-weight:600;font-size:15px}
+details[open] summary{margin-bottom:10px;border-bottom:1px solid var(--line);padding-bottom:8px}
+details p:last-child{margin-bottom:0}
+
+.two{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+@media (max-width:1000px){
+  .wrap{grid-template-columns:minmax(0,1fr);gap:24px;padding:28px 20px 100px}
+  nav.toc{position:static;max-height:none;border-left:0;border-top:1px solid var(--line);padding:16px 0 0;order:-1;overflow-x:hidden}
+  nav.toc a{display:inline;margin-right:14px;white-space:normal;overflow-wrap:anywhere}
+  header.title .meta span{white-space:normal;display:block;margin-right:0}
+  .two{grid-template-columns:1fr}
+  h1{font-size:27px}
+}
+@media print{
+  nav.toc{display:none}
+  .wrap{display:block;max-width:none;padding:0}
+  body{background:#fff;font-size:10.5pt}
+  h2{page-break-after:avoid}
+  pre,table,.box,figure,details{page-break-inside:avoid}
+  a{color:inherit;text-decoration:none}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<nav class="toc">
+  <span class="cap">目录</span>
+  <a href="#s0">0　读法</a>
+  <a href="#s1">1　问题：周期没有起点</a>
+  <a href="#s2">2　经典 WDP：把模板接成环</a>
+  <a href="#s2-3" class="sub">2.3　递推式</a>
+  <a href="#s2-5" class="sub">2.5　手算一个矩阵</a>
+  <a href="#s3">3　WDP 家族：五种形态</a>
+  <a href="#s4">4　TRF 为什么需要 WDP</a>
+  <a href="#s5">5　项目实现总览</a>
+  <a href="#s6">6　全矩阵 WDP（d ≤ 20）</a>
+  <a href="#s6-2" class="sub">6.2　backward 定位</a>
+  <a href="#s6-4" class="sub">6.4　redo 重算</a>
+  <a href="#s7">7　窄带 WDP（d &gt; 20）</a>
+  <a href="#s7-2" class="sub">7.2　带宽公式</a>
+  <a href="#s7-4" class="sub">7.4　带中心与重定心</a>
+  <a href="#s8">8　回溯：从分数到一条比对</a>
+  <a href="#s9">9　共识与第二次比对</a>
+  <a href="#s10">10　评分、边界与参数</a>
+  <a href="#s11">11　复杂度与统计</a>
+  <a href="#s12">12　不变量、风险与常见误解</a>
+  <a href="#s13">13　与 C 参考实现对照</a>
+  <a href="#s14">14　速查表</a>
+  <a href="#s15">15　自测题</a>
+  <a href="#app-a">附录 A　源码索引</a>
+  <a href="#app-b">附录 B　术语表</a>
+  <a href="#app-c">附录 C　参考文献</a>
+</nav>
+
+<main>
+
+<header class="title">
+  <p class="kicker">算法专题教材 · 第一版</p>
+  <h1>环绕动态规划（WDP）</h1>
+  <p class="sub">从 Fischetti 的环状模板匹配，到 <code>trfrs</code> 的双向、可带化实现</p>
+  <p class="meta">
+    <span>源码：<code>src/algo.rs</code> · <code>src/state.rs</code> · <code>src/scan.rs</code></span>
+    <span>参考实现：TRF 4.10.0（G. Benson）</span>
+    <span>算法出处：Fischetti et al. 1992；Miller &amp; Myers 1989</span>
+  </p>
+</header>
+
+<h2 id="s0" style="border-top:0;padding-top:0;margin-top:0"><span class="num">0</span>读法</h2>
+
+<p>本书只讲 TRF 流水线的最后一级：<b>验证</b>。前面的元组扫描、距离记账、统计判据，请先读主教材《串联重复的寻找》第 5、6 章。本书假设读者已经知道：候选是一个二元组 <code>(position, d)</code>，其中 <code>d</code> 是候选周期，<code>position</code> 是当前扫描位置。</p>
+
+<p>本书回答两个问题：</p>
+<ol>
+  <li><b>WDP 是什么？</b>它为什么能把“模板起点未知”“拷贝有错配和插入缺失”这两件事一起解决？</li>
+  <li><b><code>trfrs</code> 怎么实现它？</b>全矩阵版、窄带版、回溯、共识重对齐分别落在哪些函数和数据结构上？</li>
+</ol>
+
+<h3>0.1 记号</h3>
+<table>
+  <thead><tr><th style="width:18%">记号</th><th>含义</th></tr></thead>
+  <tbody>
+    <tr><td><code>T</code></td><td>被搜索的序列。代码里叫 <code>sequence</code>，下标从 1 开始，0 是哨兵。</td></tr>
+    <tr><td><code>P</code></td><td>模板（pattern）。代码里叫 <code>current_pattern</code>，C 版叫 <code>EC</code>。</td></tr>
+    <tr><td><code>m</code></td><td>模板长度。代码里叫 <code>size</code>；第二轮可能是 <code>class_length</code>。</td></tr>
+    <tr><td><code>n</code></td><td>序列长度。代码里叫 <code>length</code>。</td></tr>
+    <tr><td><code>r</code>, <code>c</code></td><td>DP 表的行、列。行对应序列位置，列对应模板位置（全矩阵版）或带内偏移（窄带版）。</td></tr>
+    <tr><td><code>d</code></td><td>候选周期，也是第一轮模板的初始长度。</td></tr>
+    <tr><td><code>α</code>, <code>β</code>, <code>δ</code></td><td>匹配得分、错配罚分（负数）、插入缺失罚分（负数）。</td></tr>
+    <tr><td><code>w</code></td><td>带宽半径。带内每行有 <code>2w+1</code> 个格子。</td></tr>
+  </tbody>
+</table>
+
+<h3>0.2 三条阅读路线</h3>
+<table>
+  <thead><tr><th style="width:30%">你的目标</th><th>读哪几章</th></tr></thead>
+  <tbody>
+    <tr><td>先弄懂 WDP 的思想</td><td>第 1、2、3 章。第 2.5 节的手算矩阵不要跳过。</td></tr>
+    <tr><td>想知道项目怎么跑起来</td><td>第 4、5、6、7 章，然后看第 14 章速查表。</td></tr>
+    <tr><td>想改代码或排查输出差异</td><td>第 6–9 章，加上第 12、13 章和附录 A。</td></tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <span class="tag">版本说明</span>
+  <p>本书以当前检出的 Rust 源码为准。行号会随重构变化；如果对不上，以函数名为准。C 版函数名在括号中给出，方便与参考实现对照。</p>
+</div>
+
+<h2 id="s1"><span class="num">1</span>问题：周期没有起点</h2>
+
+<p>假设扫描器在位置 <code>i = 20</code> 发现了一个候选，提示周期 <code>d = 7</code>。这并不等于“从位置 14 到 20 是一个完整的重复单元”。它只说明：<b>位置 20 和位置 13 附近有相同或相近的 7-元组</b>。真正的重复可能：</p>
+<ul>
+  <li>从位置 5 开始，到位置 60 结束；</li>
+  <li>第一份拷贝从模板的第 3 个碱基开始；</li>
+  <li>某两份拷贝之间少了一个碱基，后面的相位整体左移；</li>
+  <li>两份拷贝之间多了一个碱基，后面的相位整体右移；</li>
+  <li>两端各只有半份拷贝。</li>
+</ul>
+
+<p>如果用普通比对，把“位置 14 到 20 的 7 个碱基”当成固定模板，会同时遇到三个困难。</p>
+
+<h3>1.1 困难一：模板的起点是任意的</h3>
+<p>模板是从序列中间截出来的。它的第 0 列不一定对应重复单元的“第一个”碱基。把模板旋转一下，比对分数可能完全不同；但重复本身没有变。程序不能预先知道该旋转多少。</p>
+
+<h3>1.2 困难二：插入缺失会让相位漂移</h3>
+<p>相邻拷贝之间如果有一个插入或缺失，模板列与序列行就不再保持“每走一行、列也走一列”的固定关系。比对路径会偏离对角线。漂移量随周期长度增长，但通常远小于周期本身。</p>
+
+<h3>1.3 困难三：起止位置未知</h3>
+<p>候选点只是重复内部的一个证据点。重复可能向左右各延伸很远，也可能在候选点附近就结束。程序需要一次比对同时决定：最佳分数、左边界、右边界、拷贝数。</p>
+
+<div class="key">
+  <span class="tag">WDP 的三个关键词</span>
+  <p><b>Wraparound</b> 解决困难一：模板首尾相接，任意旋转都等价。<br>
+  <b>Dynamic programming</b> 解决困难二：允许错配和插入缺失，用分数选择路径。<br>
+  <b>Local alignment</b> 解决困难三：分数下限为 0，比对可以在任意位置开始和结束。</p>
+</div>
+
+<h3>1.4 WDP 不是“把序列复制一遍”</h3>
+<p>“环绕”不是说把序列首尾接起来，也不是把模板字符串物理复制成两倍。它只改一件事：<b>模板的列号对 <code>m</code> 取模</b>。列 <code>m−1</code> 的右边是列 0，列 0 的左边是列 <code>m−1</code>。这样一条比对路径可以自然地从模板末尾绕回开头，继续匹配下一份拷贝。</p>
+
+<figure>
+<pre><code>模板 P = A C G T        m = 4
+列号   0 1 2 3 | 0 1 2 3 | 0 1 2 3
+       A C G T | A C G T | A C G T
+               ^
+               列 3 的右邻是列 0（取模）</code></pre>
+<figcaption>图 1-1　环状模板。列号在 <code>0 … m−1</code> 之间循环，不需要复制字符串。</figcaption>
+</figure>
+
+<h2 id="s2"><span class="num">2</span>经典 WDP：把模板接成环</h2>
+
+<h3>2.1 问题定义</h3>
+<p>给定文本 <code>T[1..n]</code> 和模板 <code>P[0..m−1]</code>，在 <code>T</code> 中找一个子串，使它和 <code>P</code> 的某个循环旋转最佳对齐。若模板可以重复出现，就继续沿着环走，直到比对结束。目标是最大化比对分数。</p>
+
+<p>TRF 论文把 WDP 归到两篇文献：Miller 与 Myers 1989 的序列比对框架，以及 Fischetti、Landau、Schmidt、Sellers 1992 的“环状模板周期出现”算法。后者的标题直接对应这里的问题：模板没有固定起点，匹配可以在模板的任意位置开始和结束。TRF 借用这个思想，但把它改造成了局部、双向、可带化的版本；本书第 3 章会把这几层分开。</p>
+
+<h3 id="s2-3">2.2 环状列</h3>
+<p>把模板看成环之后，列号只有 <code>m</code> 种，但每条路径可以绕任意多圈。列 <code>c</code> 的右邻是 <code>(c+1) mod m</code>，左邻是 <code>(c−1+m) mod m</code>。代码里到处出现的 <code>% size</code>、<code>+ size</code> 就是这两个式子。</p>
+
+<h3>2.4 局部 WDP 的递推式</h3>
+<p>设 <code>S[r][c]</code> 表示：在序列第 <code>r</code> 位、模板第 <code>c</code> 位结束的最佳局部比对分数。三条转移路径是：</p>
+
+<table>
+  <thead><tr><th style="width:18%">路径</th><th style="width:30%">动作</th><th>分数变化</th></tr></thead>
+  <tbody>
+    <tr><td>对角线</td><td>序列取一个碱基，模板取一个碱基</td><td><code>+α</code>（相同）或 <code>+β</code>（不同）</td></tr>
+    <tr><td>上</td><td>序列取一个碱基，模板不动</td><td><code>+δ</code>（序列多一个碱基）</td></tr>
+    <tr><td>左</td><td>序列不动，模板前进一个</td><td><code>+δ</code>（模板多一个碱基）</td></tr>
+  </tbody>
+</table>
+
+<div class="formula">
+S[r][c] = max( 0,
+               S[r−1][(c−1+m) mod m] + sub(T[r], P[c]),
+               S[r−1][c] + δ,
+               S[r][(c−1+m) mod m] + δ )
+<span class="lbl">四项分别是：重新开始、对角线、上、左。取 0 是局部比对；<code>sub(a,b)</code> 是相似度得分，相同为 α，不同为 β。δ 是负数。</span>
+</div>
+
+<p>初始条件 <code>S[0][c] = 0</code>（对所有 <code>c</code>），<code>S[r][·]</code> 的第一列按环取左邻。答案是全表最大值。回溯从最大值所在格出发，沿着“哪个前驱加上对应分数等于当前分数”一路往回走，直到分数为 0。</p>
+
+<div class="why">
+  <span class="tag">为什么环状列就够了</span>
+  <p>局部比对允许在任何位置从 0 重新开始。把列号取模后，路径可以从任意模板列起步，绕一圈、两圈、任意圈。模板的旋转不再需要枚举；它变成了路径的起始列。全局比对没有这个 0 下限，才需要额外的边界初始化或两阶段扫描来枚举旋转。</p>
+</div>
+
+<h3 id="s2-5">2.5 手算一个矩阵</h3>
+<p>取 <code>T = ACACAC</code>，<code>P = AC</code>，<code>α = 2</code>，<code>β = −5</code>，<code>δ = −7</code>。模板只有两列：列 0 是 <code>A</code>，列 1 是 <code>C</code>。列 0 的左邻是列 1，列 1 的右邻是列 0。</p>
+
+<p>逐行计算（每行解一次环状左依赖，取局部最大）：</p>
+
+<figure>
+<pre><code>        c=0(A)  c=1(C)      max
+r=0       0       0          0
+r=1 A     2       0          2
+r=2 C     0       4          4
+r=3 A     6       0          6
+r=4 C     1       8          8
+r=5 A    10       3         10
+r=6 C     5      12         12   &lt;- 全表最大</code></pre>
+<figcaption>图 2-1　<code>T=ACACAC</code>、<code>P=AC</code> 的局部 WDP 表。最大值 12 在 <code>(6,1)</code>。</figcaption>
+</figure>
+
+<p>最佳路径是：</p>
+
+<figure>
+<pre><code>(6,1) ← (5,0) ← (4,1) ← (3,0) ← (2,1) ← (1,0) ← (0,1)
+  C        A        C        A        C        A      起点(0分)</code></pre>
+<figcaption>图 2-2　沿对角线回溯，六步全是匹配。列号在 0 和 1 之间循环。</figcaption>
+</figure>
+
+<p>分数 12 = 6 个匹配 × 2。表里还有一些“非最佳”的正数格，例如 <code>S[4][0]=1</code>、<code>S[5][1]=3</code>、<code>S[6][0]=5</code>。它们代表“在某个位置多插入一个模板碱基”的局部比对，能拿到正分，但不是全表最大，也不会出现在最佳路径上。这些格子正好说明左依赖是环状的：<code>S[r][0]</code> 的左邻是 <code>S[r][1]</code>，不是 0。</p>
+
+<div class="note">
+  <span class="tag">两遍扫描的由来</span>
+  <p>同一行内，<code>S[r][0]</code> 依赖 <code>S[r][1]</code>，<code>S[r][1]</code> 又依赖 <code>S[r][0]</code>。一次从左到右的扫描解不开这个环。参考实现的做法是每行扫两遍：第一遍假设回绕处为 0，得到一个初值；第二遍用第一遍末尾的值补上回绕依赖。第 6 章会逐行解释。</p>
+</div>
+
+<h3>2.6 经典 WDP 的边界</h3>
+<ul>
+  <li><b>全局形式</b>：要求整条模板都被消耗，模板的起点和终点由同一条路径决定。为了不枚举旋转，需要在模板边界上做特殊初始化。</li>
+  <li><b>局部形式</b>：分数下限为 0，起止自由；环状列加 0 下限已经足够。TRF 用的是这一种。</li>
+  <li><b>空间</b>：完整表是 <code>n × m</code>。TRF 把它压到 <code>n × 151</code>（第 5 章），长模板再把列压到 <code>2w+1</code>（第 7 章）。</li>
+</ul>
+
+<h2 id="s3"><span class="num">3</span>WDP 家族：五种形态</h2>
+
+<p>“WDP”不是单一算法，而是一组可以正交组合的设计选择。下面五种形态在文献和本项目里都能找到影子。前三种是通用变体；后两种是 TRF 特有的工程化改造。</p>
+
+<table>
+  <thead>
+    <tr><th style="width:18%">形态</th><th style="width:26%">评分/边界</th><th style="width:22%">扫描方式</th><th>本项目是否使用</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><b>全局 WDP</b></td>
+      <td>无 0 下限；整条模板必须被消耗</td>
+      <td>完整矩阵，环状列</td>
+      <td>否。代码保留了 <code>GLOBAL</code> 回溯分支，但当前调用点只传 <code>LOCAL</code>。</td>
+    </tr>
+    <tr>
+      <td><b>局部 WDP</b></td>
+      <td>0 下限；任意起止</td>
+      <td>完整矩阵，环状列</td>
+      <td>是，<code>wraparound_dp()</code>，用于 <code>d ≤ 20</code>。</td>
+    </tr>
+    <tr>
+      <td><b>带状局部 WDP</b></td>
+      <td>0 下限；任意起止</td>
+      <td>只算对角线附近 <code>2w+1</code> 列</td>
+      <td>是，<code>narrow_band_wraparound_dp()</code>，用于 <code>d &gt; 20</code>。</td>
+    </tr>
+    <tr>
+      <td><b>双向锚定 WDP</b></td>
+      <td>0 下限；以候选点为锚</td>
+      <td>先 backward 定位左边界，再 forward 扫描右半</td>
+      <td>是。两种矩阵版本都采用这个结构，是 TRF 与教科书 WDP 最大的不同。</td>
+    </tr>
+    <tr>
+      <td><b>共识 WDP</b></td>
+      <td>同局部 WDP</td>
+      <td>用第一次比对投票得到的共识当模板，再跑一次</td>
+      <td>是。在第一轮通过拷贝数门槛后执行。</td>
+    </tr>
+  </tbody>
+</table>
+
+<div class="note">
+  <span class="tag">维度不要混淆</span>
+  <p>“双向”和“带状”是正交的：全矩阵版也是双向的，窄带版也是双向的。“共识”是第二次调用，不是另一种递推式。把这几层拆开后，代码里的分支就清楚了。</p>
+</div>
+
+<h3>3.1 为什么还需要“双向”</h3>
+<p>普通局部 WDP 从序列左端扫到右端，天然可以找到任意起止的比对。TRF 仍然要分成 backward 和 forward 两半，原因不是数学上必需，而是<b>工程上更省</b>：</p>
+<ul>
+  <li>候选点附近一定包含重复；从候选点向左右各扫一段，比从序列开头扫到结尾更快。</li>
+  <li>backward 半边只需要确定重复的左边界，不要求分数精确；它可以用较窄的带。</li>
+  <li>forward 半边从左边界的左侧重新开始，得到干净的回溯起点和准确的分数。</li>
+</ul>
+
+<p>代价是：backward 的分数不能直接当作最终分数。全矩阵版要靠第三遍 redo 重算；窄带版在 forward 开始时把分数清零。这是读代码时最容易误解的地方，第 6、7 章会反复强调。</p>
+
+<h2 id="s4"><span class="num">4</span>TRF 为什么需要 WDP</h2>
+
+<h3>4.1 检测与验证分离</h3>
+<p>TRF 不直接对每个位置做比对。它先用元组扫描产生候选，再用统计判据筛掉大部分噪声，最后只对少量候选做 WDP。WDP 是流水线中最贵的一级，也是唯一能给出完整比对的一级。</p>
+
+<div class="pipeline">
+  <div class="pstep"><div class="n">1</div><div><b>元组扫描</b><small>滚动编码，找相同 k-元组，记录距离 d。产出候选 <code>(position, d)</code>。</small></div></div>
+  <div class="pstep"><div class="n">2</div><div><b>统计判据</b><small>等待时间、区间证据和、区域竞争、最佳周期表。决定这个候选值不值得做比对。</small></div></div>
+  <div class="pstep"><div class="n">3</div><div><b>第一轮 WDP</b><small>模板 = 序列中以 <code>position</code> 结尾、长度 <code>d</code> 的窗口。得到分数、区间、拷贝数。</small></div></div>
+  <div class="pstep"><div class="n">4</div><div><b>共识与第二轮 WDP</b><small>从第一轮比对投票出共识，再用共识当模板重跑。分数和边界更准。</small></div></div>
+  <div class="pstep"><div class="n">5</div><div><b>报告</b><small><code>align_pair.score ≥ minscore</code> 时输出。周期、拷贝数、共识、统计量都来自这条比对。</small></div></div>
+</div>
+
+<h3>4.2 第一轮模板从哪来</h3>
+<p><code>fill_current_pattern(start, size, with_consensus=false)</code> 把 <code>sequence[start−size+1 ..= start]</code> 复制到 <code>current_pattern</code>。注意这个窗口是以候选位置 <code>start</code> 结尾的，不是从重复的左边界开始。它可能：</p>
+<ul>
+  <li>从第一份拷贝的中间开始；</li>
+  <li>包含一个错配；</li>
+  <li>包含一个多出来的碱基；</li>
+  <li>跨过两份拷贝的边界。</li>
+</ul>
+<p>这正是需要 WDP 的原因：模板本身不完美，但环状列和局部比对能把它“摆正”。</p>
+
+<h3>4.3 一次 WDP 要回答什么</h3>
+<table>
+  <thead><tr><th style="width:26%">问题</th><th>答案从哪来</th></tr></thead>
+  <tbody>
+    <tr><td>最佳分数是多少？</td><td>DP 最大值，最终由 <code>align_pair.score</code> 报告。</td></tr>
+    <tr><td>重复从哪到哪？</td><td>回溯得到的 <code>sequence_index[1]</code> 与 <code>sequence_index[length]</code>。</td></tr>
+    <tr><td>拷贝数是多少？</td><td>回溯中模板列绕环的次数，加上末尾的分数份拷贝。</td></tr>
+    <tr><td>共识长什么样？</td><td>按模板位置对第一次比对投票，得到 <code>consensus.pattern</code>。</td></tr>
+    <tr><td>实际周期是多少？</td><td>报告阶段把相邻拷贝中同一模板位置的两列配对，统计它们序列位置之差的众数。</td></tr>
+  </tbody>
+</table>
+
+<h3>4.4 为什么要有第二轮</h3>
+<p>第一轮的模板是从序列里硬截的，带着样本自身的噪声。用共识重跑一次，相当于把“一份拷贝的观测”换成“所有拷贝的投票结果”，能降低错配和插入缺失对分数、边界的影响。第二轮结束后的 <code>align_pair.score</code> 才是最终报告分数。</p>
+
+<h2 id="s5"><span class="num">5</span>项目实现总览</h2>
+
+<h3>5.1 文件分工</h3>
+<table>
+  <thead><tr><th style="width:22%">文件</th><th>职责</th></tr></thead>
+  <tbody>
+    <tr><td><code>src/scan.rs</code></td><td><code>process_candidate()</code>：候选入口，决定全矩阵还是窄带，调用 WDP、回溯、共识、报告。</td></tr>
+    <tr><td><code>src/algo.rs</code></td><td>WDP 本体、带状行扫描、回溯、共识、比对打印。</td></tr>
+    <tr><td><code>src/state.rs</code></td><td>常量、<code>Trf</code> 状态、评分矩阵、<code>AlignPair</code>、<code>Consensus</code>、距离表。</td></tr>
+    <tr><td><code>src/control.rs</code></td><td>每次运行的计数器、<code>report_min</code> 初始化、统计汇总。</td></tr>
+    <tr><td><code>src/params.rs</code> / <code>src/driver.rs</code></td><td>参数结构、<code>-l</code>（百万碱基）到 <code>max_wrap_length</code> 的换算。</td></tr>
+  </tbody>
+</table>
+
+<h3>5.2 关键常量</h3>
+<table>
+  <thead><tr><th style="width:28%">常量</th><th style="width:12%">值</th><th>作用</th></tr></thead>
+  <tbody>
+    <tr><td><code>MAX_BANDWIDTH</code></td><td>150</td><td>评分矩阵的最大列数，也是带宽的硬上限。带内 <code>2w+1</code> 超过它就直接 <code>fatal(-1)</code>。</td></tr>
+    <tr><td><code>SCORE_MATRIX_STRIDE</code></td><td>151</td><td>评分矩阵的行跨度。所有行都按 151 列对齐。</td></tr>
+    <tr><td><code>SMALL_DISTANCE</code></td><td>20</td><td><code>d ≤ 20</code> 走全矩阵；<code>d &gt; 20</code> 走窄带。</td></tr>
+    <tr><td><code>MIN_BAND_RADIUS</code></td><td>6</td><td>带宽半径下限。即使随机游走范围算出来更小，也至少每行 13 格。</td></tr>
+    <tr><td><code>RECENTER_CRITERION</code></td><td>3</td><td>连续 3 行最大值都落在对角线上且是匹配，就把带中心挪过去。</td></tr>
+    <tr><td><code>MAX_PATTERN_SIZE_CONSTANT</code></td><td>2000</td><td>模板/共识数组的容量上限，对应 <code>maxperiod</code> 的上限。</td></tr>
+  </tbody>
+</table>
+
+<h3>5.3 评分矩阵与滚动行</h3>
+<p><code>Trf::new()</code> 一次性分配：</p>
+
+<div class="src">src/state.rs:609–614</div>
+<pre><code>score_matrix: vec![0; (band_width + 1) * SCORE_MATRIX_STRIDE],
+band_up:   [0; MAX_BANDWIDTH + 1],
+band_diag: [0; MAX_BANDWIDTH + 1],
+current_pattern: vec![0; 2 * (MAX_PATTERN_SIZE_CONSTANT + 1)],
+align_pair: AlignPair::new(2 * band_width),</code></pre>
+
+<ul>
+  <li><code>score_matrix</code> 是二维表 <code>S</code> 的一维展开。行是序列位置，列是模板位置或带内偏移；<code>score(row, col)</code> 做 <code>row * 151 + col</code>。</li>
+  <li><code>band_up</code> / <code>band_diag</code> 不是整张表，只是上一行的两个滚动缓冲：上方前驱和对角前驱。每算完一行就重写。</li>
+  <li><code>band_width</code> 是行数上限：<code>min(max_wrap_length, seq.length)</code>。默认 <code>max_wrap_length = 2_000_000</code>，可以用 <code>-l</code> 按百万碱基调大或调小。</li>
+  <li><code>align_pair</code> 的长度是 <code>2 * band_width + 2</code>。在 <code>band_width</code> 覆盖整个序列的通常设置下，一条比对最多消耗不到 <code>2n</code> 列，容量足够。</li>
+</ul>
+
+<h3>5.4 关键字段</h3>
+<table>
+  <thead><tr><th style="width:24%">字段</th><th>含义</th></tr></thead>
+  <tbody>
+    <tr><td><code>band_centers[row]</code></td><td>窄带版：第 <code>row</code> 行的带中心对应模板的哪个位置。<b>全矩阵版不使用。</b></td></tr>
+    <tr><td><code>wrap_end</code></td><td>本轮 WDP 扫描停下的序列位置。当前源码只写不读，保留是为了与 C 版结构对应。</td></tr>
+    <tr><td><code>max_real_row</code>, <code>max_row</code>, <code>max_col</code></td><td>最终最大分的序列位置、矩阵行号、模板列（全矩阵）或带内列（窄带）。</td></tr>
+    <tr><td><code>max_score</code></td><td>DP 最大值。报告真正使用的是 <code>align_pair.score</code>。</td></tr>
+    <tr><td><code>rows</code></td><td>本次 WDP 处理的行数，用来估算计算量。</td></tr>
+    <tr><td><code>wraparound_dp_count</code></td><td>进入 WDP 的候选数。注意它在第一轮之前加一，第二轮不重复加。</td></tr>
+    <tr><td><code>report_min</code></td><td>历史阈值。当前初始化为 0，且 WDP 内部也把它设成 0，所以条件恒真；真正的门槛是报告前的 <code>minscore</code>。</td></tr>
+  </tbody>
+</table>
+
+<h3>5.5 C 版命名对照</h3>
+<table>
+  <thead><tr><th style="width:38%">C 参考实现</th><th>Rust</th></tr></thead>
+  <tbody>
+    <tr><td><code>wraparound_dp()</code></td><td><code>Trf::wraparound_dp</code>（<code>src/algo.rs:825</code>）</td></tr>
+    <tr><td><code>narrow_band_wraparound_dp()</code></td><td><code>Trf::narrow_band_wraparound_dp</code>（<code>src/algo.rs:191</code>）</td></tr>
+    <tr><td><code>get_pair_alignment_with_copynumber()</code></td><td><code>Trf::get_pair_alignment_with_copynumber</code>（<code>src/algo.rs:1079</code>）</td></tr>
+    <tr><td><code>get_narrow_band_pair_alignment_with_copynumber()</code></td><td><code>Trf::get_narrow_band_pair_alignment_with_copynumber</code>（<code>src/algo.rs:1176</code>）</td></tr>
+    <tr><td><code>get_consensus()</code></td><td><code>Trf::get_consensus</code>（<code>src/algo.rs:1775</code>）</td></tr>
+    <tr><td><code>S</code></td><td><code>score_matrix</code></td></tr>
+    <tr><td><code>EC</code></td><td><code>current_pattern</code></td></tr>
+    <tr><td><code>MAXBANDWIDTH</code></td><td><code>MAX_BANDWIDTH</code></td></tr>
+    <tr><td><code>SMALLDISTANCE</code></td><td><code>SMALL_DISTANCE</code></td></tr>
+    <tr><td><code>MINBANDRADIUS</code></td><td><code>MIN_BAND_RADIUS</code></td></tr>
+    <tr><td><code>RECENTERCRITERION</code></td><td><code>RECENTER_CRITERION</code></td></tr>
+    <tr><td><code>band_center[]</code></td><td><code>band_centers</code></td></tr>
+    <tr><td><code>fill_align_pair</code> 宏</td><td><code>Trf::fill_align_pair</code>（<code>src/state.rs:674</code>）</td></tr>
+    <tr><td><code>test_trace_and_backwards_maxscore</code> 宏</td><td><code>Trf::backward_trace_cell</code>（<code>src/algo.rs:103</code>）</td></tr>
+  </tbody>
+</table>
+
+<h2 id="s6"><span class="num">6</span>全矩阵 WDP（d ≤ 20）</h2>
+
+<p>入口在 <code>process_candidate()</code>：</p>
+
+<div class="src">src/scan.rs:549–552</div>
+<pre><code>if distance &lt;= SMALL_DISTANCE {
+    self.wraparound_dp(position, distance, false);
+    self.cell_counts[distance as usize] += self.rows * distance as f64;
+    self.get_pair_alignment_with_copynumber(distance);
+}</code></pre>
+
+<p>这段只处理第一轮、<code>d ≤ 20</code> 的情况。第二轮是否走全矩阵，取决于共识长度 <code>class_length</code>，不是原始 <code>d</code>。</p>
+
+<h3>6.1 三段式结构</h3>
+<p><code>wraparound_dp(start, size, consensus_present)</code> 不是一次扫描，而是三段：</p>
+
+<figure>
+<pre><code>序列位置
+   1  +--------------------------------------------+
+      |  backward：从 start+1 向左扫                |  定位 min_row
+start +--------------------------------------------+
+      |  forward：从 start−1 向右扫                 |  记录 wrap_end
+      +--------------------------------------------+
+   n  |  redo：从 min_row−size−1 向右重算           |  最终分数与回溯起点
+      +--------------------------------------------+</code></pre>
+<figcaption>图 6-1　全矩阵版的三段。第三段才是权威结果。</figcaption>
+</figure>
+
+<ul>
+  <li><b>backward</b>：主要用来找一个种子行 <code>min_row</code>，即左半部分最大分出现的最左行；它的 <code>max_score</code> 还会填进主 forward 的起始行，但两者都不是最终分数。</li>
+  <li><b>forward</b>：从候选点右侧开始，把 backward 的最大分作为起始分数，记录扫描终点 <code>wrap_end</code>；它不直接使用 <code>min_row</code>，<code>min_row</code> 只给 redo 用。</li>
+  <li><b>redo</b>：从种子行往前一个模板长度处重新开始，用 0 初始化，算出干净的局部比对，并记录 <code>max_real_row / max_row / max_col</code>。</li>
+</ul>
+
+<div class="key">
+  <span class="tag">最重要的一句话</span>
+  <p>backward 的 <code>max_score</code> 不是最终分数。最终分数来自 redo。读代码时不要把第一、二段的 <code>max_score</code> 当成报告分数。</p>
+</div>
+
+<h3 id="s6-2">6.2 backward：从 start+1 向左</h3>
+<p>初始化与循环骨架：</p>
+
+<div class="src">src/algo.rs:834–849</div>
+<pre><code>let mut max_score = 0;
+let mut real_row = start + 1;
+let mut row = self.band_width as i32;
+
+for pattern_col in 0..size {
+    self.set_score(row as usize, pattern_col as usize, max_score);
+    self.band_diag[pattern_col as usize] = max_score;
+    self.band_up[pattern_col as usize] = max_score + delta;
+}
+
+while !end_of_trace &amp;&amp; real_row &gt; 1 &amp;&amp; row &gt; 0 {
+    row -= 1;
+    real_row -= 1;
+    ...
+}</code></pre>
+
+<p>backward 的“上”方向是 <code>r+1</code>（因为行号在减小），对角线是 <code>(r+1, c+1)</code>。这正是把普通 DP 的行、列同时反向后得到的方向。每一行仍然要扫两遍，原因见 2.5 节。</p>
+
+<h3>6.3 一行之内的两遍</h3>
+<div class="src">src/algo.rs:855–907（节选）</div>
+<pre><code>// 第一遍：给环状左依赖一个初值
+let mut left_score = delta;
+let mut pattern_col = size_minus_one;
+while pattern_col &gt;= 0 {
+    self.band_diag[pattern_col as usize] +=
+        self.similarity_score(current_base, self.current_pattern[pattern_col as usize]);
+    let cell_score = max4(0,
+        self.band_diag[pattern_col as usize],
+        self.band_up[pattern_col as usize],
+        left_score);
+    self.set_score(row as usize, pattern_col as usize, cell_score);
+    left_score = cell_score + delta;
+    pattern_col -= 1;
+}
+
+// 第二遍：用第一遍末尾的 left_score 补上回绕
+end_of_trace = true;
+let mut pattern_col = size_minus_one;
+while pattern_col &gt;= 0 {
+    let mut cell_score = max4(0,
+        self.band_diag[pattern_col as usize],
+        self.band_up[pattern_col as usize],
+        left_score);
+    left_score = cell_score + delta;
+    self.set_score(row as usize, pattern_col as usize, cell_score);
+    self.band_up[pattern_col as usize] = left_score;
+    if real_row &lt;= start - std::cmp::max(size, 20) &amp;&amp; cell_score == 0 {
+        cell_score = -1000;
+        self.set_score(row as usize, pattern_col as usize, cell_score);
+        self.band_up[pattern_col as usize] = -1000;
+        left_score = -1000;
+    } else {
+        end_of_trace = false;
+    }
+    if cell_score &gt;= max_score {
+        max_score = cell_score;
+        min_row = real_row;
+    }
+    pattern_col -= 1;
+}</code></pre>
+
+<p>两个细节：</p>
+<ul>
+  <li><b>两遍的方向相反于 forward</b>。backward 的列从 <code>size−1</code> 递减到 0，所以“左”是往模板的更小列走；“上”是往序列的更小行号走。</li>
+  <li><b>每行结束后移位对角线缓存</b>：<code>band_diag[j] = S[row][j+1]</code>，<code>band_diag[size−1] = S[row][0]</code>。下一行要用当前行的右邻作为对角前驱，而列号是环状的。</li>
+</ul>
+
+<h3>6.4 forward：从 start−1 向右</h3>
+<p>forward 的初始化把 backward 的 <code>max_score</code> 填进第 0 行：</p>
+
+<div class="src">src/algo.rs:910–925</div>
+<pre><code>let mut row = 0i32;
+let mut real_row = start - 1;
+
+for pattern_col in 0..size {
+    self.set_score(0, pattern_col as usize, max_score);
+    self.band_diag[pattern_col as usize] = max_score;
+    self.band_up[pattern_col as usize] = max_score + delta;
+}</code></pre>
+
+<p>然后逐行递增 <code>real_row</code> 和 <code>row</code>。forward 的列从 0 递增到 <code>size−1</code>，“左”是往更大的列走；“上”是往更大的行号走。每行结束后：</p>
+
+<div class="src">src/algo.rs:971–977</div>
+<pre><code>for pattern_col in 0..size {
+    self.band_diag[(pattern_col + 1) as usize] =
+        self.score(row as usize, pattern_col as usize);
+}
+self.band_diag[0] = self.band_diag[size as usize];</code></pre>
+
+<p>下一行的对角前驱是当前行的左邻，所以缓存整体右移一位；列 0 的对角前驱来自列 <code>size−1</code>，这是环。</p>
+
+<p>forward 的屏障条件是 <code>real_row ≥ start &amp;&amp; cell_score == 0</code>。意思是：到达候选点之后，任何“想重新从 0 开始”的路径都被挡住；已经有正分的路径可以继续穿过。扫描在所有格子都变成屏障时停止，<code>wrap_end</code> 记录停下的位置。</p>
+
+<h3 id="s6-4">6.5 redo：从种子前一个模板长度重算</h3>
+<div class="src">src/algo.rs:983–1001</div>
+<pre><code>self.report_min = 0;
+if max_score &gt;= self.report_min {
+    let mut row = 0i32;
+    let start_plus_one = start + 1;
+    let mut real_row = min_row - size - 1;
+    if real_row &lt; 0 {
+        real_row = 0;
+    }
+    max_score = 0;
+
+    for pattern_col in 0..size {
+        self.set_score(0, pattern_col as usize, max_score);
+        self.band_diag[pattern_col as usize] = max_score;
+        self.band_up[pattern_col as usize] = max_score + delta;
+    }
+    ...
+}</code></pre>
+
+<p>redo 的起点是 <code>min_row − size − 1</code>：从 backward 找到的最左最大行再往左一个模板长度。这样做的理由是：<code>min_row</code> 已经落在重复内部，往左留一个模板长度就足以覆盖第一份拷贝的上下文，同时不必从序列开头重扫。</p>
+
+<p>redo 的屏障条件是 <code>real_row ≥ start + 1 &amp;&amp; cell_score == 0</code>，比主 forward 晚一行。这一行之差很关键：它允许比对在 <code>start</code> 处从 0 重新开始，因为 redo 是从候选点左边启动的，需要一个干净的局部起点。主 forward 不需要这个起点，所以它在 <code>start</code> 就设屏障。</p>
+
+<h3>6.6 屏障与三个区间</h3>
+<table>
+  <thead><tr><th style="width:20%">阶段</th><th style="width:38%">屏障</th><th>作用</th></tr></thead>
+  <tbody>
+    <tr><td>backward</td><td><code>real_row ≤ start − max(size,20)</code> 且分数为 0</td><td>禁止比对跑到候选点左侧太远；<code>max(size,20)</code> 给小周期留出至少 20 个碱基的搜索半径。</td></tr>
+    <tr><td>forward</td><td><code>real_row ≥ start</code> 且分数为 0</td><td>禁止在候选点之后重新开始；比对只能有一个连续的主体。</td></tr>
+    <tr><td>redo</td><td><code>real_row ≥ start + 1</code> 且分数为 0</td><td>允许在 <code>start</code> 处重新开始，给 redo 一个干净起点。</td></tr>
+  </tbody>
+</table>
+
+<p><code>−1000</code> 只是一个哨兵。它必须比任何真实分数都小，所以它能输给 0 和所有正分，等价于“此路不通”。屏障只改写本来等于 0 的格子；已经有正分的路径不受影响。</p>
+
+<h3>6.7 伪代码</h3>
+<pre><code>wraparound_dp(start, m, use_consensus):
+    EC = sequence[start-m+1 ..= start]      # 或 consensus
+    # 1. backward
+    max_score = 0; real_row = start+1; row = band_width
+    init row band_width for all m columns with (max_score, max_score+delta)
+    while not all_barrier and real_row &gt; 1 and row &gt; 0:
+        row -= 1; real_row -= 1
+        compute_row_backward(...)            # 两遍，-1000 屏障
+        max_score = max(max_score, row max); min_row = leftmost row of max
+
+    # 2. forward（只为 wrap_end）
+    row = 0; real_row = start-1
+    init row 0 for all m columns with (max_score, max_score+delta)
+    while not all_barrier and real_row &lt; n and row &lt; band_width:
+        row += 1; real_row += 1
+        compute_row_forward(...)             # 两遍，-1000 屏障
+    wrap_end = real_row
+
+    # 3. redo（权威）
+    real_row = max(0, min_row - m - 1)
+    max_score = 0; row = 0
+    init row 0 with zeros
+    while not all_barrier and real_row &lt; n and row &lt; band_width:
+        row += 1; real_row += 1
+        compute_row_forward_without_left_carry(...)
+        record max_real_row / max_row / max_col
+    max_score = best score
+</code></pre>
+
+<h3>6.8 数值验证</h3>
+<p>用仓库自带的构建跑一个 20 bp 模式、重复 5 次、两侧各 21 bp 侧翼的序列。因为 <code>d = 20 ≤ SMALL_DISTANCE</code>，走全矩阵版。</p>
+
+<pre><code>python3 - &lt;&lt;'EOF'
+pat = 'ACGTTGCAAGTCCTAGGATC'       # 20 bp
+left = 'TTGACCGATTAACGGTCAGTT'     # 21 bp
+right = 'GGCTAACGTTAGGCCATGTCA'    # 21 bp
+open('/tmp/p20.fa','w').write('&gt;t\n' + left + pat*5 + right + '\n')
+EOF
+
+./target/release/trfrs /tmp/p20.fa --minscore 0 --minperiod 1 --maxperiod 100 -ngs</code></pre>
+
+<p>输出中的关键字段：</p>
+<pre><code>22 121 20 5.0 20 100 0 200 ...
+^   ^   ^   ^   ^        ^
+|   |   |   |   |        score = 200 = 20 × 5 × 2
+|   |   |   |   copies = 5.0
+|   |   |   period = 20
+|   |   consensus size = 20
+start=22, end=121</code></pre>
+
+<p>分数 200 正好等于 5 份拷贝、每份 20 个匹配、每个匹配 +2。说明全矩阵 WDP 没有把候选点重复计分，也没有把侧翼算进去。</p>
+
+<h2 id="s7"><span class="num">7</span>窄带 WDP（d &gt; 20）</h2>
+
+<h3>7.1 为什么需要带</h3>
+<p>完整矩阵有 <code>m</code> 列。最大 <code>m = 2000</code>，序列可达百万碱基。若每个候选都填 <code>n × m</code> 个格子，成本不可接受。但真正有用的格子只在对角线附近：插入缺失很少，序列每走一行，模板通常也只前进一列。偏离对角线的距离就是相位漂移，它的 95% 范围远小于 <code>m</code>。</p>
+
+<h3 id="s7-2">7.2 带宽公式</h3>
+<div class="formula">
+range(d) = floor( 2.3 × sqrt( pI × d ) )
+<br>
+w = max( MIN_BAND_RADIUS, range(d) )       MIN_BAND_RADIUS = 6
+<br>
+w_forward = min( 2 × w, d / 3 )
+<span class="lbl"><code>pI</code> 是插入缺失概率（<code>indel_probability_percent / 100</code>）。<code>range</code> 是随机游走的 95% 半径；系数 2.3 是参考实现的标定值，不是从正态分布直接推出的 1.96。</span>
+</div>
+
+<p>代码在 <code>state.rs</code>：</p>
+
+<div class="src">src/state.rs:653–656</div>
+<pre><code>pub fn indel_random_walk_range(&amp;self, distance: i32) -&gt; i32 {
+    (2.3 * (self.indel_probability * distance as f64).sqrt()).floor() as i32
+}</code></pre>
+
+<p>默认 <code>pI = 0.10</code> 时，几个典型值：</p>
+
+<table>
+  <thead><tr><th class="num">d</th><th class="num">range(d)</th><th class="num">w</th><th class="num">2w+1（backward）</th><th class="num">w_forward</th><th class="num">2w_forward+1</th></tr></thead>
+  <tbody>
+    <tr><td class="num">21</td><td class="num">3</td><td class="num">6</td><td class="num">13</td><td class="num">7</td><td class="num">15</td></tr>
+    <tr><td class="num">30</td><td class="num">3</td><td class="num">6</td><td class="num">13</td><td class="num">10</td><td class="num">21</td></tr>
+    <tr><td class="num">50</td><td class="num">5</td><td class="num">6</td><td class="num">13</td><td class="num">12</td><td class="num">25</td></tr>
+    <tr><td class="num">100</td><td class="num">7</td><td class="num">7</td><td class="num">15</td><td class="num">14</td><td class="num">29</td></tr>
+    <tr><td class="num">500</td><td class="num">16</td><td class="num">16</td><td class="num">33</td><td class="num">32</td><td class="num">65</td></tr>
+    <tr><td class="num">2000</td><td class="num">32</td><td class="num">32</td><td class="num">65</td><td class="num">64</td><td class="num">129</td></tr>
+  </tbody>
+</table>
+
+<p>即使 <code>d = 2000</code>，每行也只算 65 或 129 个格子，而不是 2000 个。带把列数从 <code>m</code> 降到 <code>O(sqrt d)</code>。</p>
+
+<h3>7.3 列号的含义变了</h3>
+<div class="warn">
+  <span class="tag">最容易读错的地方</span>
+  <p>全矩阵版：<code>S[row][col]</code> 的 <code>col</code> 就是模板位置，范围 <code>0..m−1</code>。<br>
+  窄带版：<code>S[row][col]</code> 的 <code>col</code> 是<b>带内偏移</b>，范围 <code>0..2w</code>。真正的模板位置由 <code>band_centers[row]</code> 推出：<code>pattern_col = (center ± w) mod m</code>。回溯时也同时用到 <code>col</code> 和 <code>pattern_col</code> 两套坐标。</p>
+</div>
+
+<figure>
+<pre><code>              col = 0   1   2   3   4   5   6     (w = 3)
+row r-1        .   .   #   #   #   #   .          center[r-1] = 10
+row r          .   .   .   #   #   #   #          center[r]   = 11
+row r+1        .   .   .   .   #   #   #          center[r+1] = 12
+
+#  = 带内格子，实际模板位置 = center[row] + (col - w), 再对 m 取模
+.  = 带外，视为 -1000</code></pre>
+<figcaption>图 7-1　窄带版的列是相对偏移。中心每行正常移动 ±1；插入缺失和重定心会让它跳变。</figcaption>
+</figure>
+
+<h3 id="s7-4">7.4 带中心与重定心</h3>
+<p>每一行都要先决定 <code>band_centers[row]</code>，再决定本行怎么对齐上一行。</p>
+
+<h4>backward 的方向</h4>
+<div class="src">src/algo.rs:361–373</div>
+<pre><code>if trace.matches_in_diagonal &gt;= recenter_criterion {
+    self.band_centers[row as usize] = (trace.match_at_max_col - 1 + size) % size;
+} else {
+    self.band_centers[row as usize] =
+        (self.band_centers[(row + 1) as usize] - 1 + size) % size;
+}
+
+let mut band_shift =
+    (self.band_centers[row as usize] - self.band_centers[(row + 1) as usize] + size) % size;
+if size - band_shift &lt;= band_shift {
+    band_shift = -(size - band_shift);
+}
+let pattern_col = (self.band_centers[row as usize] + band_radius) % size;</code></pre>
+
+<p>正常情况：序列向更小行号走，模板也向更小列走，所以中心减 1。如果连续 3 行最大值都落在对角线上且是匹配，就把中心直接设到匹配列的前一列（<code>match_at_max_col − 1</code>），让带跟上真实路径。</p>
+
+<h4>forward 的方向</h4>
+<div class="src">src/algo.rs:605–616</div>
+<pre><code>if trace.matches_in_diagonal &gt;= recenter_criterion {
+    self.band_centers[row as usize] = (trace.match_at_max_col + 1) % size;
+} else {
+    self.band_centers[row as usize] = (self.band_centers[(row - 1) as usize] + 1) % size;
+}
+
+let mut band_shift =
+    (self.band_centers[row as usize] - self.band_centers[(row - 1) as usize] + size) % size;
+if size - band_shift &lt;= band_shift {
+    band_shift = -(size - band_shift);
+}
+let pattern_col = (self.band_centers[row as usize] - band_radius + size) % size;</code></pre>
+
+<p>forward 的方向相反：序列向更大行号走，模板向更大列走，中心加 1。重定心时取 <code>match_at_max_col + 1</code>。</p>
+
+<h4>“连续 3 行对齐”怎么计数</h4>
+<p><code>TraceState::matches_in_diagonal</code> 不是“匹配了几个碱基”，而是“连续多少行的行最大值沿着对角线前进且那一步是匹配”。每行结束时的判断是：</p>
+
+<div class="src">src/algo.rs:405–409（backward） / 648–652（forward）</div>
+<pre><code>// backward：当前匹配列应当比上一行少 1（环状）
+if (match_at_max_col - last_match_at_max_col + size) % size == size - 1 {
+    matches_in_diagonal += 1;
+} else {
+    matches_in_diagonal = 0;
+}
+
+// forward：当前匹配列应当比上一行多 1
+if (match_at_max_col - last_match_at_max_col + size) % size == 1 {
+    matches_in_diagonal += 1;
+} else {
+    matches_in_diagonal = 0;
+}</code></pre>
+
+<p>只有 <code>match_at_max_col</code> 是“本行最大分且这一步是匹配”时才有效；否则它被设成 <code>−2</code>，计数清零。这样，随机波动偶尔把最大值放在对角线上不会触发重定心；连续 3 次才说明这是一段真实的重复。</p>
+
+<h3>7.5 一行怎么填：中心跳变</h3>
+<p>中心从上一行到本行的位移记作 <code>band_shift</code>，已经归一化到环上的最短方向。位移有三种情况：</p>
+<ul>
+  <li><b>0</b>：中心不动；按“右移”分支处理。</li>
+  <li><b>正</b>：中心向更大的模板列移动；走“右移”分支。</li>
+  <li><b>负</b>：中心向更小的模板列移动；走“左移”分支。</li>
+</ul>
+
+<p>由于本行的带相对上一行整体平移了 <code>|band_shift|</code> 个格子，本行两端会有若干格子找不到完整的前驱。代码因此把一行分成四段。以 backward、中心左移为例：</p>
+
+<figure>
+<pre><code>上一行的带（row+1）:        [ d ][ d ][ d ][ d ][ d ]
+本行的带（row）  :   [ d ][ d ][ d ][ d ][ d ]
+                      ↑
+                      左移了 1 格：本行最右一格没有“上/对角”前驱
+
+段的划分（从右往左）：
+  1. 最右 shift 格：只有“左”前驱
+  2. 边界格：      “对角 + 左”
+  3. 中间格：      “对角 + 上 + 左”  (max4)
+  4. 最左格：      只可能来自更左边，按“左”处理</code></pre>
+<figcaption>图 7-2　中心跳变导致带的两端缺前驱。代码用 <code>diag_index</code> / <code>up_index</code> 的偏移量把上一行映射到本行。</figcaption>
+</figure>
+
+<p>四个分支分别对应：backward 左移、backward 右移、forward 右移、forward 左移。它们做的事相同：把上一行的 <code>band_diag</code> / <code>band_up</code> 按 <code>band_shift</code> 对齐，能取三个前驱的取 <code>max4</code>，缺一个的取 <code>max3</code> 或 <code>max2</code>，缺两个的只保留“左”。</p>
+
+<div class="src">src/algo.rs:332–341</div>
+<pre><code>fn store_banded_row(&amp;mut self, row: i32, band_radius: i32) {
+    let delta = self.delta;
+    for col in 0..=(2 * band_radius) {
+        let cell_score = self.score(row as usize, col as usize);
+        self.band_diag[col as usize] = cell_score;
+        self.band_up[col as usize] = cell_score + delta;
+    }
+}</code></pre>
+
+<p>这里存的是<b>物理列</b>的分数；下一行读取时再用 <code>diag_index</code> / <code>up_index</code> 的偏移去取对应的前驱。不要误以为 <code>band_diag[col]</code> 直接对应同一模板列。</p>
+
+<h3>7.6 窄带版的两段式</h3>
+<p>窄带版没有 redo。它的结构是：</p>
+<ul>
+  <li><b>backward</b>：从 <code>start+1</code> 向左，定位 <code>min_real_row</code>（最大分的最左行）和 <code>min_col_position</code>（最大分在带内的列）。</li>
+  <li><b>forward</b>：从 <code>min_real_row − 1</code> 向右，<b>分数清零</b>，重新算一遍。这一遍才是权威结果。</li>
+</ul>
+
+<div class="src">src/algo.rs:254–287（节选）</div>
+<pre><code>let mut row = 0i32;
+let mut real_row = trace.min_real_row - 1;
+
+self.band_centers[0] = (trace.min_col_band_center - 1 + size) % size;
+trace.matches_in_diagonal = 0;
+trace.match_at_max_col = -2;
+trace.max_score = 0;
+
+let zero_column = trace.min_col_position - band_radius;
+...
+for col in first_end..=(2 * band_radius_forward) {
+    let cell_score = delta * (col - (band_radius_forward + zero_column));
+    self.set_score(0, col as usize, cell_score);
+    ...
+}</code></pre>
+
+<p>注意 <code>trace.max_score = 0</code>：backward 的分数没有被带进 forward。forward 的第 0 行只用一个斜率为 <code>delta</code> 的初始轮廓，把带的位置对齐到 backward 找到的最大分附近，然后从 0 开始重新累积。因此窄带版不需要第三遍。</p>
+
+<h3>7.7 数值验证</h3>
+<p>同样的 5 份拷贝，把模式换成 30 bp，<code>d = 30 &gt; 20</code>，走窄带版：</p>
+
+<pre><code>python3 - &lt;&lt;'EOF'
+pat = 'ACGTTGCAAGTCCTAGGATCCGATCGATGC'   # 30 bp
+left = 'TTGACCGATTAACGGTCAGTT'
+right = 'GGCTAACGTTAGGCCATGTCA'
+open('/tmp/p30.fa','w').write('&gt;t\n' + left + pat*5 + right + '\n')
+EOF
+
+./target/release/trfrs /tmp/p30.fa --minscore 0 --minperiod 1 --maxperiod 100 -ngs</code></pre>
+
+<p>输出中的关键字段：</p>
+<pre><code>22 171 30 5.0 30 100 0 300 ...
+^   ^   ^   ^   ^        ^
+|   |   |   |   |        score = 300 = 30 × 5 × 2
+|   |   |   |   copies = 5.0
+|   |   |   period = 30
+|   |   consensus size = 30
+start=22, end=171</code></pre>
+
+<p>分数 300 = 30 × 5 × 2，区间 22..171 = 150 bp，正好 5 份拷贝。带宽在 <code>d = 30</code> 时是 <code>w = 6</code>、<code>w_forward = 10</code>，每行最多 21 个格子，而不是 30 个。输出仍然精确等于全匹配分数，说明带没有漏掉最佳路径。</p>
+
+<h2 id="s8"><span class="num">8</span>回溯：从分数到一条比对</h2>
+
+<h3>8.1 全矩阵回溯</h3>
+<p>回溯从 <code>(max_real_row, max_row, max_col)</code> 出发。每一步检查当前分数是否等于某个前驱加上对应动作的分数：</p>
+
+<div class="src">src/algo.rs:1090–1141（节选）</div>
+<pre><code>if cell_score &lt;= 0 {
+    done = true;
+} else if cell_score ==
+    self.score_at(row - 1, (pattern_col + size_minus_one) % size)
+        + self.similarity_score(sequence[real_row], current_pattern[pattern_col])
+{
+    // 对角线：匹配/错配
+    length += 1;
+    if pattern_col == fullcopy { copynumber += 1.0; }
+    fill_align_pair(sequence[real_row], current_pattern[pattern_col], length, real_row, pattern_col);
+    real_row -= 1; row -= 1;
+    pattern_col = (pattern_col + size_minus_one) % size;
+} else if cell_score == self.score_at(row - 1, pattern_col) + delta {
+    // 上：模板相对序列多一个碱基；序列字符对 DASH
+    ...
+} else if cell_score ==
+    self.score_at(row, (pattern_col + size_minus_one) % size) + delta
+{
+    // 左：序列相对模板多一个碱基；模板字符对 DASH
+    ...
+} else {
+    // 走到这里说明分数表与递推式不一致
+}</code></pre>
+
+<p>三个分支的优先级是：对角线、上、左。由于 DP 表可能有多条同分路径，优先级决定了回溯选哪一条；这与 C 版保持一致。</p>
+
+<h3>8.2 环状索引</h3>
+<p>回溯里所有“前一列”都写成 <code>(pattern_col + size − 1) % size</code>。它是 <code>(pattern_col − 1 + size) % size</code> 的等价写法，避免负数取模。列 0 的前一列是 <code>size−1</code>，这就是环绕。</p>
+
+<h3>8.3 窄带回溯</h3>
+<p>窄带回溯同时维护两套坐标：</p>
+<ul>
+  <li><code>col</code>：当前行带内的物理列，范围 <code>0..2w</code>。</li>
+  <li><code>pattern_col</code>：当前格对应的模板位置，范围 <code>0..m−1</code>。</li>
+</ul>
+
+<p>初始化：</p>
+
+<div class="src">src/algo.rs:1183–1195</div>
+<pre><code>let mut real_row = self.max_real_row;
+let mut row = self.max_row;
+let mut pattern_col = self.max_col;
+let mut band_shift = (self.max_col - self.band_centers[row as usize] + size) % size;
+if size - band_shift &lt;= band_shift {
+    band_shift = -(size - band_shift);
+}
+let mut col = band_radius + band_shift;
+let fullcopy = (self.max_col + 1) % size;</code></pre>
+
+<p>每一步先算 <code>up_col</code>：把上一行的模板位置映射回上一行的带内列。</p>
+
+<div class="src">src/algo.rs:1274–1279</div>
+<pre><code>let mut column_shift =
+    (pattern_col - self.band_centers[(row - 1) as usize] + size) % size;
+if size - column_shift &lt;= column_shift {
+    column_shift = -(size - column_shift);
+}
+let up_col = band_radius + column_shift;</code></pre>
+
+<p>然后按 <code>center_shift</code> 的正负决定本行相对上一行是右移还是左移，进而决定三个前驱哪些还在带内：</p>
+
+<table>
+  <thead><tr><th style="width:16%">center_shift</th><th style="width:22%">方向</th><th>前驱可用性</th></tr></thead>
+  <tbody>
+    <tr><td><code>≥ 1</code></td><td>带右移</td><td><code>try_diag</code> 看 <code>col ≤ 2w−shift</code> 或边界格；<code>try_up</code> 看 <code>col ≤ 2w−shift</code>；<code>try_left</code> 默认尝试，<code>col == 0</code> 时是错误边界。</td></tr>
+    <tr><td><code>≤ −1</code></td><td>带左移</td><td><code>try_diag</code> 看 <code>col &gt; shift</code>；<code>try_up</code> 看 <code>col ≥ shift</code>；<code>try_left</code> 默认尝试，<code>col == 0</code> 时是错误边界。</td></tr>
+  </tbody>
+</table>
+
+<p>可用时按对角线、上、左的顺序尝试；命中就前进一行/一列。走到 <code>row == 0</code> 或（LOCAL 且分数 ≤ 0 且不是“合法的 0”）时停止。</p>
+
+<h3>8.4 “合法的 0”</h3>
+<p>局部比对在分数为 0 时结束。但在带状表里，0 有两个来源：</p>
+<ol>
+  <li>真实的比对终点；</li>
+  <li>带边界切掉了某个前驱，取 <code>max</code> 后只能得到 0。</li>
+</ol>
+<p>如果把第 2 种也当终点，回溯会提前停止，比对变短、分数变低。窄带回溯因此加了一段检查：当 <code>cell_score == 0</code> 且 <code>row != 0</code> 时，看这个 0 能否由三个前驱中的某一个解释；能解释就是“合法的 0”，继续回溯。</p>
+
+<div class="src">src/algo.rs:1198–1263（节选）</div>
+<pre><code>let mut legitimate_zero = false;
+if option == LOCAL &amp;&amp; cell_score == 0 &amp;&amp; row != 0 {
+    // 根据 center_shift 的正负与 col 的位置，
+    // 检查 S[row][col] 是否等于某个可用前驱 + 对应分数
+    ...
+}
+let stop = row == 0 || (option == LOCAL &amp;&amp; cell_score &lt;= 0 &amp;&amp; !legitimate_zero);</code></pre>
+
+<p>这段分支很细，但逻辑只有一句：<b>带边缘的 0 不一定代表比对结束，能由前驱解释的 0 要放行。</b></p>
+
+<h3>8.5 拷贝数</h3>
+<p>拷贝数不是 DP 直接算出来的，而是在回溯时数“模板绕环的圈数”。</p>
+
+<div class="src">src/algo.rs:1084 / 1191</div>
+<pre><code>let fullcopy = (pattern_col_max + 1) % size;   // 回溯起点的下一列 = 下一份拷贝的边界</code></pre>
+
+<p>回溯每经过一次 <code>pattern_col == fullcopy</code>，就把 <code>copynumber</code> 加 1。循环结束时，再补上起点到终点的分数份拷贝：</p>
+
+<div class="src">src/algo.rs:1163–1170</div>
+<pre><code>if self.max_col &gt;= pattern_col {
+    self.copynumber += (self.max_col - pattern_col) as f64 / size as f64;
+} else {
+    self.copynumber += (self.max_col + size - pattern_col) as f64 / size as f64;
+}</code></pre>
+
+<p>所以拷贝数可以是 1.9、2.5 这样的分数：整数部分是从回溯起点到终点绕过的完整模板圈数，分数部分是首尾不足一份的拷贝。</p>
+
+<h3>8.6 AlignPair 的布局</h3>
+<p>回溯从右往左走，但 <code>fill_align_pair()</code> 把每一步写到下标 <code>length = 1, 2, 3, …</code>。因此写出来的数组是反的；报告前要调用 <code>reverse()</code> 翻转 <code>1..length</code>。四个数组平行存放：</p>
+
+<table>
+  <thead><tr><th style="width:28%">数组</th><th>内容</th></tr></thead>
+  <tbody>
+    <tr><td><code>sequence_text</code></td><td>比对后的序列字符，gap 为 <code>-</code></td></tr>
+    <tr><td><code>pattern_text</code></td><td>比对后的模板字符，gap 为 <code>-</code></td></tr>
+    <tr><td><code>sequence_index</code></td><td>该列对应的序列位置</td></tr>
+    <tr><td><code>pattern_index</code></td><td>该列对应的模板位置</td></tr>
+  </tbody>
+</table>
+
+<p>下标 0 不用；<code>length</code> 是有效列数。报告阶段再用 <code>shift_pattern_indices()</code> 把模板下标旋转到从 0 开始，方便打印。</p>
+
+<h2 id="s9"><span class="num">9</span>共识与第二次比对</h2>
+
+<h3>9.1 为什么第一轮的模板不够好</h3>
+<p>第一轮模板是从序列里截的一段。它可能包含：</p>
+<ul>
+  <li>一个错配；</li>
+  <li>一个多出来的碱基；</li>
+  <li>一个缺失的碱基；</li>
+  <li>跨越两份拷贝的边界。</li>
+</ul>
+<p>用这样的模板重跑，分数会被样本噪声拉低，边界也可能偏。共识的作用是把所有拷贝的观测放在一起投票，得到更接近“祖先模板”的序列。</p>
+
+<h3>9.2 投票规则</h3>
+<p><code>get_consensus(pattern_length)</code> 遍历第一次比对，把每个比对列按 <code>pattern_index</code> 分组：</p>
+
+<ul>
+  <li><b>奇数槽位</b> <code>2p+1</code>：模板位置 <code>p</code> 上对齐到的序列碱基。正常一列一个。</li>
+  <li><b>偶数槽位</b> <code>2p</code>：模板位置 <code>p</code> 之后插入的碱基。连续多列共享同一个 <code>pattern_index</code> 时，多出来的列记到这里。</li>
+</ul>
+
+<p>然后：</p>
+<ol>
+  <li>对每个奇数槽位，在 A/C/G/T/— 中取多数，得到共识碱基。</li>
+  <li>对每个偶数槽位，若插入次数 / 总次数 ≥ 0.5，说明这个位置经常多出一个碱基，保留多数碱基；否则填 <code>-</code>。</li>
+  <li>把所有 <code>-</code> 去掉，压缩成 <code>consensus.pattern</code>；压缩后的长度是 <code>consensus_class_length</code>。</li>
+</ol>
+
+<p>如果共识长度和原模板不同，<code>process_candidate()</code> 会把 <code>class_length</code> 改成共识长度：</p>
+
+<div class="src">src/scan.rs:597–602</div>
+<pre><code>self.class_length = distance;
+self.get_consensus(distance);
+if self.consensus_class_length != self.class_length {
+    self.class_length = self.consensus_class_length;
+}</code></pre>
+
+<h3>9.3 第二轮 WDP</h3>
+<p>第二轮和第一轮共用同一套全矩阵/窄带分支，只是模板换成共识：</p>
+
+<div class="src">src/scan.rs:604–632（节选）</div>
+<pre><code>if self.class_length &lt;= SMALL_DISTANCE {
+    self.wraparound_dp(position, self.class_length, true);
+    self.get_pair_alignment_with_copynumber(self.class_length);
+} else {
+    let class_length = self.class_length;
+    let band_radius = max2(MIN_BAND_RADIUS, self.indel_random_walk_range(class_length));
+    let band_radius_forward = min2(2 * band_radius, class_length / 3);
+    self.narrow_band_wraparound_dp(position, class_length, band_radius,
+                                   band_radius_forward, true, RECENTER_CRITERION);
+    self.get_narrow_band_pair_alignment_with_copynumber(class_length,
+        min2(2 * band_radius, class_length / 3), LOCAL);
+}</code></pre>
+
+<p>第二轮结束后再检查一次拷贝数门槛，然后用 <code>align_pair.score</code> 和 <code>minscore</code> 决定是否报告：</p>
+
+<div class="src">src/scan.rs:637–657</div>
+<pre><code>let class_length = self.class_length;
+let copynumber = self.copynumber;
+if (class_length &lt;= 50 &amp;&amp; copynumber &lt; 1.9)
+    || (class_length &gt; 50 &amp;&amp; class_length &lt;= 100
+        &amp;&amp; copynumber &lt; 1.9 - 0.002 * (distance - 50) as f64)
+    || (class_length &gt; 100 &amp;&amp; copynumber &lt; 1.8)
+{
+    return;
+}
+
+if class_length &gt;= self.minsize &amp;&amp; self.align_pair.score &gt;= self.minscore {
+    self.output_count += 1.0;
+    self.output_size_counts[class_length as usize] += 1;
+    self.report_repeat(class_length);
+}</code></pre>
+
+<h3>9.4 分数与周期</h3>
+<p>最终输出里的 <code>score</code> 是 <code>align_pair.score</code>，即回溯起点格的分数，不是 DP 最大值字段。报告里的 <code>period</code> 也不是 <code>class_length</code>：<code>report_repeat()</code> 把相邻拷贝中同一模板位置的两列配对，统计它们序列位置之差，取众数作为 <code>best_match_distance</code>。有插入缺失时，实际周期和共识长度可以不同。</p>
+
+<h2 id="s10"><span class="num">10</span>评分、边界与参数</h2>
+
+<h3>10.1 相似度矩阵</h3>
+<p><code>Trf::new()</code> 建立 256×256 的 <code>similarity_matrix</code>：</p>
+
+<div class="src">src/state.rs:525–529</div>
+<pre><code>let mut similarity_matrix = vec![beta; 256 * 256];
+similarity_matrix[b'A' as usize * 256 + b'A' as usize] = alpha;
+similarity_matrix[b'C' as usize * 256 + b'C' as usize] = alpha;
+similarity_matrix[b'G' as usize * 256 + b'G' as usize] = alpha;
+similarity_matrix[b'T' as usize * 256 + b'T' as usize] = alpha;</code></pre>
+
+<p>只有 A/A、C/C、G/G、T/T 得 <code>α</code>；其它所有组合都得 <code>β</code>。<code>α = match_weight</code>，<code>β = −mismatch</code>，<code>δ = −indel</code>。默认值是 <code>2 / −5 / −7</code>。</p>
+
+<h3>10.2 局部性与线性 gap</h3>
+<p>递推里的 <code>max(0, …)</code> 保证分数不会为负；每次插入缺失的代价固定为 <code>δ</code>，没有 affine gap（开 gap 和延伸 gap 同价）。这就是 TRF 的评分模型，比 Smith-Waterman 的仿射 gap 简单，但与它的统计模型一致。</p>
+
+<h3>10.3 PM / PI 不直接进入分数</h3>
+<p><code>PM</code>（匹配概率）和 <code>PI</code>（插入缺失概率）不参与 <code>α/β/δ</code>。它们的作用是：</p>
+<ul>
+  <li><code>PM</code> 决定元组长度与阈值表（<code>init_criteria_tables()</code>）。</li>
+  <li><code>PI</code> 决定 <code>indel_probability</code>，进而决定带宽 <code>range(d)</code>。</li>
+</ul>
+<p>换句话说，DP 的分数只看 <code>α/β/δ</code>；<code>PM/PI</code> 决定“哪些候选值得做 DP”和“带要留多宽”。</p>
+
+<h3>10.4 门槛的顺序</h3>
+<table>
+  <thead><tr><th style="width:24%">门槛</th><th>位置</th><th>作用</th></tr></thead>
+  <tbody>
+    <tr><td>统计判据</td><td><code>distance_meets_criteria()</code></td><td>决定是否进入 WDP。</td></tr>
+    <tr><td><code>distance_seen</code></td><td><code>process_candidate()</code> 开头</td><td>同一周期上一轮已经覆盖到这里，直接跳过。</td></tr>
+    <tr><td>拷贝数</td><td>两轮 WDP 之后</td><td>周期 ≤50 要求 ≥1.9；50–100 线性降到 1.8；&gt;100 要求 ≥1.8。</td></tr>
+    <tr><td><code>minscore</code></td><td>报告前</td><td>最终分数门槛。</td></tr>
+    <tr><td><code>min_period</code></td><td><code>clean::trf_clean()</code></td><td>报告后的周期过滤，不影响 WDP 是否执行。</td></tr>
+  </tbody>
+</table>
+
+<h3>10.5 <code>report_min</code> 是什么</h3>
+<p><code>report_min</code> 在 <code>control.rs:103</code> 被设为 0，<code>algo.rs:984</code> 又设了一次 0。全矩阵版的 redo 条件 <code>max_score ≥ report_min</code> 因此恒真；窄带版保存结果的条件也恒真。它更像一个保留的开关，而不是用户可调参数。真正决定“报不报”的是 <code>minscore</code>。</p>
+
+<h2 id="s11"><span class="num">11</span>复杂度与统计</h2>
+
+<h3>11.1 时间</h3>
+<table>
+  <thead><tr><th style="width:24%">版本</th><th style="width:30%">每行格子数</th><th>总时间</th></tr></thead>
+  <tbody>
+    <tr><td>全矩阵</td><td><code>m</code>（≤20），每行两遍；三段</td><td><code>O(R · m)</code>，常数约 6（三段 × 两遍）</td></tr>
+    <tr><td>窄带 backward</td><td><code>2w+1</code></td><td><code>O(R · w)</code></td></tr>
+    <tr><td>窄带 forward</td><td><code>2w_forward+1</code></td><td><code>O(R · w_forward)</code></td></tr>
+    <tr><td>回溯</td><td>每步 O(1)</td><td><code>O(比对长度)</code></td></tr>
+  </tbody>
+</table>
+
+<p><code>R</code> 是本次 WDP 实际扫描的行数，不是整个序列长度；backward/forward 只覆盖重复附近。窄带版的 <code>w</code> 随 <code>sqrt(d)</code> 增长，所以长周期的行成本远低于全矩阵。</p>
+
+<h3>11.2 空间</h3>
+<ul>
+  <li><code>score_matrix</code>：<code>(band_width+1) × 151</code> 个 <code>i32</code>。与模板长度无关，只与 <code>-l</code> 有关。</li>
+  <li><code>band_up</code> / <code>band_diag</code>：各 151 个 <code>i32</code>。</li>
+  <li><code>current_pattern</code>：<code>2 × (2000+1)</code> 字节。</li>
+  <li><code>align_pair</code>：4 个数组，每个 <code>2 × band_width + 2</code>。</li>
+</ul>
+
+<h3>11.3 统计计数器</h3>
+<table>
+  <thead><tr><th style="width:28%">字段</th><th>含义</th></tr></thead>
+  <tbody>
+    <tr><td><code>rows</code></td><td>本次 WDP 处理的行数。每次 WDP 前清零。</td></tr>
+    <tr><td><code>cell_counts[d]</code></td><td>按周期累计的估算格子数：全矩阵 <code>rows × d</code>；窄带 <code>rows × (2w+1)</code>。</td></tr>
+    <tr><td><code>cell_total</code></td><td>所有周期 <code>cell_counts</code> 之和，在 <code>control.rs:197</code> 汇总。</td></tr>
+    <tr><td><code>wasted_total</code></td><td>参考实现的另一个统计量：按周期和 <code>range(d)</code> 估算的“浪费格子”计数，用于统计展示；它不参与算法决策。</td></tr>
+    <tr><td><code>wraparound_dp_count</code></td><td>进入 WDP 的候选数，不是 WDP 调用次数。</td></tr>
+  </tbody>
+</table>
+
+<h3>11.4 最坏情况</h3>
+<ul>
+  <li><b>低复杂度序列</b>：候选多，DP 次数多；靠统计判据、<code>distance_seen</code> 和最佳周期表限制。</li>
+  <li><b>高 PI</b>：<code>range(d)</code> 变大。带宽超过 <code>MAX_BANDWIDTH</code> 时，<code>narrow_band_wraparound_dp()</code> 直接 <code>fatal(-1)</code>。默认 <code>PI=10</code> 时 <code>d=2000</code> 的 <code>w=32</code>，远低于 <code>2w+1 ≤ 150</code> 给出的 74 硬上限。</li>
+  <li><b>长序列 + 小 <code>-l</code></b>：<code>band_width</code> 被截断，WDP 只能扫前 <code>max_wrap_length</code> 行；超出部分的重复可能被漏掉。这是 <code>-l</code> 的语义。</li>
+</ul>
+
+<h2 id="s12"><span class="num">12</span>不变量、风险与常见误解</h2>
+
+<h3>12.1 不变量</h3>
+<ol>
+  <li><b>环状列</b>：所有模板列索引都在 <code>0..m−1</code>，任何加一/减一都取模。</li>
+  <li><b>局部性</b>：每个格子的分数 ≥0；<code>−1000</code> 只作为屏障，不参与正常路径。</li>
+  <li><b>屏障只改写 0</b>：正分路径可以穿过屏障区。</li>
+  <li><b>权威分数</b>：全矩阵来自 redo，窄带来自 forward；backward 只负责定位。</li>
+  <li><b>回溯一致性</b>：每一步都必须满足 <code>S[r][c] == 前驱 + 动作分</code>；否则代码会报 “error in trace back”。</li>
+  <li><b>带宽上限</b>：<code>2w+1 ≤ MAX_BANDWIDTH</code>，否则致命错误。</li>
+</ol>
+
+<h3>12.2 风险</h3>
+<ul>
+  <li><b>带跟丢</b>：真实比对漂出带外，分数会偏低。随机游走半径覆盖约 95%，forward 带更宽，重定心再补一层；但仍不是 100% 保证。</li>
+  <li><b>两遍行扫描不是完整不动点</b>：它按参考实现的顺序定义结果；换顺序、加遍数可能改变个别格子的值，从而改变输出。要逐字节一致，就照原样保留。</li>
+  <li><b>屏障位置差一行</b>：redo 的 <code>start+1</code> 与主 forward 的 <code>start</code> 是有意为之；改成一样会改变局部起点。</li>
+  <li><b><code>MAX_BANDWIDTH</code> 是硬限制</b>：高 PI + 长周期可能触发 <code>fatal(-1)</code>，不是静默降级。</li>
+</ul>
+
+<h3>12.3 常见误解</h3>
+<details>
+<summary>1. “backward 的最大分就是最终分数。”</summary>
+<p>不是。全矩阵版会用 redo 从 <code>min_row−m−1</code> 重算；窄带版在 forward 开始时把分数清零。backward 只负责找左边界/种子。</p>
+</details>
+<details>
+<summary>2. “窄带的 <code>S[r][c]</code> 里 <code>c</code> 就是模板列。”</summary>
+<p>不是。窄带里 <code>c</code> 是带内物理偏移，模板位置要由 <code>band_centers[row]</code> 换算。全矩阵版才是“列 = 模板位置”。</p>
+</details>
+<details>
+<summary>3. “WDP 会把整个序列复制一遍，形成双倍模板。”</summary>
+<p>不会。只是列号取模。模板字符串只有一份；环绕发生在索引运算里。</p>
+</details>
+<details>
+<summary>4. “<code>−1000</code> 是一个很低的真实分数。”</summary>
+<p>它是一个哨兵，表示“此路不通”。它比任何可能的真实分数都小，所以一定输给 <code>max</code>。</p>
+</details>
+<details>
+<summary>5. “<code>report_min</code> 就是 <code>minscore</code>。”</summary>
+<p>不是。当前 <code>report_min</code> 恒为 0；<code>minscore</code> 是报告前的最终门槛，作用在 <code>align_pair.score</code> 上。</p>
+</details>
+<details>
+<summary>6. “<code>wrap_end</code> 用来跳过已覆盖的候选。”</summary>
+<p>当前源码里 <code>wrap_end</code> 只写不读；真正用于跳过的是 <code>distance_seen</code> 中的 <code>max_real_row</code>。</p>
+</details>
+<details>
+<summary>7. “<code>GLOBAL</code> 回溯分支是给第二轮用的。”</summary>
+<p>不是。当前 <code>process_candidate()</code> 两轮都传 <code>LOCAL</code>；<code>GLOBAL</code> 分支和 <code>max_real_col</code> 是移植时保留的完整接口，当前调用路径不会走到。</p>
+</details>
+<details>
+<summary>8. “周期就是共识长度。”</summary>
+<p>不一定。共识长度是压缩后的模板长度；周期是报告阶段统计相同碱基距离得到的众数。有插入缺失时两者可以不同。</p>
+</details>
+
+<h2 id="s13"><span class="num">13</span>与 C 参考实现对照</h2>
+
+<p>Rust 版是逐函数移植，控制流和数组下标尽量保持原样。下面这张表用于排查“输出不一致”时定位。</p>
+
+<table>
+  <thead><tr><th style="width:36%">C 版</th><th>Rust 版</th><th>备注</th></tr></thead>
+  <tbody>
+    <tr><td><code>wraparound_dp()</code></td><td><code>Trf::wraparound_dp</code></td><td>三段：backward / forward / redo。</td></tr>
+    <tr><td><code>narrow_band_wraparound_dp()</code></td><td><code>Trf::narrow_band_wraparound_dp</code></td><td>两段：backward / forward；没有 redo。</td></tr>
+    <tr><td><code>get_pair_alignment_with_copynumber()</code></td><td><code>Trf::get_pair_alignment_with_copynumber</code></td><td>全矩阵回溯。</td></tr>
+    <tr><td><code>get_narrow_band_pair_alignment_with_copynumber()</code></td><td><code>Trf::get_narrow_band_pair_alignment_with_copynumber</code></td><td>窄带回溯；“合法的 0”检查在这里。</td></tr>
+    <tr><td><code>get_consensus()</code></td><td><code>Trf::get_consensus</code></td><td>奇偶槽位投票。</td></tr>
+    <tr><td><code>reverse()</code></td><td><code>Trf::reverse</code></td><td>翻转 <code>AlignPair</code> 的 <code>1..length</code>。</td></tr>
+    <tr><td><code>shift_pattern_indices()</code></td><td><code>Trf::shift_pattern_indices</code></td><td>打印前把模板下标归零。</td></tr>
+    <tr><td><code>print_alignment()</code></td><td><code>Trf::print_alignment</code></td><td>HTML 对齐图。</td></tr>
+    <tr><td><code>fill_align_pair</code> 宏</td><td><code>Trf::fill_align_pair</code></td><td>写四数组。</td></tr>
+    <tr><td><code>test_trace_and_backwards_maxscore</code> 宏</td><td><code>Trf::backward_trace_cell</code></td><td>屏障、最大值、匹配列。</td></tr>
+    <tr><td><code>test_maxrowscore_with_match</code> 宏</td><td><code>backward_trace_cell</code> / <code>forward_trace_cell</code> 内联</td><td>行最大值与匹配列。</td></tr>
+    <tr><td><code>test_maxrowscore_without_match</code> 宏</td><td>同上</td><td><code>match_at_max_col = −2</code>。</td></tr>
+  </tbody>
+</table>
+
+<p>移植时保留了 C 版的一些“看似多余”的字段和分支，例如 <code>wrap_end</code>、<code>max_real_col</code>、<code>GLOBAL</code>。它们不影响当前输出，但删掉会让代码与参考实现难以逐行对照。</p>
+
+<h2 id="s14"><span class="num">14</span>速查表</h2>
+
+<h3>14.1 调用链</h3>
+<pre><code>scan_sequence()
+  └─ process_candidate(position, distance, tuple_size)
+       ├─ distance_seen.covers(distance, position) ? return
+       ├─ distance_meets_criteria(...) ? continue
+       ├─ distance ≤ 20 ?
+       │    ├─ wraparound_dp(position, distance, false)
+       │    └─ get_pair_alignment_with_copynumber(distance)
+       │  else
+       │    ├─ w = max(6, range(distance))
+       │    ├─ wf = min(2w, distance/3)
+       │    ├─ narrow_band_wraparound_dp(position, distance, w, wf, false, 3)
+       │    └─ get_narrow_band_pair_alignment_with_copynumber(distance, wf, LOCAL)
+       ├─ copynumber 门槛
+       ├─ get_consensus(distance)
+       ├─ class_length = consensus_class_length
+       ├─ 第二轮：同上，模板 = consensus，size = class_length
+       ├─ 拷贝数门槛
+       └─ align_pair.score ≥ minscore ? report_repeat()
+</code></pre>
+
+<h3>14.2 公式与常量</h3>
+<table>
+  <thead><tr><th style="width:34%">项</th><th>值 / 公式</th></tr></thead>
+  <tbody>
+    <tr><td>匹配 / 错配 / gap</td><td><code>α = 2</code>，<code>β = −5</code>，<code>δ = −7</code>（默认）</td></tr>
+    <tr><td>局部递推</td><td><code>max(0, diag+sub, up+δ, left+δ)</code></td></tr>
+    <tr><td>随机游走半径</td><td><code>floor(2.3 × sqrt(pI × d))</code></td></tr>
+    <tr><td>backward 带宽</td><td><code>w = max(6, range(d))</code></td></tr>
+    <tr><td>forward / 回溯带宽</td><td><code>min(2w, d/3)</code></td></tr>
+    <tr><td>全矩阵阈值</td><td><code>d ≤ 20</code>（第二轮看 <code>class_length</code>）</td></tr>
+    <tr><td>重定心阈值</td><td>连续 3 行对角线匹配</td></tr>
+    <tr><td>带宽上限</td><td><code>2w+1 ≤ 150</code></td></tr>
+    <tr><td>屏障值</td><td><code>−1000</code></td></tr>
+  </tbody>
+</table>
+
+<h3>14.3 一句话总结</h3>
+<div class="key">
+  <span class="tag">把全书压成三句</span>
+  <p>1. 环状列让模板的任意旋转都等价；局部 0 让比对可以在任意位置起止。<br>
+  2. 窄带只算对角线附近，用 <code>2.3·sqrt(pI·d)</code> 定宽，用连续 3 次匹配重定心。<br>
+  3. backward 只负责找左边界，forward/redo 才算最终分数；回溯把分数变成区间、拷贝数和共识。</p>
+</div>
+
+<h2 id="s15"><span class="num">15</span>自测题</h2>
+
+<details>
+<summary>Q1. 为什么模板列号要取模？不取模会怎样？</summary>
+<p>取模让模板首尾相接，一条路径可以从任意列开始、绕任意圈，覆盖同一模式的多次拷贝。不取模的话，模板有固定起点和终点，第一份拷贝从中间开始时就无法对齐，程序必须枚举所有旋转。</p>
+</details>
+
+<details>
+<summary>Q2. 局部 WDP 的 0 下限解决了什么？全局 WDP 为什么不能直接用？</summary>
+<p>0 下限让比对可以在任意位置重新开始和结束，因此不需要预先知道重复的左右边界。全局 WDP 要求整条模板被消耗，起止受约束；要支持任意旋转，需要额外的边界初始化或两阶段扫描。</p>
+</details>
+
+<details>
+<summary>Q3. 全矩阵版为什么要扫三遍？窄带版为什么只扫两遍？</summary>
+<p>全矩阵版的 backward 只用来找种子行，主 forward 只记录扫描终点；真正的分数和回溯起点由第三遍 redo 从种子前一个模板长度重算。窄带版的 forward 直接把分数清零，从种子行左边重新累积，所以不需要第三遍。</p>
+</details>
+
+<details>
+<summary>Q4. 窄带版的 <code>S[r][c]</code> 中，<code>c</code> 和模板列是什么关系？</summary>
+<p><code>c</code> 是带内物理偏移，范围 <code>0..2w</code>。模板列由 <code>band_centers[r]</code> 换算：backward 时 <code>pattern_col = center + w</code> 起步向左，forward 时 <code>pattern_col = center − w</code> 起步向右，全部对 <code>m</code> 取模。</p>
+</details>
+
+<details>
+<summary>Q5. 为什么带宽用 <code>2.3·sqrt(pI·d)</code>，而不是固定的 6？</summary>
+<p>插入缺失造成的相位漂移是随机游走，标准差随 <code>sqrt(d)</code> 增长。固定带宽在长周期上会跟丢，固定的大带宽又浪费。用随机游走半径可以覆盖约 95% 的漂移，同时让带宽远小于周期。系数 2.3 是参考实现的标定值。</p>
+</details>
+
+<details>
+<summary>Q6. 重定心为什么要求连续 3 行，而不是 1 行？</summary>
+<p>一次行最大值落在对角线上可能只是随机波动。连续 3 行都沿着对角线且都是匹配，才说明真实比对已经移到带的边缘，需要把中心挪过去。</p>
+</details>
+
+<details>
+<summary>Q7. 窄带回溯里的“合法的 0”是什么？</summary>
+<p>带边界会切掉某个前驱，使 <code>max</code> 只能得到 0。这个 0 不是真实终点。回溯检查这个 0 能否由可用的前驱解释；能解释就继续走，避免比对被截短。</p>
+</details>
+
+<details>
+<summary>Q8. 为什么报告分数用 <code>align_pair.score</code>，而不是 <code>max_score</code>？</summary>
+<p><code>align_pair.score</code> 是回溯起点格的分数，和最终输出的比对、区间、拷贝数绑定在一起。<code>max_score</code> 是 DP 过程的字段；全矩阵版中间两段的 <code>max_score</code> 还可能来自非权威的半边。用回溯起点的分数可以保证“报出的分数”和“报出的比对”一致。</p>
+</details>
+
+<details>
+<summary>Q9. 为什么 <code>period</code> 可能不等于 <code>class_length</code>？</summary>
+<p><code>class_length</code> 是共识模板压缩后的长度；<code>period</code> 是报告阶段把相邻拷贝中同一模板位置的两列配对后，序列位置之差的众数。插入缺失会让相邻拷贝的实际间距与模板长度不同。</p>
+</details>
+
+<details>
+<summary>Q10. 如果把 <code>SMALL_DISTANCE</code> 调大，强制中等周期走全矩阵，输出应该变吗？</summary>
+<p>在带宽足够、没有跟丢的前提下，不应改变分数和区间；全矩阵是窄带的精确版本。可以用一段中等周期（如 30–100 bp）的测试序列对比输出，验证两者逐字节一致。若不一致，通常说明窄带跟丢或边界处理有差异。</p>
+</details>
+
+<h2 id="app-a"><span class="num">A</span>源码索引</h2>
+
+<table>
+  <thead><tr><th style="width:44%">内容</th><th>位置</th></tr></thead>
+  <tbody>
+    <tr><td>常量</td><td><code>src/state.rs:34–45</code></td></tr>
+    <tr><td><code>Trf</code> 字段</td><td><code>src/state.rs:396–500</code></td></tr>
+    <tr><td>矩阵分配</td><td><code>src/state.rs:609–614</code></td></tr>
+    <tr><td>随机游走半径</td><td><code>src/state.rs:653–656</code></td></tr>
+    <tr><td>候选入口</td><td><code>src/scan.rs:529–658</code></td></tr>
+    <tr><td>全矩阵 / 窄带分支</td><td><code>src/scan.rs:549–575</code></td></tr>
+    <tr><td>共识与第二轮</td><td><code>src/scan.rs:596–632</code></td></tr>
+    <tr><td>窄带 WDP</td><td><code>src/algo.rs:191–314</code></td></tr>
+    <tr><td>backward 行</td><td><code>src/algo.rs:343–410</code></td></tr>
+    <tr><td>forward 行</td><td><code>src/algo.rs:587–653</code></td></tr>
+    <tr><td>全矩阵 WDP</td><td><code>src/algo.rs:825–1068</code></td></tr>
+    <tr><td>全矩阵回溯</td><td><code>src/algo.rs:1079–1173</code></td></tr>
+    <tr><td>窄带回溯</td><td><code>src/algo.rs:1176–1446</code></td></tr>
+    <tr><td>共识</td><td><code>src/algo.rs:1775–1874</code></td></tr>
+    <tr><td>统计汇总</td><td><code>src/control.rs:197–215</code></td></tr>
+    <tr><td><code>-l</code> 参数</td><td><code>src/driver.rs:107–112</code></td></tr>
+  </tbody>
+</table>
+
+<h2 id="app-b"><span class="num">B</span>术语表</h2>
+
+<table>
+  <thead><tr><th style="width:24%">术语</th><th>含义</th></tr></thead>
+  <tbody>
+    <tr><td>WDP</td><td>Wraparound Dynamic Programming，环绕动态规划。模板列号取模，使模板首尾相接。</td></tr>
+    <tr><td>环状模板</td><td>列 <code>m−1</code> 的右邻是列 0，列 0 的左邻是列 <code>m−1</code>。不是物理复制字符串。</td></tr>
+    <tr><td>相位 / 旋转</td><td>模板的哪个位置对应重复单元的第一个碱基。WDP 不需要枚举它。</td></tr>
+    <tr><td>带 / band</td><td>只计算对角线附近 <code>2w+1</code> 列的子矩阵。</td></tr>
+    <tr><td>带中心</td><td><code>band_centers[row]</code>，第 <code>row</code> 行带中心对应的模板位置。</td></tr>
+    <tr><td>重定心</td><td>连续 3 行对角线匹配后，把带中心移到真实路径上。</td></tr>
+    <tr><td>屏障</td><td>把 0 改写成 <code>−1000</code>，禁止比对在某些区域重新开始。</td></tr>
+    <tr><td>种子行</td><td>backward 找到的最左最大分行 <code>min_row</code>；redo/forward 从它附近启动。</td></tr>
+    <tr><td>共识</td><td>按模板位置对所有拷贝投票得到的模板；第二轮 WDP 用它。</td></tr>
+    <tr><td>合法 0</td><td>带状回溯中，能由可用前驱解释的 0；不是真实终点。</td></tr>
+  </tbody>
+</table>
+
+<h2 id="app-c"><span class="num">C</span>参考文献</h2>
+
+<ol>
+  <li>Benson G. Tandem repeats finder: a program to analyze DNA sequences. <i>Nucleic Acids Research</i>, 1999, 27(2): 573–580. 本书讨论的 TRF 算法与参数出处。</li>
+  <li>Miller W, Myers E. Sequence comparison with concave weighting functions. <i>Bulletin of Mathematical Biology</i>, 1989, 51: 5–37. TRF 论文引用 [35]。</li>
+  <li>Fischetti V, Landau G, Schmidt J, Sellers P. Identifying periodic occurrences of a template with applications to protein structure. In <i>Proceedings of the 3rd Annual Symposium on Combinatorial Pattern Matching</i>, LNCS 644, Springer, 1992: 111–120. TRF 论文引用 [36]；环状模板 WDP 的直接来源。</li>
+  <li>Smith T F, Waterman M S. Identification of common molecular subsequences. <i>Journal of Molecular Biology</i>, 1981, 147: 195–197. 局部比对评分模型的经典出处。</li>
+</ol>
+
+<p style="margin-top:44px;padding-top:18px;border-top:1px solid var(--line);font-size:13px;color:var(--muted)">
+  本书依据 <code>trfrs</code> 源码与 TRF 4.10.0 参考实现编写。原始 C 程序作者：Gary Benson（1999–2020）。<br>
+  行号取自当前检出；若源码重构后对不上，请以函数名和常量名为准。
+</p>
+
+</main>
+</div>
+</body>
+</html>
