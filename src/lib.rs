@@ -75,18 +75,20 @@ License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 //! |-------------------------|-----------------------------------------------|
 //! | `trf.c`                 | `cli.rs` (command line), `driver.rs` (driver) |
 //! | `trfrun.h`              | `control.rs` (control routine, `TRF()`)       |
-//! | `tr30dat.h` + `tr30dat.c` | `state.rs`, `algo.rs`, `scan.rs`            |
+//! | `tr30dat.h` + `tr30dat.c` | `state.rs`, `algo.rs`, `scan.rs`, `dp.rs`    |
 //! | `trfclean.h`            | `clean.rs` (redundancy removal, HTML output)  |
 //! | FASTA input             | `fasta.rs`                                    |
 //! | generated tables        | `tables.rs`                                   |
 //!
 //! The C program keeps its state in file scope globals; here everything lives in
-//! `state::Trf`, which is created once per sequence.
+//! `state::Trf`, which is created once per sequence, except the wraparound DP
+//! workspace and algorithms, which live in `dp::WraparoundDp`.
 
 mod algo;
 mod clean;
 mod cli;
 mod control;
+mod dp;
 mod driver;
 mod fasta;
 mod params;

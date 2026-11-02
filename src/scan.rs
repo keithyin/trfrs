@@ -546,10 +546,10 @@ impl Trf {
 
         self.wraparound_dp_count += 1.0;
         self.criteria_counts[distance as usize] += 1;
-        self.rows = 0.0;
+        self.dp.rows = 0.0;
         if distance <= SMALL_DISTANCE {
             self.wraparound_dp(position, distance, false);
-            self.cell_counts[distance as usize] += self.rows * distance as f64;
+            self.cell_counts[distance as usize] += self.dp.rows * distance as f64;
             self.get_pair_alignment_with_copynumber(distance);
         } else {
             let band_radius = max2(MIN_BAND_RADIUS, self.indel_random_walk_range(distance));
@@ -562,7 +562,7 @@ impl Trf {
                 false,
                 RECENTER_CRITERION,
             );
-            self.cell_counts[distance as usize] += self.rows
+            self.cell_counts[distance as usize] += self.dp.rows
                 * (2 * max2(MIN_BAND_RADIUS, self.indel_random_walk_range(distance)) + 1) as f64;
             let trace_band_radius = min2(
                 2 * max2(MIN_BAND_RADIUS, self.indel_random_walk_range(distance)),
@@ -575,7 +575,7 @@ impl Trf {
             );
         }
         self.distance_seen
-            .record(position, distance, self.max_real_row, self.max_score);
+            .record(position, distance, self.dp.max_real_row, self.dp.max_score);
 
         /* number of copies required, less restrictive for larger patterns */
         let copynumber = self.copynumber;
@@ -601,10 +601,10 @@ impl Trf {
             self.class_length = self.consensus_class_length;
         }
         self.consensus_counts[self.class_length as usize] += 1;
-        self.rows = 0.0;
+        self.dp.rows = 0.0;
         if self.class_length <= SMALL_DISTANCE {
             self.wraparound_dp(position, self.class_length, true);
-            self.cell_counts[self.class_length as usize] += self.rows * distance as f64;
+            self.cell_counts[self.class_length as usize] += self.dp.rows * distance as f64;
             self.get_pair_alignment_with_copynumber(self.class_length);
         } else {
             let class_length = self.class_length;
@@ -618,7 +618,7 @@ impl Trf {
                 true,
                 RECENTER_CRITERION,
             );
-            self.cell_counts[class_length as usize] += self.rows
+            self.cell_counts[class_length as usize] += self.dp.rows
                 * (2 * max2(MIN_BAND_RADIUS, self.indel_random_walk_range(class_length)) + 1)
                     as f64;
             let trace_band_radius = min2(
@@ -632,7 +632,7 @@ impl Trf {
             );
         }
         self.distance_seen
-            .record(position, distance, self.max_real_row, self.max_score);
+            .record(position, distance, self.dp.max_real_row, self.dp.max_score);
         self.adjust_best_period_entry(distance);
 
         let class_length = self.class_length;

@@ -100,8 +100,8 @@ impl Trf {
         self.print_flanking = self.params.flanking_sequence;
         self.progress("Allocating Memory...");
 
-        self.report_min = 0;
-        self.rows = 0.0;
+        self.dp.report_min = 0;
+        self.dp.rows = 0.0;
         self.total_characters = 0.0;
     }
 

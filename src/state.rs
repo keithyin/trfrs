@@ -28,6 +28,7 @@ use std::collections::VecDeque;
 use std::fs::File;
 use std::io::{BufWriter, Write};
 
+use crate::dp::WraparoundDp;
 use crate::fasta::FastaSequence;
 use crate::params::ParamSet;
 
@@ -390,6 +391,23 @@ impl AlignPair {
             pattern_index: vec![0; size + 2],
         }
     }
+
+    /// Writes one traceback cell (the `fill_align_pair()` macro).
+    #[inline]
+    pub fn fill(
+        &mut self,
+        sequence_char: u8,
+        pattern_char: u8,
+        column: i32,
+        sequence_position: i32,
+        pattern_position: i32,
+    ) {
+        let column = column as usize;
+        self.sequence_text[column] = sequence_char;
+        self.pattern_text[column] = pattern_char;
+        self.sequence_index[column] = sequence_position;
+        self.pattern_index[column] = pattern_position;
+    }
 }
 
 /// The complete algorithm state for one sequence.
@@ -400,15 +418,9 @@ pub struct Trf {
     /// Sequence characters; index 0 is a sentinel, `sequence[1..=length]` are bases.
     pub sequence: Vec<u8>,
     pub length: i32,
-    /// `max_wrap_length`: number of rows of `S`.
-    pub band_width: usize,
 
-    /// Wraparound dynamic programming scoring matrix (`S`).
-    pub score_matrix: Vec<i32>,
-    pub band_up: [i32; MAX_BANDWIDTH + 1],
-    pub band_diag: [i32; MAX_BANDWIDTH + 1],
-    /// Pattern currently being aligned against the sequence (`EC`).
-    pub current_pattern: Vec<u8>,
+    /// Wraparound dynamic programming workspace and results.
+    pub dp: WraparoundDp,
     pub consensus: Consensus,
     pub align_pair: AlignPair,
 
@@ -430,22 +442,13 @@ pub struct Trf {
     pub max_distance: i32,
     #[allow(dead_code)]
     pub maxpatternsize: i32,
-    pub max_real_col: i32,
-    pub report_min: i32,
     pub heading: i32,
     pub class_length: i32,
     pub consensus_class_length: i32,
     pub period: i32,
     pub minsize: i32,
 
-    /// Counter of processed rows, a `double` in the reference implementation.
-    pub rows: f64,
     pub total_characters: f64,
-    pub wrap_end: i32,
-    pub max_real_row: i32,
-    pub max_row: i32,
-    pub max_col: i32,
-    pub max_score: i32,
 
     pub tags: Vec<i32>,
     pub top_tag: i32,
@@ -468,8 +471,6 @@ pub struct Trf {
     /// Per tuple size `k`: hash table and rolling history.  Index 0 is an unused
     /// sentinel so `k` stays 1-based; live entries are `1..=num_tuple_sizes`.
     pub tuple_histories: Vec<TupleHistory>,
-
-    pub band_centers: Vec<i32>,
 
     pub copynumber: f64,
     pub wraparound_dp_count: f64,
@@ -544,7 +545,7 @@ impl Trf {
 
         let top_tag = max_distance / TAG_SEPARATION;
 
-        let mut trf = Trf {
+        Trf {
             alpha,
             beta,
             delta,
@@ -555,20 +556,12 @@ impl Trf {
             maxperiod: params.maxperiod as i32,
             max_distance,
             maxpatternsize: max_distance,
-            max_real_col: 0,
-            report_min: 0,
             heading: 0,
             class_length: 0,
             consensus_class_length: 0,
             period: 0,
             minsize: 1,
-            rows: 0.0,
             total_characters: 0.0,
-            wrap_end: 0,
-            max_real_row: 0,
-            max_row: 0,
-            max_col: 0,
-            max_score: 0,
             tags: vec![0; (max_distance / TAG_SEPARATION) as usize + 1],
             top_tag,
             distances,
@@ -585,7 +578,6 @@ impl Trf {
             tuple_max_distances: [0; MAX_TUPLE_SIZES + 1],
             tuple_codes: [0; MAX_TUPLE_SIZES + 1],
             tuple_histories: Vec::new(),
-            band_centers: vec![0; band_width + 1],
             copynumber: 0.0,
             wraparound_dp_count: 0.0,
             output_count: 0.0,
@@ -605,18 +597,12 @@ impl Trf {
             fasta: seq.clone(),
             sequence,
             length,
-            band_width,
-            score_matrix: vec![0; (band_width + 1) * SCORE_MATRIX_STRIDE],
-            band_up: [0; MAX_BANDWIDTH + 1],
-            band_diag: [0; MAX_BANDWIDTH + 1],
-            current_pattern: vec![0; 2 * (MAX_PATTERN_SIZE_CONSTANT + 1)],
+            dp: WraparoundDp::new(band_width),
             consensus: Consensus::default(),
             align_pair: AlignPair::new(2 * band_width),
             similarity_matrix,
             nucleotide_index,
-        };
-        trf.score_matrix[0] = 1; // S[0][0]=1
-        trf
+        }
     }
 
     /// Allocates [`Self::tuple_histories`] from the configured tuple sizes.
@@ -633,21 +619,6 @@ impl Trf {
             ));
         }
         debug_assert_eq!(self.tuple_histories.len(), num_tuple_sizes + 1);
-    }
-
-    #[inline]
-    pub fn similarity_score(&self, first_base: u8, second_base: u8) -> i32 {
-        self.similarity_matrix[256 * first_base as usize + second_base as usize]
-    }
-
-    #[inline]
-    pub fn score(&self, row: usize, col: usize) -> i32 {
-        self.score_matrix[row * SCORE_MATRIX_STRIDE + col]
-    }
-
-    #[inline]
-    pub fn set_score(&mut self, row: usize, col: usize, value: i32) {
-        self.score_matrix[row * SCORE_MATRIX_STRIDE + col] = value;
     }
 
     /// 95% range of the random walk caused by indels over `distance` bases.
@@ -667,23 +638,6 @@ impl Trf {
                 let _ = f.write_all(text);
             }
         }
-    }
-
-    /// Writes the `fill_align_pair()` macro.
-    #[inline]
-    pub fn fill_align_pair(
-        &mut self,
-        sequence_char: u8,
-        pattern_char: u8,
-        column: i32,
-        sequence_position: i32,
-        pattern_position: i32,
-    ) {
-        let column = column as usize;
-        self.align_pair.sequence_text[column] = sequence_char;
-        self.align_pair.pattern_text[column] = pattern_char;
-        self.align_pair.sequence_index[column] = sequence_position;
-        self.align_pair.pattern_index[column] = pattern_position;
     }
 
     pub fn param_string(&self) -> String {
