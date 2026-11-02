@@ -887,7 +887,7 @@ impl Trf {
                     self.set_score(row as usize, pattern_col as usize, cell_score);
                     self.band_up[pattern_col as usize] = -1000;
                     left_score = -1000;
-                } else {
+                } else { // real_row >  start - std::cmp::max(size, 20)  || cell_score != 0
                     end_of_trace = false;
                 }
                 if cell_score >= max_score {

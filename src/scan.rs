@@ -526,6 +526,7 @@ impl Trf {
     }
 
     /// Handles one candidate distance found while scanning tuples.
+    /// position 是 结束位置。闭区间
     fn process_candidate(&mut self, position: i32, distance: i32, tuple_size: i32) {
         self.distances[distance as usize].record_match(position, tuple_size, distance);
 

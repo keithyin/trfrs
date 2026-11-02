@@ -453,6 +453,7 @@ ACTCATTAAACAATAAGTGGTGGAAGAATCATATCATTTATTGAGACCTACATATATATC
 TAATAACAGATTTTGTTAGAGACGACAGTTGCTATGTTTT";
         let seq = seq.replace("\r\n", "");
         let seq = seq.replace("\n", "");
+        println!("{seq}");
 
         let finder = TrfFinder::new(&Params {
             min_period: 1,
@@ -462,9 +463,10 @@ TAATAACAGATTTTGTTAGAGACGACAGTTGCTATGTTTT";
         })
         .unwrap();
 
-        let result = finder.find(seq).unwrap();
+        let result = finder.find(&seq).unwrap();
         for repeat in &result {
             println!("{:?}", repeat);
+            println!("{}", String::from_utf8(seq.as_bytes()[repeat.start..repeat.end].to_vec()).unwrap());
         }
     }
 }
