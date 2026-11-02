@@ -466,7 +466,10 @@ TAATAACAGATTTTGTTAGAGACGACAGTTGCTATGTTTT";
         let result = finder.find(&seq).unwrap();
         for repeat in &result {
             println!("{:?}", repeat);
-            println!("{}", String::from_utf8(seq.as_bytes()[repeat.start..repeat.end].to_vec()).unwrap());
+            println!(
+                "{}",
+                String::from_utf8(seq.as_bytes()[repeat.start..repeat.end].to_vec()).unwrap()
+            );
         }
     }
 }
