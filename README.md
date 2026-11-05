@@ -182,7 +182,7 @@ trfrs sample.fasta --str --maxperiod 2000 --ngs   # 仍按 1–2000 报告
 
 ```toml
 [dependencies]
-trfrs = "4.10"
+trfrs = "5.1"
 ```
 
 ```rust
