@@ -543,6 +543,28 @@ fn stdin_requires_ngs() {
     );
 }
 
+/// Progress messages are off by default and shown only with `--verbose`.
+#[test]
+fn progress_messages_are_opt_in() {
+    let (dir, silent) = run_fixture("multi.fasta", &["-d"], "silent");
+    let stderr = String::from_utf8_lossy(&silent.stderr);
+    assert!(
+        !stderr.contains("Scanning"),
+        "progress leaked without --verbose: {stderr}"
+    );
+
+    let (verbose_dir, verbose) = run_fixture("multi.fasta", &["-d", "--verbose"], "verbose");
+    let stderr = String::from_utf8_lossy(&verbose.stderr);
+    assert!(
+        stderr.contains("Scanning"),
+        "no progress shown with --verbose: {stderr}"
+    );
+
+    for dir in [dir, verbose_dir] {
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+}
+
 /// The reference program does not ignore `SIGPIPE`: a consumer that closes the
 /// pipe early terminates it (`-ngs` output is meant to be piped).  Ignoring the
 /// signal would turn the same situation into a panic and a bogus exit code.

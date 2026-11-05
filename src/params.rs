@@ -55,8 +55,8 @@ pub struct ParamSet {
     pub redundancy_removal_off: bool,
     pub ngs: bool,
     pub use_stdin: bool,
-    /// Suppress progress messages (`--quiet`).
-    pub quiet: bool,
+    /// Print progress messages (`--verbose`); off by default.
+    pub verbose: bool,
     pub max_wrap_length: u32,
 
     pub input_file_name: String,
@@ -100,7 +100,7 @@ impl Default for ParamSet {
             redundancy_removal_off: false,
             ngs: false,
             use_stdin: false,
-            quiet: false,
+            verbose: false,
             max_wrap_length: 2_000_000,
             input_file_name: String::new(),
             output_prefix: String::new(),

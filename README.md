@@ -77,7 +77,7 @@ trfrs FILE [--match N] [--mismatch N] [--indel N] [--pm N] [--pi N] [--minscore 
 | `--html` | 输出 HTML 报告（重复表格与比对明细；默认关闭） |
 | `--no-redundancy` | 关闭冗余重复剔除 |
 | `-n, --ngs` | 紧凑单行记录直接输出到 stdout，不写文件（适合流程管道） |
-| `-q, --quiet` | 关闭进度消息 |
+| `-v, --verbose` | 打印进度消息（默认关闭） |
 
 ### 其他选项
 
@@ -113,8 +113,8 @@ trfrs FILE [--match N] [--mismatch N] [--indel N] [--pm N] [--pi N] [--minscore 
 # 从标准输入读取
 cat tests/data/small_test.fasta | ./target/release/trfrs - --ngs
 
-# 安静模式（只输出结果，无进度消息）
-./target/release/trfrs tests/data/small_test.fasta --ngs --quiet
+# 显示进度消息（默认安静）
+./target/release/trfrs tests/data/small_test.fasta --ngs --verbose
 
 # 版本信息 / 用法
 ./target/release/trfrs --version

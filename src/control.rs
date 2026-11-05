@@ -512,7 +512,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
         }
     };
 
-    if !params.ngs && !params.quiet {
+    if params.verbose && !params.ngs {
         eprint!("\nLoading sequence...");
     }
 
@@ -761,7 +761,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
         }
 
         if more {
-            if !params.ngs && !params.quiet {
+            if params.verbose && !params.ngs {
                 eprint!("\nLoading sequence file...");
             }
             match load_sequence(&mut reader) {

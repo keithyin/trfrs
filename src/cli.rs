@@ -208,9 +208,9 @@ struct Args {
     #[arg(short = 'n', long, help_heading = "Output options")]
     ngs: bool,
 
-    /// Suppress progress messages
-    #[arg(short = 'q', long, help_heading = "Output options")]
-    quiet: bool,
+    /// Print progress messages (off by default)
+    #[arg(short = 'v', long, help_heading = "Output options")]
+    verbose: bool,
 
     /// Expected maximum tandem repeat length, in millions of bases
     #[arg(
@@ -256,8 +256,8 @@ pub struct OutputOptions {
     pub no_redundancy: bool,
     /// Print compact records to stdout instead of writing files (`--ngs`).
     pub ngs: bool,
-    /// Suppress progress messages (`--quiet`).
-    pub quiet: bool,
+    /// Print progress messages (`--verbose`); off by default.
+    pub verbose: bool,
 }
 
 /// Validated command line arguments.
@@ -328,7 +328,7 @@ pub fn parse() -> Result<Cli, i32> {
             html_output: args.html,
             no_redundancy: args.no_redundancy,
             ngs: args.ngs,
-            quiet: args.quiet,
+            verbose: args.verbose,
         },
         max_length_millions: args.max_length,
     })

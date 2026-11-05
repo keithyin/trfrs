@@ -640,10 +640,10 @@ impl Trf {
         }
     }
 
-    /// `PrintProgress()`: progress messages go to stderr, suppressed in
-    /// `-ngs` and `--quiet` mode.
+    /// `PrintProgress()`: progress messages go to stderr; they are only
+    /// shown in `--verbose` mode and never in `-ngs` mode.
     pub fn progress(&self, text: &str) {
-        if !self.params.ngs && !self.params.quiet {
+        if self.params.verbose && !self.params.ngs {
             eprint!("\n{}", text);
         }
     }
@@ -666,7 +666,7 @@ impl Trf {
 
     /// `SetProgressBar()` for the console build: one dot per 5 percent.
     pub fn set_progress_bar(&mut self) {
-        if self.params.quiet {
+        if !self.params.verbose {
             return;
         }
         if self.params.percent < 0 {

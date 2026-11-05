@@ -34,7 +34,8 @@ use crate::cli;
 use crate::control;
 use crate::params::{ParamSet, VERSION};
 
-/// Prints the version banner (suppressed by `--quiet` and `--ngs`).
+/// Prints the version banner (only shown in `--verbose` mode, never in
+/// `--ngs` mode).
 pub(crate) fn print_banner() {
     eprint!("\nTandem Repeats Finder, Version {}", VERSION);
     eprint!("\nCopyright (C) Dr. Gary Benson 1999-2012. All rights reserved.\n");
@@ -71,7 +72,7 @@ pub fn run_cli() -> i32 {
         html_output_off: !cli.output.html_output,
         redundancy_removal_off: cli.output.no_redundancy,
         ngs: cli.output.ngs,
-        quiet: cli.output.quiet,
+        verbose: cli.output.verbose,
         max_wrap_length: (cli.max_length_millions as f64 * 1e6) as u32,
         output_directory: cli.output.directory.to_string_lossy().into_owned(),
         ..ParamSet::default()
@@ -84,7 +85,7 @@ pub fn run_cli() -> i32 {
         /* the compact records go to stdout; there is nothing else to show */
         paramset.data_file = true;
     } else {
-        if !cli.output.quiet {
+        if cli.output.verbose {
             print_banner();
         }
         /* the report files are opt-in; a run without any of them has no
@@ -93,7 +94,7 @@ pub fn run_cli() -> i32 {
             && !cli.output.data_file
             && !cli.output.csv_file
             && !cli.output.masked_file;
-        if writes_nothing && !cli.output.quiet {
+        if writes_nothing {
             eprintln!(
                 "note: no output files requested; use --html, -d, --csv or -m to write results"
             );
@@ -121,7 +122,7 @@ pub fn run_cli() -> i32 {
         }
         return 1;
     }
-    if paramset.output_count == 0 && !paramset.stdout_closed && !cli.output.quiet {
+    if paramset.output_count == 0 && !paramset.stdout_closed {
         eprintln!("No TRs found.");
     }
     0
