@@ -471,13 +471,12 @@ fn str_preset_values() {
 /// The default scan finds period 16 in the fixture, the STR preset does not,
 /// and the records it keeps are exactly the ones the command line reports.
 ///
-/// The command line is run with `-h` (suppress HTML output): the comparison is
-/// about the `-ngs` data stream, and the HTML report would be written next to
-/// the fixture, i.e. into the source tree and into whatever directory the test
-/// binary happens to run in.  Keeping the run free of file output makes the
-/// test independent of the working directory, of the file name the absolute
-/// fixture path turns into, and of that directory being writable (`-h` prints
-/// exactly the same `-ngs` output).
+/// The command line is run with `--ngs`: the comparison is about the compact
+/// data stream, and file output would be written next to the fixture, i.e.
+/// into the source tree and into whatever directory the test binary happens
+/// to run in.  Keeping the run free of file output makes the test independent
+/// of the working directory, of the file name the absolute fixture path turns
+/// into, and of that directory being writable.
 #[test]
 fn str_preset_matches_command_line() {
     let (_, sequence) = parse_fasta(&read_fixture("str_short.fasta"))
@@ -505,7 +504,7 @@ fn str_preset_matches_command_line() {
 
     let output = Command::new(env!("CARGO_BIN_EXE_trfrs"))
         .arg(data_dir().join("str_short.fasta"))
-        .args(["--str", "-ngs", "-h"])
+        .args(["--str", "--ngs"])
         .output()
         .expect("run trf");
     assert!(

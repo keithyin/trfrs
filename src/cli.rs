@@ -18,366 +18,318 @@ You should have received a copy of the GNU Affero General Public
 License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-//! Command line interface (`trf.c`).
+//! Command line interface.
 //!
-//! The reference implementation parses its options with
-//! `getopt_long_only()`, which is unusually permissive:
+//! The interface is designed for this port instead of being transcribed from
+//! the reference implementation's `getopt_long_only()` parsing.  It follows
+//! conventional Rust/Unix command line practice:
 //!
-//! * long options may be introduced by a single dash (`-ngs`),
-//! * long options may be abbreviated to a unique prefix (`--maxl`),
-//! * short options may be clustered (`-df`) and take attached values (`-l3`),
-//! * short option letters are matched case insensitively (`-D`).
+//! * long options are introduced by `--` (`--ngs`, `--no-html`),
+//! * values are typed and range checked while parsing (a bad value is a
+//!   command line error, not a run time failure),
+//! * `--help` and `--version` behave as users expect,
+//! * exit codes follow the common scheme: `0` success, `1` run time error,
+//!   `2` command line error.
 //!
-//! `clap` (Derive API) provides the clustering, the abbreviations and the
-//! attached values; a small pre-pass spells single dash long options with
-//! `--` before the vector is handed to clap.  The file name is the only
-//! positional parameter; the search parameters are key-value options with
-//! defaults.  They are kept as strings: validating them is the job of the
-//! caller, which reproduces the error messages of the reference program.
-//! `--str` is an extension of this port: it only provides defaults for the
-//! period range (1–15 bp) and can be overridden by `--minperiod`/`--maxperiod`.
+//! The search parameters keep the meaning (and the defaults `2 5 7 80 10 50
+//! 2000`) of the reference program.  `--str` is a preset that only narrows the
+//! reported period range to 1–15 bp; explicit `--minperiod`/`--maxperiod`
+//! take precedence.
+
+use std::path::PathBuf;
 
 use clap::Parser;
 
-use crate::driver::print_banner;
-use crate::params::{STR_MAX_PERIOD, STR_MIN_PERIOD};
+use crate::params::STR_MAX_PERIOD;
 
-/// Defaults of the search parameters; the values are the customary human DNA
-/// set `2 5 7 80 10 50 2000`.
-pub const DEFAULT_MATCH: &str = "2";
-pub const DEFAULT_MISMATCH: &str = "5";
-pub const DEFAULT_INDEL: &str = "7";
-pub const DEFAULT_PM: &str = "80";
-pub const DEFAULT_PI: &str = "10";
-pub const DEFAULT_MINSCORE: &str = "50";
-pub const DEFAULT_MINPERIOD: &str = "1";
-pub const DEFAULT_MAXPERIOD: &str = "2000";
+/// Default of `--match`: the customary human DNA set.
+const DEFAULT_MATCH: u32 = 2;
 
-/// The `usage()` text of the reference program, `%s` being the program name.
-const USAGE_BODY: &str = "\n\nPlease use: %s File [options]\n\
-\nWhere: (all weights, penalties, and scores are positive)\
-\n  File = sequences input file\
-\n  [options] = one or more of the following:\
-\n        --match <n>       matching weight (default 2)\
-\n        --mismatch <n>    mismatching penalty (default 5)\
-\n        --indel <n>       indel penalty (default 7)\
-\n        --pm <n>          match probability (whole number, default 80)\
-\n        --pi <n>          indel probability (whole number, default 10)\
-\n        --minscore <n>    minimum alignment score to report (default 50)\
-\n        --minperiod <n>   minimum period size to report. Must be between 1 and\
-\n                          MaxPeriod, inclusive (default 1)\
-\n        --maxperiod <n>   maximum period size to report. Must be between 1 and 2000,\
-\n                          inclusive (default 2000)\
-\n        --str             STR mode: shorthand for --minperiod 1 --maxperiod 15,\
-\n                          i.e. report short tandem repeats of 1-15 bp units.\
-\n                          Explicit --minperiod/--maxperiod take precedence.\
-\n        -m        masked sequence file\
-\n        -f        flanking sequence\
-\n        -d        data file\
-\n        -h        suppress html output\
-\n        -r        no redundancy elimination\
-\n        -l <n>    maximum TR length expected (in millions) (eg, -l 3 or -l=3 for 3 million)\
-\n                  Human genome HG38 would need -l 6\
-\n        -ngs      more compact .dat output on multisequence files, returns 0 on success.\
-\n                  Output is printed to the screen, not a file. You may pipe input in with\
-\n                  this option using - for file name. Short 50 flanks are appended to .dat\
-\n                  output.\
-\n\
-\nSee more information on the TRF Unix Help web page: https://tandem.bu.edu/trf/trf.unix.help.html\
-\n\
-\nNote the sequence file should be in FASTA format:\
-\n\
-\n>Name of sequence\
-\naggaaacctgccatggcctcctggtgagctgtcctcatccactgctcgctgcctctccag\
-\natactctgacccatggatcccctgggtgcagccaagccacaatggccatggcgccgctgt\
-\nactcccacccgccccaccctcctgatcctgctatggacatggcctttccacatccctgtg\
-\n\
-\n\
-\nTandem Repeats Finder\
-\nCopyright (C) 1999-2020 Gary Benson\
-\n\
-\nThis program is free software: you can redistribute it and/or modify\
-\nit under the terms of the GNU Affero General Public License as\
-\npublished by the Free Software Foundation, either version 3 of\
-\nthe License, or (at your option) any later version.\
-\n";
+/// Default of `--mismatch`.
+const DEFAULT_MISMATCH: u32 = 5;
 
-/// `usage()`: the help text with the program name substituted.
-fn usage(program: &str) -> String {
-    USAGE_BODY.replacen("%s", program, 1)
-}
+/// Default of `--indel`.
+const DEFAULT_INDEL: u32 = 7;
 
-/// Long option names of the `getopt_long_only()` table, mapped to the
-/// canonical `clap` long name.  The three spellings of `-ngs` select one
-/// option.
-const LONG_OPTIONS: &[(&str, &str)] = &[
-    ("help", "help"),
-    ("version", "version"),
-    ("dat", "dat"),
-    ("mask", "mask"),
-    ("flank", "flank"),
-    ("html-off", "html-off"),
-    ("redund-off", "redund-off"),
-    ("ngs", "ngs"),
-    ("Ngs", "ngs"),
-    ("NGS", "ngs"),
-    ("maxlength", "maxlength"),
-    ("match", "match"),
-    ("mismatch", "mismatch"),
-    ("indel", "indel"),
-    ("pm", "pm"),
-    ("pi", "pi"),
-    ("minscore", "minscore"),
-    ("minperiod", "minperiod"),
-    ("maxperiod", "maxperiod"),
-    ("str", "str"),
-];
+/// Default of `--pm`.
+const DEFAULT_PM: u32 = 80;
 
-/// `getopt_long_only()` lookup: an exact match wins, otherwise a unique
-/// prefix is accepted (long option names are case sensitive).
-fn long_option(name: &str) -> Option<&'static str> {
-    if name.is_empty() {
-        return None;
-    }
-    if let Some((_, canonical)) = LONG_OPTIONS.iter().find(|(n, _)| *n == name) {
-        return Some(canonical);
-    }
-    let mut matches = LONG_OPTIONS.iter().filter(|(n, _)| n.starts_with(name));
-    let first = matches.next()?;
-    if matches.next().is_some() {
-        return None; /* ambiguous abbreviation */
-    }
-    Some(first.1)
-}
+/// Default of `--pi`.
+const DEFAULT_PI: u32 = 10;
 
-/// Rewrites a single dash long option (`-ngs`, `-maxl=3`) into the `--`
-/// spelling understood by `clap`.  Short options and short option clusters
-/// are returned unchanged.
-fn rewrite_long_option(arg: &str) -> Option<String> {
-    let body = arg.strip_prefix('-')?;
-    if body.is_empty() || body.starts_with('-') {
-        return None;
-    }
-    let (name, value) = match body.split_once('=') {
-        Some((name, value)) => (name, Some(value)),
-        None => (body, None),
-    };
-    let canonical = long_option(name)?;
-    Some(match value {
-        Some(value) => format!("--{canonical}={value}"),
-        None => format!("--{canonical}"),
-    })
-}
+/// Default of `--minscore`.
+const DEFAULT_MINSCORE: u32 = 50;
+
+/// Default of `--maxperiod` outside `--str` mode.
+const DEFAULT_MAXPERIOD: u32 = 2000;
+
+/// Default of `--max-length`, in millions of bases.
+const DEFAULT_MAX_LENGTH: u32 = 2;
 
 /// The `clap` definition of the command line (Derive API).
 ///
-/// `File` is the only positional parameter; the search parameters are
-/// key-value options (`--match 2`, `--match=2`, or the single dash spelling
-/// `-match 2`) with defaults, so an invocation such as `trf file.fasta`
-/// searches with the customary human DNA parameters.  They are kept as
-/// strings, validating them is the job of the caller, which reproduces the
-/// error messages of the reference program.
-/// Every other behaviour mirrors `getopt_long_only()`: `-h` means
-/// "suppress html output" while help lives on `-u`, `-v` prints the banner,
-/// short option letters are matched case insensitively and the three
-/// spellings of `-ngs` select one option.
-#[derive(Parser)]
+/// The values are parsed into their final types here, so a bad value is
+/// reported by `clap` with exit code 2 before the program does any work.
+/// Cross-field checks (`--pm` table support, the period range) live in
+/// [`parse`], which is why the period options are kept optional.
+#[derive(Parser, Debug)]
 #[command(
-    name = "trf",
-    disable_help_flag = true, /* -h is "suppress html output" */
-    disable_version_flag = true, /* -v and -V both print the banner */
-    infer_long_args = true,   /* unique prefixes, as getopt_long_only() */
-    args_override_self = true /* repeated options are accepted */
+    name = "trfrs",
+    version,
+    about = "Find tandem repeats in DNA sequences.",
+    long_about = "A Rust port of Tandem Repeats Finder: searches a FASTA or FASTQ file for \
+tandem repeats and writes HTML tables, alignment reports and machine readable \
+data files.\n\nThe search parameter defaults are the customary human DNA set \
+2 5 7 80 10 50 2000, so naming the input file is enough to run a search.",
+    args_override_self = true
 )]
 struct Args {
-    /* Optional in `clap` so that option-only command lines such as `trfrs -h`
-    still reach `parse()`, which prints the usage text instead of a clap
-    "missing required <File>" diagnostic. */
-    #[arg(value_name = "File")]
-    file: Option<String>,
+    /// Input sequence file (FASTA or FASTQ); `-` reads from stdin
+    #[arg(value_name = "FILE")]
+    file: PathBuf,
+
+    /// Matching weight
     #[arg(
         long = "match",
-        value_name = "Match",
-        default_value = DEFAULT_MATCH
+        value_name = "N",
+        default_value_t = DEFAULT_MATCH,
+        value_parser = clap::value_parser!(u32).range(1..=i32::MAX as i64),
+        help_heading = "Search parameters"
     )]
-    match_weight: String,
-    #[arg(
-        long = "mismatch",
-        value_name = "Mismatch",
-        default_value = DEFAULT_MISMATCH
-    )]
-    mismatch: String,
-    #[arg(long = "indel", value_name = "Delta", default_value = DEFAULT_INDEL)]
-    indel: String,
-    #[arg(long = "pm", value_name = "PM", default_value = DEFAULT_PM)]
-    pm: String,
-    #[arg(long = "pi", value_name = "PI", default_value = DEFAULT_PI)]
-    pi: String,
-    #[arg(
-        long = "minscore",
-        value_name = "Minscore",
-        default_value = DEFAULT_MINSCORE
-    )]
-    minscore: String,
-    #[arg(long = "minperiod", value_name = "MinPeriod")]
-    minperiod: Option<String>,
-    #[arg(long = "maxperiod", value_name = "MaxPeriod")]
-    maxperiod: Option<String>,
-    /// `--str`: shorthand for `--minperiod 1 --maxperiod 15`.  Values given
-    /// explicitly on the command line take precedence.
-    #[arg(long = "str")]
-    str_mode: bool,
+    match_weight: u32,
 
-    #[arg(short = 'd', visible_short_alias = 'D', long = "dat")]
+    /// Mismatching penalty
+    #[arg(
+        long,
+        value_name = "N",
+        default_value_t = DEFAULT_MISMATCH,
+        value_parser = clap::value_parser!(u32).range(1..=i32::MAX as i64),
+        help_heading = "Search parameters"
+    )]
+    mismatch: u32,
+
+    /// Insertion/deletion penalty
+    #[arg(
+        long,
+        value_name = "N",
+        default_value_t = DEFAULT_INDEL,
+        value_parser = clap::value_parser!(u32).range(1..=i32::MAX as i64),
+        help_heading = "Search parameters"
+    )]
+    indel: u32,
+
+    /// Match probability in percent (only 75 and 80 have statistical tables)
+    #[arg(
+        long,
+        value_name = "N",
+        default_value_t = DEFAULT_PM,
+        value_parser = clap::value_parser!(u32).range(0..=100),
+        help_heading = "Search parameters"
+    )]
+    pm: u32,
+
+    /// Insertion/deletion probability in percent
+    #[arg(
+        long,
+        value_name = "N",
+        default_value_t = DEFAULT_PI,
+        value_parser = clap::value_parser!(u32).range(0..=100),
+        help_heading = "Search parameters"
+    )]
+    pi: u32,
+
+    /// Minimum alignment score to report
+    #[arg(
+        long,
+        value_name = "N",
+        default_value_t = DEFAULT_MINSCORE,
+        value_parser = clap::value_parser!(u32).range(1..=i32::MAX as i64),
+        help_heading = "Search parameters"
+    )]
+    minscore: u32,
+
+    /// Minimum repeat unit length to report
+    #[arg(
+        long,
+        value_name = "N",
+        value_parser = clap::value_parser!(u32).range(1..=2000),
+        help_heading = "Search parameters"
+    )]
+    minperiod: Option<u32>,
+
+    /// Maximum repeat unit length to report
+    #[arg(
+        long,
+        value_name = "N",
+        value_parser = clap::value_parser!(u32).range(1..=2000),
+        help_heading = "Search parameters"
+    )]
+    maxperiod: Option<u32>,
+
+    /// Short tandem repeat mode: period 1-15 (explicit --minperiod/--maxperiod win)
+    #[arg(long, help_heading = "Search parameters")]
+    str: bool,
+
+    /// Output directory for the report and data files (created if missing)
+    #[arg(
+        short = 'o',
+        long,
+        value_name = "DIR",
+        default_value = ".",
+        help_heading = "Output options"
+    )]
+    output: PathBuf,
+
+    /// Write the .dat data file
+    #[arg(short = 'd', long, help_heading = "Output options")]
     dat: bool,
-    #[arg(short = 'm', visible_short_alias = 'M', long = "mask")]
+
+    /// Write the .csv table (one row per repeat)
+    #[arg(long, help_heading = "Output options")]
+    csv: bool,
+
+    /// Write the masked sequence file
+    #[arg(short = 'm', long, help_heading = "Output options")]
     mask: bool,
-    #[arg(short = 'f', visible_short_alias = 'F', long = "flank")]
+
+    /// Include the flanking sequences around each repeat in the report
+    #[arg(short = 'f', long, help_heading = "Output options")]
     flank: bool,
-    #[arg(short = 'h', visible_short_alias = 'H', long = "html-off")]
-    html_off: bool,
-    #[arg(short = 'r', visible_short_alias = 'R', long = "redund-off")]
-    redund_off: bool,
-    #[arg(long = "ngs", alias = "Ngs", alias = "NGS")]
+
+    /// Write the HTML report (repeat tables and alignments)
+    #[arg(long, help_heading = "Output options")]
+    html: bool,
+
+    /// Keep redundant repeats
+    #[arg(long, help_heading = "Output options")]
+    no_redundancy: bool,
+
+    /// Print compact single-line records to stdout instead of writing files
+    #[arg(short = 'n', long, help_heading = "Output options")]
     ngs: bool,
+
+    /// Suppress progress messages
+    #[arg(short = 'q', long, help_heading = "Output options")]
+    quiet: bool,
+
+    /// Expected maximum tandem repeat length, in millions of bases
     #[arg(
         short = 'l',
-        visible_short_alias = 'L',
-        long = "maxlength",
-        value_name = "n",
-        /* getopt reports a missing value but carries on */
-        num_args = 0..=1,
-        default_missing_value = ""
+        long = "max-length",
+        value_name = "N",
+        default_value_t = DEFAULT_MAX_LENGTH,
+        value_parser = clap::value_parser!(u32).range(1..=2000),
+        help_heading = "Memory options"
     )]
-    maxlength: Option<String>,
-    #[arg(short = 'u', visible_short_alias = 'U', long = "help")]
-    help: bool,
-    #[arg(short = 'v', visible_short_alias = 'V', long = "version")]
-    version: bool,
+    max_length: u32,
 }
 
-/// The value of the `-l` / `--maxlength` option.
-pub enum MaxLength {
-    /// The option was not given.
-    Absent,
-    /// The option was given without a value; `getopt` reports it and the
-    /// program continues.
-    MissingValue,
-    /// The option was given with a value.
-    Value(String),
+/// The search parameters, validated and resolved.
+#[derive(Clone, Copy, Debug)]
+pub struct SearchParams {
+    pub match_weight: u32,
+    pub mismatch: u32,
+    pub indel: u32,
+    pub match_probability_percent: u32,
+    pub indel_probability_percent: u32,
+    pub minscore: u32,
+    pub min_period: u32,
+    pub maxperiod: u32,
 }
 
-/// Command line arguments.
-pub struct Cli {
-    pub file: String,
-    pub match_weight: String,
-    pub mismatch: String,
-    pub indel: String,
-    pub pm: String,
-    pub pi: String,
-    pub minscore: String,
-    pub minperiod: String,
-    pub maxperiod: String,
-
+/// The output options.
+#[derive(Clone, Debug)]
+pub struct OutputOptions {
+    /// Directory the report and data files are written to (`--output`).
+    pub directory: PathBuf,
+    /// Write the `.dat` data file (`--dat`).
     pub data_file: bool,
+    /// Write the `.csv` table (`--csv`).
+    pub csv_file: bool,
+    /// Write the masked sequence file (`--mask`).
     pub masked_file: bool,
+    /// Include flanking sequences in the report (`--flank`).
     pub flanking_sequence: bool,
-    pub html_output_off: bool,
-    pub redundancy_removal_off: bool,
+    /// Write the HTML report (`--html`); off by default.
+    pub html_output: bool,
+    /// Keep redundant repeats (`--no-redundancy`).
+    pub no_redundancy: bool,
+    /// Print compact records to stdout instead of writing files (`--ngs`).
     pub ngs: bool,
-    pub maxlength: MaxLength,
+    /// Suppress progress messages (`--quiet`).
+    pub quiet: bool,
+}
+
+/// Validated command line arguments.
+#[derive(Clone, Debug)]
+pub struct Cli {
+    pub file: PathBuf,
+    pub search: SearchParams,
+    pub output: OutputOptions,
+    /// Expected maximum tandem repeat length in millions of bases
+    /// (`--max-length`).
+    pub max_length_millions: u32,
 }
 
 /// Parses `std::env::args()`.
 ///
-/// Returns the parsed arguments, or the exit code to terminate with.  Help,
-/// version and usage messages are printed here, as is the `clap` diagnostic
-/// for a malformed command line.
+/// Help, version and malformed command lines are handled by `clap` (help and
+/// version exit with 0, a command line error with 2).  The cross-field checks
+/// report to stderr and exit with 2, so a [`Cli`] is always valid when this
+/// returns `Ok`.
 pub fn parse() -> Result<Cli, i32> {
-    let argv: Vec<String> = std::env::args().collect();
+    let args = Args::parse();
 
-    /* The reference program inspects the raw argument vector before it looks
-    at any option: a lone -v/-V prints the banner. */
-    if argv.len() == 2 && (argv[1] == "-v" || argv[1] == "-V") {
-        print_banner();
-        return Err(0);
-    }
-
-    let args: Vec<String> = argv
-        .iter()
-        .enumerate()
-        .map(|(index, arg)| {
-            if index == 0 {
-                arg.clone()
-            } else {
-                rewrite_long_option(arg).unwrap_or_else(|| arg.clone())
-            }
-        })
-        .collect();
-
-    let args = match Args::try_parse_from(args) {
-        Ok(args) => args,
-        Err(error) => {
-            let _ = error.print();
-            return Err(error.exit_code());
-        }
-    };
-
-    if args.help {
-        print!("{}", usage(&argv[0]));
-        return Err(0);
-    }
-    if args.version {
-        print_banner();
-        return Err(0);
-    }
-
-    /* No file name: print the usage text, as the reference program does for a
-    command line without arguments (this covers e.g. a lone `-h`). */
-    let file = match args.file {
-        Some(file) => file,
-        None => {
-            eprint!("{}", usage(&argv[0]));
-            return Err(1);
-        }
-    };
-
-    let maxlength = match args.maxlength {
-        Some(value) if !value.is_empty() => MaxLength::Value(value),
-        Some(_) => MaxLength::MissingValue,
-        None => MaxLength::Absent,
-    };
-
-    /* Period range: an explicit option wins, then the `--str` preset, then the
-    built in default.  Keeping the preset values as strings lets the driver
-    validate them through the very same path as a user supplied value. */
-    let minperiod = match args.minperiod {
-        Some(value) => value,
-        None if args.str_mode => STR_MIN_PERIOD.to_string(),
-        None => DEFAULT_MINPERIOD.to_string(),
-    };
+    /* Period range: an explicit option wins, then the `--str` preset, then
+    the built in default. */
+    let min_period = args.minperiod.unwrap_or(1);
     let maxperiod = match args.maxperiod {
         Some(value) => value,
-        None if args.str_mode => STR_MAX_PERIOD.to_string(),
-        None => DEFAULT_MAXPERIOD.to_string(),
+        None if args.str => STR_MAX_PERIOD,
+        None => DEFAULT_MAXPERIOD,
     };
 
+    if min_period > maxperiod {
+        eprintln!(
+            "error: invalid period range: --minperiod ({min_period}) must not exceed \
+--maxperiod ({maxperiod})\n\nFor more information, try '--help'."
+        );
+        return Err(2);
+    }
+
+    /* Only these two match probabilities have statistical tables. */
+    if args.pm != 75 && args.pm != 80 {
+        eprintln!(
+            "error: invalid value '{pm}' for '--pm <N>': only 75 and 80 are supported \
+(no statistical tables exist for other values)\n\nFor more information, try '--help'.",
+            pm = args.pm
+        );
+        return Err(2);
+    }
+
     Ok(Cli {
-        file,
-        match_weight: args.match_weight,
-        mismatch: args.mismatch,
-        indel: args.indel,
-        pm: args.pm,
-        pi: args.pi,
-        minscore: args.minscore,
-        minperiod,
-        maxperiod,
-        data_file: args.dat,
-        masked_file: args.mask,
-        flanking_sequence: args.flank,
-        html_output_off: args.html_off,
-        redundancy_removal_off: args.redund_off,
-        ngs: args.ngs,
-        maxlength,
+        file: args.file,
+        search: SearchParams {
+            match_weight: args.match_weight,
+            mismatch: args.mismatch,
+            indel: args.indel,
+            match_probability_percent: args.pm,
+            indel_probability_percent: args.pi,
+            minscore: args.minscore,
+            min_period,
+            maxperiod,
+        },
+        output: OutputOptions {
+            directory: args.output,
+            data_file: args.dat,
+            csv_file: args.csv,
+            masked_file: args.mask,
+            flanking_sequence: args.flank,
+            html_output: args.html,
+            no_redundancy: args.no_redundancy,
+            ngs: args.ngs,
+            quiet: args.quiet,
+        },
+        max_length_millions: args.max_length,
     })
 }

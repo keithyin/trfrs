@@ -18,11 +18,13 @@ name = "trfrs"
 path = "src/main.rs"
 
 [dependencies]
-# Command line parsing.  Help/usage text is TRF's own, so clap's help and
-# colour features are not needed.
+# Command line parsing with a conventional GNU style interface: standard
+# --help/--version flags, typed values and help headings.
 clap = { version = "4.5", default-features = false, features = [
     "std",
     "derive",
+    "help",
+    "usage",
     "error-context",
     "suggestions",
 ] }

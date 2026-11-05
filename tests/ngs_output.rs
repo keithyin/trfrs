@@ -112,7 +112,7 @@ fn golden_with_program_version(name: &str) -> String {
 }
 
 fn assert_ngs(fasta: &str, golden_file: &str, tag: &str) {
-    let (dir, output) = run_fixture(fasta, &["-ngs"], tag);
+    let (dir, output) = run_fixture(fasta, &["--ngs"], tag);
     assert!(output.status.success(), "trf failed: {:?}", output.status);
     let actual = String::from_utf8(output.stdout).expect("stdout is utf8");
     assert_eq!(
@@ -129,6 +129,23 @@ fn small_test_ngs() {
     assert_ngs("small_test.fasta", "small_test.fasta.out", "small");
 }
 
+/// FASTQ input is an extension of this port: `tests/data/small_test.fastq`
+/// holds the same sequences as `small_test.fasta` (wrapped sequence and
+/// quality lines included).  Quality strings are ignored, so the report must
+/// be byte for byte the one of the FASTA fixture.
+#[test]
+fn fastq_input_matches_fasta() {
+    let (dir, output) = run_fixture("small_test.fastq", &["--ngs"], "fastq");
+    assert!(output.status.success(), "trf failed: {:?}", output.status);
+    let actual = String::from_utf8(output.stdout).expect("stdout is utf8");
+    assert_eq!(
+        actual,
+        golden("small_test.fasta.out"),
+        "fastq output differs from fasta output"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
 #[test]
 fn diff_cn_ngs() {
     assert_ngs("diff_cn.fasta", "diff_cn.fasta.out", "diffcn");
@@ -139,32 +156,46 @@ fn multi_ngs() {
     assert_ngs("multi.fasta", "multi.fasta.out", "multings");
 }
 
-/// A command line without a file name prints the usage text instead of a clap
-/// diagnostic.  A lone `-h` only means "suppress html output", so the run
-/// reports the usage and exits with 1; `-u` is the help option and exits 0.
+/// `-h` is the standard help flag now and exits with 0; a command line
+/// without the required file argument is a clap usage error with exit code 2.
 #[test]
-fn usage_without_file() {
+fn help_and_usage() {
     let output = Command::new(env!("CARGO_BIN_EXE_trfrs"))
         .arg("-h")
         .output()
         .expect("run trf");
-    assert_eq!(output.status.code(), Some(1));
-    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert_eq!(output.status.code(), Some(0));
+    let stdout = String::from_utf8_lossy(&output.stdout);
     assert!(
-        stderr.contains("Please use:"),
-        "usage text missing: {stderr}"
+        stdout.contains("Usage:"),
+        "help text missing: {stdout}"
     );
     assert!(
-        stderr.contains("--maxperiod"),
-        "parameter options missing: {stderr}"
+        stdout.contains("Search parameters:"),
+        "option groups missing: {stdout}"
     );
 
     let output = Command::new(env!("CARGO_BIN_EXE_trfrs"))
-        .arg("-u")
+        .output()
+        .expect("run trf");
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("required arguments"),
+        "usage diagnostic missing: {stderr}"
+    );
+}
+
+/// `--version` prints the program version and exits with 0.
+#[test]
+fn version_flag() {
+    let output = Command::new(env!("CARGO_BIN_EXE_trfrs"))
+        .arg("--version")
         .output()
         .expect("run trf");
     assert_eq!(output.status.code(), Some(0));
-    assert!(String::from_utf8_lossy(&output.stdout).contains("Please use:"));
+    assert!(String::from_utf8_lossy(&output.stdout)
+        .contains(env!("CARGO_PKG_VERSION")));
 }
 
 /// The search parameters default to `2 5 7 80 10 50 2000`, so a run that
@@ -179,7 +210,7 @@ fn default_parameters() {
     .expect("copy fixture");
     let output = Command::new(env!("CARGO_BIN_EXE_trfrs"))
         .current_dir(&dir)
-        .args(["small_test.fasta", "-ngs"])
+        .args(["small_test.fasta", "--ngs"])
         .output()
         .expect("run trf");
     assert!(output.status.success(), "trf failed: {:?}", output.status);
@@ -194,10 +225,10 @@ fn default_parameters() {
 
 #[test]
 fn multi_dat_and_summary() {
-    let (dir, output) = run_fixture("multi.fasta", &["-d"], "multidat");
+    let (dir, output) = run_fixture("multi.fasta", &["-d", "--html"], "multidat");
     assert!(output.status.success(), "trf failed: {:?}", output.status);
 
-    let dat = std::fs::read_to_string(dir.join("multi.fasta.2.5.7.80.10.50.2000.dat"))
+    let dat = std::fs::read_to_string(dir.join("multi.fasta.dat"))
         .expect("read .dat output");
     assert_eq!(
         dat,
@@ -205,13 +236,13 @@ fn multi_dat_and_summary() {
         ".dat output differs"
     );
 
-    let summary = std::fs::read_to_string(dir.join("multi.fasta.2.5.7.80.10.50.2000.summary.html"))
+    let summary = std::fs::read_to_string(dir.join("multi.fasta.summary.html"))
         .expect("read summary output");
-    assert_eq!(
-        summary,
-        golden_with_program_version("multi.fasta.summary.html"),
-        "summary output differs"
-    );
+    /* the golden file still uses the reference program's parameter string in
+    the per-sequence table links; this port names the files without it */
+    let expected = golden_with_program_version("multi.fasta.summary.html")
+        .replace(".2.5.7.80.10.50.2000.", ".");
+    assert_eq!(summary, expected, "summary output differs");
 
     let _ = std::fs::remove_dir_all(&dir);
 }
@@ -221,7 +252,7 @@ fn multi_dat_and_summary() {
 fn clustered_options() {
     let (plain, _) = run_fixture("multi.fasta", &["-d", "-f"], "plain");
     let (cluster, _) = run_fixture("multi.fasta", &["-df"], "cluster");
-    let dat = "multi.fasta.2.5.7.80.10.50.2000.dat";
+    let dat = "multi.fasta.dat";
     let left = std::fs::read(plain.join(dat)).expect("plain .dat");
     let right = std::fs::read(cluster.join(dat)).expect("clustered .dat");
     assert_eq!(left, right, "-d -f and -df must produce the same output");
@@ -229,14 +260,14 @@ fn clustered_options() {
     let _ = std::fs::remove_dir_all(&cluster);
 }
 
-/// A missing value makes getopt ignore the option; the run still succeeds.
+/// A missing `--max-length` value is a command line error with exit code 2.
 #[test]
-fn missing_maxlength_argument() {
-    let (dir, output) = run_fixture("diff_cn.fasta", &["-ngs", "-l"], "missingarg");
-    assert!(output.status.success(), "trf should still succeed");
+fn missing_maxlength_value() {
+    let (dir, output) = run_fixture("diff_cn.fasta", &["--ngs", "-l"], "missingarg");
+    assert_eq!(output.status.code(), Some(2));
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(
-        stderr.contains("option requires an argument -- 'l'"),
+        stderr.contains("--max-length"),
         "unexpected stderr: {stderr}"
     );
     let _ = std::fs::remove_dir_all(&dir);
@@ -263,18 +294,18 @@ fn periods(stdout: &[u8]) -> Vec<usize> {
 /// `--maxperiod 15`, because the lower bound defaults to 1).
 #[test]
 fn str_preset_equals_explicit_period_range() {
-    let (preset_dir, preset) = run_fixture_args("str_short.fasta", &["--str", "-ngs"], "strpreset");
+    let (preset_dir, preset) =
+        run_fixture_args("str_short.fasta", &["--str", "--ngs"], "strpreset");
     let (explicit_dir, explicit) = run_fixture_args(
         "str_short.fasta",
-        &["--minperiod", "1", "--maxperiod", "15", "-ngs"],
+        &["--minperiod", "1", "--maxperiod", "15", "--ngs"],
         "strexplicit",
     );
     let (maxonly_dir, maxonly) = run_fixture_args(
         "str_short.fasta",
-        &["--maxperiod", "15", "-ngs"],
+        &["--maxperiod", "15", "--ngs"],
         "strmaxonly",
     );
-    let (dash_dir, dash) = run_fixture_args("str_short.fasta", &["-str", "-ngs"], "strdash");
 
     assert!(preset.status.success(), "trf failed: {:?}", preset.status);
     assert_eq!(
@@ -285,9 +316,8 @@ fn str_preset_equals_explicit_period_range() {
         preset.stdout, maxonly.stdout,
         "--str and --maxperiod 15 differ"
     );
-    assert_eq!(preset.stdout, dash.stdout, "-str and --str differ");
 
-    for dir in [preset_dir, explicit_dir, maxonly_dir, dash_dir] {
+    for dir in [preset_dir, explicit_dir, maxonly_dir] {
         let _ = std::fs::remove_dir_all(&dir);
     }
 }
@@ -296,8 +326,8 @@ fn str_preset_equals_explicit_period_range() {
 /// the 1–15 ones (single base repeats included) and drops period 16.
 #[test]
 fn str_preset_reports_only_short_units() {
-    let (all_dir, all) = run_fixture_args("str_short.fasta", &["-ngs"], "strall");
-    let (str_dir, str_mode) = run_fixture_args("str_short.fasta", &["--str", "-ngs"], "stronly");
+    let (all_dir, all) = run_fixture_args("str_short.fasta", &["--ngs"], "strall");
+    let (str_dir, str_mode) = run_fixture_args("str_short.fasta", &["--str", "--ngs"], "stronly");
 
     let mut all_periods = periods(&all.stdout);
     all_periods.sort_unstable();
@@ -318,7 +348,7 @@ fn str_preset_reports_only_short_units() {
 fn period_range_options_take_precedence() {
     let (expanded_dir, expanded) = run_fixture_args(
         "str_short.fasta",
-        &["--str", "--maxperiod", "2000", "-ngs"],
+        &["--str", "--maxperiod", "2000", "--ngs"],
         "strovr",
     );
     let mut expanded_periods = periods(&expanded.stdout);
@@ -327,7 +357,7 @@ fn period_range_options_take_precedence() {
 
     let (lower_dir, lower) = run_fixture_args(
         "str_short.fasta",
-        &["--minperiod", "2", "--maxperiod", "15", "-ngs"],
+        &["--minperiod", "2", "--maxperiod", "15", "--ngs"],
         "strlower",
     );
     let mut lower_periods = periods(&lower.stdout);
@@ -345,7 +375,7 @@ fn period_range_options_take_precedence() {
 fn default_minperiod_keeps_output() {
     let (dir, output) = run_fixture(
         "small_test.fasta",
-        &["-ngs", "--minperiod", "1"],
+        &["--ngs", "--minperiod", "1"],
         "mindefault",
     );
     assert!(output.status.success(), "trf failed: {:?}", output.status);
@@ -358,28 +388,71 @@ fn default_minperiod_keeps_output() {
 }
 
 /// A zero lower bound, a lower bound above the upper bound and a non numeric
-/// value are rejected with the usual driver message and exit code 1.
+/// value are command line errors: they are rejected with exit code 2 and a
+/// diagnostic on stderr.
 #[test]
 fn invalid_minperiod_is_rejected() {
     let cases: [(&[&str], &str); 3] = [
-        (&["--minperiod", "0", "-ngs"], "positive integer"),
+        (&["--minperiod", "0", "--ngs"], "invalid value '0'"),
         (
-            &["--minperiod", "16", "--maxperiod", "15", "-ngs"],
-            "must not exceed MaxPeriod",
+            &["--minperiod", "16", "--maxperiod", "15", "--ngs"],
+            "must not exceed",
         ),
-        (&["--minperiod", "abc", "-ngs"], "positive integer"),
+        (&["--minperiod", "abc", "--ngs"], "invalid value 'abc'"),
     ];
 
     for (index, (args, expected)) in cases.iter().enumerate() {
         let (dir, output) = run_fixture_args("str_short.fasta", args, &format!("badmin{index}"));
-        assert_eq!(output.status.code(), Some(1), "args: {args:?}");
-        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert_eq!(output.status.code(), Some(2), "args: {args:?}");
+        let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stdout.contains(expected),
-            "missing {expected:?} for {args:?}: {stdout}"
+            stderr.contains(expected),
+            "missing {expected:?} for {args:?}: {stderr}"
         );
         let _ = std::fs::remove_dir_all(&dir);
     }
+}
+
+/// `--csv` writes a machine readable table next to the other outputs: one row
+/// per reported repeat, with the same values and in the same order as `.dat`.
+#[test]
+fn csv_output_matches_dat_records() {
+    let (dir, output) = run_fixture("multi.fasta", &["-d", "--csv"], "csv");
+    assert!(output.status.success(), "trf failed: {:?}", output.status);
+
+    let stem = "multi.fasta";
+    let csv = std::fs::read_to_string(dir.join(format!("{stem}.csv"))).expect("read .csv");
+    let dat = std::fs::read_to_string(dir.join(format!("{stem}.dat"))).expect("read .dat");
+
+    let mut lines = csv.lines();
+    assert_eq!(
+        lines.next(),
+        Some(
+            "sequence_index,sequence_name,start,end,period,copy_number,pattern_size,\
+             percent_matches,percent_indels,score,percent_a,percent_c,percent_g,\
+             percent_t,entropy,repeat_unit,repeat_sequence"
+        ),
+        "unexpected .csv header"
+    );
+
+    let rows: Vec<&str> = lines.collect();
+    let dat_rows: Vec<&str> = dat
+        .lines()
+        .filter(|line| line.starts_with(|c: char| c.is_ascii_digit()))
+        .collect();
+    assert_eq!(rows.len(), dat_rows.len(), "row count differs from .dat");
+    assert!(rows.iter().any(|row| row.starts_with("1,")));
+    assert!(rows.iter().any(|row| row.starts_with("3,")));
+
+    /* Columns 2..17 are the fifteen `.dat` fields of a record. */
+    for (row, dat_row) in rows.iter().zip(dat_rows.iter()) {
+        let fields: Vec<&str> = row.split(',').collect();
+        assert_eq!(fields.len(), 17, "unexpected column count in {row}");
+        let dat_fields: Vec<&str> = dat_row.split_whitespace().collect();
+        assert_eq!(&fields[2..17], &dat_fields[..15], "row differs from .dat");
+    }
+
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 /// `true` when `haystack` contains `needle` (`strstr()` on bytes).
@@ -402,12 +475,12 @@ fn non_utf8_header_is_preserved() {
         .current_dir(&dir)
         .arg("bad.fasta")
         .args(PARAMS)
-        .args(["-d", "-m"])
+        .args(["-d", "-m", "--html"])
         .output()
         .expect("run trf");
     assert!(output.status.success(), "trf failed: {:?}", output.status);
 
-    let stem = "bad.fasta.2.5.7.80.10.50.2000";
+    let stem = "bad.fasta";
     let sequence_line: &[u8] = b"Sequence: bad\xff\xfe name";
 
     let dat = std::fs::read(dir.join(format!("{stem}.dat"))).expect("read .dat");
@@ -419,7 +492,7 @@ fn non_utf8_header_is_preserved() {
         ".html lost the header bytes"
     );
 
-    let txt = std::fs::read(dir.join(format!("{stem}.1.txt.html"))).expect("read .txt.html");
+    let txt = std::fs::read(dir.join(format!("{stem}.txt.1.html"))).expect("read .txt.html");
     assert!(
         contains(&txt, sequence_line),
         ".txt.html lost the header bytes"
@@ -432,6 +505,42 @@ fn non_utf8_header_is_preserved() {
     );
 
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// `--output` places the report and data files into the given directory,
+/// which is created when it does not exist yet.
+#[test]
+fn output_directory_is_used() {
+    let (dir, output) = run_fixture(
+        "small_test.fasta",
+        &["-d", "--csv", "-o", "results"],
+        "outdir",
+    );
+    assert!(output.status.success(), "trf failed: {:?}", output.status);
+    assert!(
+        dir.join("results").join("small_test.fasta.dat").exists(),
+        ".dat not written into --output"
+    );
+    assert!(
+        dir.join("results").join("small_test.fasta.csv").exists(),
+        ".csv not written into --output"
+    );
+    let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// Reading from stdin without `--ngs` is a command line error with exit 2.
+#[test]
+fn stdin_requires_ngs() {
+    let output = Command::new(env!("CARGO_BIN_EXE_trfrs"))
+        .arg("-")
+        .output()
+        .expect("run trf");
+    assert_eq!(output.status.code(), Some(2));
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    assert!(
+        stderr.contains("--ngs"),
+        "unexpected stderr: {stderr}"
+    );
 }
 
 /// The reference program does not ignore `SIGPIPE`: a consumer that closes the
@@ -468,7 +577,7 @@ fn broken_pipe_terminates_by_signal() {
         .current_dir(&dir)
         .arg("big.fasta")
         .args(PARAMS)
-        .arg("-ngs")
+        .arg("--ngs")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

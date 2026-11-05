@@ -23,7 +23,7 @@ License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 //!
 //! The crate provides two entry points:
 //!
-//! * the command line program (`trfrs`), which mirrors `trf.c`, and
+//! * the command line program (`trfrs`), and
 //! * a library API for embedding the search into other Rust programs.
 //!
 //! # Library

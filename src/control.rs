@@ -22,47 +22,62 @@ License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 
 use std::fs::File;
 use std::io::{BufReader, BufWriter, Write};
+use std::path::Path;
 
 use crate::clean::make_file_name;
 use crate::fasta::{load_sequence, ByteReader, FastaSequence, LoadError};
 use crate::params::{ParamSet, VERSION};
 use crate::state::{format_c_float, Trf, SMALL_DISTANCE};
 
-/// The output files derived from one prefix: `<prefix>.<paramstring>.<ext>`.
+/// The output files derived from one prefix: `<dir>/<prefix>.<ext>`.
 ///
 /// `prefix` is the input file name without its directory part (single sequence
 /// and the root of a multi-sequence run), or `<prefix>.s<ordinal>` for one
-/// sequence of a multi-sequence run.
+/// sequence of a multi-sequence run.  The search parameters are not part of
+/// the names of this port; runs that should not overwrite each other write
+/// into separate `--output` directories.
 struct OutputPaths {
     /// Prefix written back to `ParamSet` for a sequence of a multi-sequence run.
     prefix: String,
-    /// `<prefix>.<paramstring>.html` (page 1 is derived by [`Self::html_page`]).
+    /// `<dir>/<prefix>.html` (page 1 is derived by [`Self::html_page`]).
     html: String,
-    /// `<prefix>.<paramstring>.txt.html` (the alignment file).
+    /// `<dir>/<prefix>.txt.html` (the alignment file).
     txt: String,
-    /// `<prefix>.<paramstring>.dat`.
+    /// `<dir>/<prefix>.dat`.
     dat: String,
-    /// `<prefix>.<paramstring>.mask`.
+    /// `<dir>/<prefix>.csv`.
+    csv: String,
+    /// `<dir>/<prefix>.mask`.
     mask: String,
-    /// `<prefix>.<paramstring>.summary.html` (only read from the root paths).
+    /// `<dir>/<prefix>.summary.html` (only read from the root paths).
     summary: String,
 }
 
 impl OutputPaths {
-    fn new(prefix: &str, paramstring: &str) -> OutputPaths {
+    fn new(dir: &Path, prefix: &str) -> OutputPaths {
+        /* the default directory is `.`, which would leak a `./` prefix into
+        the file names (and the HTML links) */
+        let join = |rest: String| {
+            if dir == Path::new(".") {
+                rest
+            } else {
+                dir.join(rest).to_string_lossy().into_owned()
+            }
+        };
         OutputPaths {
             prefix: prefix.to_string(),
-            html: format!("{prefix}.{paramstring}.html"),
-            txt: format!("{prefix}.{paramstring}.txt.html"),
-            dat: format!("{prefix}.{paramstring}.dat"),
-            mask: format!("{prefix}.{paramstring}.mask"),
-            summary: format!("{prefix}.{paramstring}.summary.html"),
+            html: join(format!("{prefix}.html")),
+            txt: join(format!("{prefix}.txt.html")),
+            dat: join(format!("{prefix}.dat")),
+            csv: join(format!("{prefix}.csv")),
+            mask: join(format!("{prefix}.mask")),
+            summary: join(format!("{prefix}.summary.html")),
         }
     }
 
     /// Paths of sequence `ordinal` of a multi-sequence run.
-    fn for_ordinal(prefix: &str, ordinal: i32, paramstring: &str) -> OutputPaths {
-        OutputPaths::new(&format!("{prefix}.s{ordinal}"), paramstring)
+    fn for_ordinal(dir: &Path, prefix: &str, ordinal: i32) -> OutputPaths {
+        OutputPaths::new(dir, &format!("{prefix}.s{ordinal}"))
     }
 
     /// Table page name, using the same rule as `clean::make_file_name`.
@@ -79,8 +94,10 @@ impl OutputPaths {
 impl Trf {
     /// `TRF()`: runs the algorithm on a single sequence and writes the output.
     pub fn run(&mut self) {
-        let paramstring = self.param_string();
-        let paths = OutputPaths::new(&self.params.output_prefix, &paramstring);
+        let paths = OutputPaths::new(
+            Path::new(&self.params.output_directory),
+            &self.params.output_prefix,
+        );
 
         self.prepare_sequence();
         self.open_alignment_output(&paths);
@@ -297,6 +314,67 @@ fn dat_program_header() -> String {
     )
 }
 
+/// Header of the `.csv` output.  One column per `.dat` field of a repeat,
+/// preceded by the index and the name of the sequence that holds it, so that
+/// the table of a multi sequence file stays self contained.
+const CSV_HEADER: &str = "sequence_index,sequence_name,start,end,period,\
+copy_number,pattern_size,percent_matches,percent_indels,score,percent_a,\
+percent_c,percent_g,percent_t,entropy,repeat_unit,repeat_sequence\n";
+
+/// Appends one CSV field, quoting it when it contains a delimiter, a quote or
+/// a line break (`RFC 4180`).  The sequence name is written as raw bytes, like
+/// every other output of the program.
+fn push_csv_field(out: &mut Vec<u8>, field: &[u8]) {
+    if !field.iter().any(|b| matches!(b, b',' | b'"' | b'\n' | b'\r')) {
+        out.extend_from_slice(field);
+        return;
+    }
+    out.push(b'"');
+    for &byte in field {
+        if byte == b'"' {
+            out.push(b'"');
+        }
+        out.push(byte);
+    }
+    out.push(b'"');
+}
+
+/// Formats the `.csv` records of the current sequence.  `sequence_index` is
+/// the ordinal of the sequence in a multi sequence file (1 otherwise).
+fn format_csv_records(trf: &Trf, sequence_index: i32, name: &[u8]) -> Vec<u8> {
+    let mut out = Vec::new();
+    for record in &trf.records {
+        out.extend_from_slice(sequence_index.to_string().as_bytes());
+        out.push(b',');
+        push_csv_field(&mut out, name);
+        out.push(b',');
+        out.extend_from_slice(
+            format!(
+                "{},{},{},{:.1},{},{},{},{},{},{},{},{},{:.2},",
+                record.first,
+                record.last,
+                record.period,
+                record.copies,
+                record.size,
+                record.matches,
+                record.indels,
+                record.score,
+                record.a_count,
+                record.c_count,
+                record.g_count,
+                record.t_count,
+                record.entropy
+            )
+            .as_bytes(),
+        );
+        push_csv_field(&mut out, record.pattern.as_bytes());
+        out.push(b',');
+        out.extend_from_slice(&trf.sequence[record.first as usize..=record.last as usize]);
+        out.push(b'\n');
+    }
+    out
+}
+
 /// Header of the multi-sequence `*.summary.html` table.
 fn summary_header() -> String {
     let mut header = String::new();
@@ -396,6 +474,25 @@ fn os_error_message(e: &std::io::Error) -> String {
 pub fn trf_control_routine(params: &mut ParamSet) {
     let source = params.input_file_name.clone();
     let prefix = params.output_prefix.clone();
+    let output_dir = std::path::PathBuf::from(&params.output_directory);
+
+    /* the report and data files of a non `-ngs` run live in the output
+    directory; create it up front so a bad path fails before any work */
+    if !params.ngs {
+        if let Err(e) = std::fs::create_dir_all(&output_dir) {
+            eprintln!(
+                "Error: unable to create output directory {}: {}",
+                output_dir.display(),
+                os_error_message(&e)
+            );
+            params.end_status = Some(format!(
+                "Cannot create output directory {}",
+                output_dir.display()
+            ));
+            params.running = false;
+            return;
+        }
+    }
 
     let mut reader = if params.use_stdin {
         ByteReader::new(Box::new(BufReader::new(std::io::stdin())))
@@ -415,7 +512,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
         }
     };
 
-    if !params.ngs {
+    if !params.ngs && !params.quiet {
         eprint!("\nLoading sequence...");
     }
 
@@ -433,8 +530,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
     };
     let (mut seq, mut more) = loaded;
 
-    let paramstring = params.param_string();
-    let root_paths = OutputPaths::new(&prefix, &paramstring);
+    let root_paths = OutputPaths::new(&output_dir, &prefix);
     let header_parameters = params.parameters_header();
 
     if !more {
@@ -476,6 +572,15 @@ pub fn trf_control_routine(params: &mut ParamSet) {
                 Some(root_paths.dat.clone())
             };
             emit_dat(dest.as_deref(), &content, params);
+        }
+
+        if params.csv_file {
+            let mut content = CSV_HEADER.as_bytes().to_vec();
+            content.extend_from_slice(&format_csv_records(&trf, 1, &seq.name));
+            if let Err(e) = std::fs::write(&root_paths.csv, &content) {
+                eprintln!("Error: unable to write {}: {}", root_paths.csv, e);
+                std::process::exit(-1);
+            }
         }
 
         /* masked file is written after the .dat output so that the sequence is
@@ -542,12 +647,29 @@ pub fn trf_control_routine(params: &mut ParamSet) {
         }
     }
 
+    let mut csv_fp: Option<BufWriter<File>> = None;
+    if params.csv_file {
+        match File::create(&root_paths.csv) {
+            Ok(f) => {
+                let mut f = BufWriter::new(f);
+                let _ = f.write_all(CSV_HEADER.as_bytes());
+                csv_fp = Some(f);
+            }
+            Err(_) => {
+                eprintln!(
+                    "Error: Unable to open csv file for writing in TRFControlRoutine routine!"
+                );
+                std::process::exit(-1);
+            }
+        }
+    }
+
     let mut foundsome = false;
     let mut ordinal = 1i32;
 
     loop {
         /* prefix used for the output files of this sequence */
-        let seq_paths = OutputPaths::for_ordinal(&prefix, ordinal, &paramstring);
+        let seq_paths = OutputPaths::for_ordinal(&output_dir, &prefix, ordinal);
         params.input_file_name = seq_paths.prefix.clone();
         params.output_prefix = seq_paths.prefix.clone();
 
@@ -585,6 +707,10 @@ pub fn trf_control_routine(params: &mut ParamSet) {
                     let _ = stdout.flush();
                 }
             }
+        }
+
+        if let Some(f) = csv_fp.as_mut() {
+            let _ = f.write_all(&format_csv_records(&trf, ordinal, &seq.name));
         }
 
         if let Some(f) = summary_fp.as_mut() {
@@ -635,7 +761,7 @@ pub fn trf_control_routine(params: &mut ParamSet) {
         }
 
         if more {
-            if !params.ngs {
+            if !params.ngs && !params.quiet {
                 eprint!("\nLoading sequence file...");
             }
             match load_sequence(&mut reader) {
@@ -664,6 +790,9 @@ pub fn trf_control_routine(params: &mut ParamSet) {
     if let Some(mut f) = dat_fp {
         let _ = f.flush();
     }
+    if let Some(mut f) = csv_fp {
+        let _ = f.flush();
+    }
     if let Some(mut f) = mask_fp {
         let _ = f.flush();
     }
@@ -681,36 +810,42 @@ pub fn trf_control_routine(params: &mut ParamSet) {
 mod tests {
     use super::*;
 
-    const PARAMSTRING: &str = "2.5.7.80.10.50.2000";
-
     #[test]
-    fn output_paths_match_the_reference_names() {
-        let paths = OutputPaths::new("seq.fasta", PARAMSTRING);
+    fn output_paths_use_the_output_directory() {
+        let paths = OutputPaths::new(Path::new("out"), "seq.fasta");
         assert_eq!(paths.prefix, "seq.fasta");
-        assert_eq!(paths.html, "seq.fasta.2.5.7.80.10.50.2000.html");
-        assert_eq!(paths.txt, "seq.fasta.2.5.7.80.10.50.2000.txt.html");
-        assert_eq!(paths.dat, "seq.fasta.2.5.7.80.10.50.2000.dat");
-        assert_eq!(paths.mask, "seq.fasta.2.5.7.80.10.50.2000.mask");
-        assert_eq!(paths.summary, "seq.fasta.2.5.7.80.10.50.2000.summary.html");
-        assert_eq!(paths.html_page(1), "seq.fasta.2.5.7.80.10.50.2000.1.html");
-        assert_eq!(
-            paths.txt_page(1),
-            "seq.fasta.2.5.7.80.10.50.2000.1.txt.html"
-        );
+        assert_eq!(paths.html, "out/seq.fasta.html");
+        assert_eq!(paths.txt, "out/seq.fasta.txt.html");
+        assert_eq!(paths.dat, "out/seq.fasta.dat");
+        assert_eq!(paths.csv, "out/seq.fasta.csv");
+        assert_eq!(paths.mask, "out/seq.fasta.mask");
+        assert_eq!(paths.summary, "out/seq.fasta.summary.html");
+        assert_eq!(paths.html_page(1), "out/seq.fasta.1.html");
+        assert_eq!(paths.txt_page(1), "out/seq.fasta.txt.1.html");
     }
 
     #[test]
     fn sequence_paths_carry_the_multi_sequence_prefix() {
-        let paths = OutputPaths::for_ordinal("multi.fasta", 3, PARAMSTRING);
+        let paths = OutputPaths::for_ordinal(Path::new("."), "multi.fasta", 3);
         assert_eq!(paths.prefix, "multi.fasta.s3");
+        assert_eq!(paths.html_page(1), "multi.fasta.s3.1.html");
+        assert_eq!(paths.txt_page(1), "multi.fasta.s3.txt.1.html");
+        assert_eq!(paths.mask, "multi.fasta.s3.mask");
+    }
+
+    #[test]
+    fn csv_fields_are_quoted_only_when_needed() {
+        let mut out: Vec<u8> = Vec::new();
+        push_csv_field(&mut out, b"plain");
+        out.push(b'|');
+        push_csv_field(&mut out, b"a,b");
+        out.push(b'|');
+        push_csv_field(&mut out, b"say \"hi\"");
+        out.push(b'|');
+        push_csv_field(&mut out, b"two\nlines");
         assert_eq!(
-            paths.html_page(1),
-            "multi.fasta.s3.2.5.7.80.10.50.2000.1.html"
+            out,
+            b"plain|\"a,b\"|\"say \"\"hi\"\"\"|\"two\nlines\"".to_vec()
         );
-        assert_eq!(
-            paths.txt_page(1),
-            "multi.fasta.s3.2.5.7.80.10.50.2000.1.txt.html"
-        );
-        assert_eq!(paths.mask, "multi.fasta.s3.2.5.7.80.10.50.2000.mask");
     }
 }

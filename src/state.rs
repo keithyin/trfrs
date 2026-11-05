@@ -640,13 +640,10 @@ impl Trf {
         }
     }
 
-    pub fn param_string(&self) -> String {
-        self.params.param_string()
-    }
-
-    /// `PrintProgress()`: progress messages go to stderr unless `-ngs` is used.
+    /// `PrintProgress()`: progress messages go to stderr, suppressed in
+    /// `-ngs` and `--quiet` mode.
     pub fn progress(&self, text: &str) {
-        if !self.params.ngs {
+        if !self.params.ngs && !self.params.quiet {
             eprint!("\n{}", text);
         }
     }
@@ -669,6 +666,9 @@ impl Trf {
 
     /// `SetProgressBar()` for the console build: one dot per 5 percent.
     pub fn set_progress_bar(&mut self) {
+        if self.params.quiet {
+            return;
+        }
         if self.params.percent < 0 {
             if !self.progress_ready {
                 return;

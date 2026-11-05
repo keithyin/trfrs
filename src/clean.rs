@@ -63,24 +63,17 @@ fn contains(haystack: &[u8], needle: &[u8]) -> bool {
     needle.is_empty() || haystack.windows(needle.len()).any(|w| w == needle)
 }
 
-/// `MakeFileName()`: replace the number in front of the extension.
-pub fn make_file_name(oldname: &str, tag: i32) -> String {
-    let bytes = oldname.as_bytes();
-    let mut numindex = 0usize;
-    for (i, b) in bytes.iter().enumerate() {
-        if b.is_ascii_digit() {
-            numindex = i;
-        }
+/// `MakeFileName()`: insert the page number before the last extension.
+///
+/// `report.html` becomes `report.1.html`, `report.txt.html` becomes
+/// `report.1.txt.html`.  Unlike the reference implementation, which replaces
+/// the number in front of the extension and therefore depends on the numeric
+/// parameter string in the file name, this rule works for any name.
+pub fn make_file_name(name: &str, tag: i32) -> String {
+    match name.rfind('.') {
+        Some(pos) => format!("{}.{}{}", &name[..pos], tag, &name[pos..]),
+        None => format!("{}.{}", name, tag),
     }
-    let oldext = if numindex + 1 <= bytes.len() {
-        &oldname[numindex + 1..]
-    } else {
-        ""
-    };
-    let mut newname = String::new();
-    newname.push_str(&oldname[..numindex + 1]);
-    newname.push_str(&format!(".{}{}", tag, oldext));
-    newname
 }
 
 /// `IntervalOverlap()`.

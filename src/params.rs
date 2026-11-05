@@ -46,6 +46,8 @@ pub struct ParamSet {
     pub indel_probability_percent: u32,
 
     pub data_file: bool,
+    /// Extension of this port: write the repeats as a CSV table.
+    pub csv_file: bool,
     pub masked_file: bool,
     pub flanking_sequence: bool,
     pub flankinglength: u32,
@@ -53,11 +55,13 @@ pub struct ParamSet {
     pub redundancy_removal_off: bool,
     pub ngs: bool,
     pub use_stdin: bool,
+    /// Suppress progress messages (`--quiet`).
+    pub quiet: bool,
     pub max_wrap_length: u32,
 
     pub input_file_name: String,
     pub output_prefix: String,
-    #[allow(dead_code)]
+    /// Directory the report and data files are written to (`--output`).
     pub output_directory: String,
     pub output_file_name: String,
 
@@ -88,6 +92,7 @@ impl Default for ParamSet {
             match_probability_percent: 0,
             indel_probability_percent: 0,
             data_file: false,
+            csv_file: false,
             masked_file: false,
             flanking_sequence: false,
             flankinglength: 500,
@@ -95,6 +100,7 @@ impl Default for ParamSet {
             redundancy_removal_off: false,
             ngs: false,
             use_stdin: false,
+            quiet: false,
             max_wrap_length: 2_000_000,
             input_file_name: String::new(),
             output_prefix: String::new(),
@@ -112,24 +118,6 @@ impl Default for ParamSet {
 }
 
 impl ParamSet {
-    /// `"%d.%d.%d.%d.%d.%d.%d"` parameter string used in output file names.
-    ///
-    /// The lower period bound of the STR mode is not part of the string: the
-    /// reference implementation has no such parameter and both header and file
-    /// names have to stay byte identical to the C program.
-    pub fn param_string(&self) -> String {
-        format!(
-            "{}.{}.{}.{}.{}.{}.{}",
-            self.match_weight,
-            self.mismatch,
-            self.indel,
-            self.match_probability_percent,
-            self.indel_probability_percent,
-            self.minscore,
-            self.maxperiod
-        )
-    }
-
     /// `"Parameters: %d %d %d %d %d %d %d\n"` header line.
     pub fn parameters_header(&self) -> String {
         format!(

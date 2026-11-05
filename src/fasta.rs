@@ -18,7 +18,12 @@ You should have received a copy of the GNU Affero General Public
 License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-//! FASTA input handling, mirroring `LoadSequenceFromFileEugene()`.
+//! Sequence input handling, mirroring `LoadSequenceFromFileEugene()`.
+//!
+//! Besides FASTA, FASTQ files are accepted as an extension of this port.  The
+//! format is detected from the first byte of every record (`>` for FASTA, `@`
+//! for FASTQ), so a single run can even mix both.  Only the sequence matters:
+//! the quality strings of a FASTQ record are skipped.
 
 use std::io::{BufRead, Read};
 
@@ -125,6 +130,26 @@ impl ByteReader {
     pub fn ungetc(&mut self, b: u8) {
         self.pushback = Some(b);
     }
+
+    /// Reads one line, without its `\n` (or `\r\n`) terminator.  `None` means
+    /// end of file; a last line that is not terminated is still returned.
+    /// Used by the FASTQ reader, where line structure carries meaning.
+    pub fn read_line(&mut self) -> Option<Vec<u8>> {
+        let mut line = Vec::new();
+        loop {
+            let c = self.getc();
+            if c < 0 {
+                return if line.is_empty() { None } else { Some(line) };
+            }
+            if c == LF {
+                if line.last() == Some(&(CR as u8)) {
+                    line.pop();
+                }
+                return Some(line);
+            }
+            line.push(c as u8);
+        }
+    }
 }
 
 const LF: i32 = 10;
@@ -133,35 +158,42 @@ const EOF: i32 = -1;
 
 /// Reads one sequence from the stream.
 ///
+/// FASTA (`>` header) and FASTQ (`@` header) records are both accepted, as
+/// detected from the first byte of the record: FASTQ is an extension of this
+/// port, the reference implementation only reads FASTA.
+///
 /// The boolean in the returned tuple is `true` when another sequence header was
 /// encountered (the reference implementation returns 1 in that case, 0 at end of
 /// file).
 pub fn load_sequence(reader: &mut ByteReader) -> Result<(FastaSequence, bool), LoadError> {
+    // read the FASTA '>' or FASTQ '@' symbol
+    let char_code = reader.getc();
+    match char_code {
+        EOF => Err(LoadError::Silent),
+        _ if (char_code as u8) == b'>' => load_fasta_sequence(reader),
+        _ if (char_code as u8) == b'@' => load_fastq_sequence(reader),
+        _ => Err(LoadError::Silent),
+    }
+}
+
+/// Reads one FASTA record; the leading `>` has already been consumed.
+fn load_fasta_sequence(reader: &mut ByteReader) -> Result<(FastaSequence, bool), LoadError> {
     let mut seq = FastaSequence::default();
 
-    // read the FASTA '>' symbol
-    let mut char_code = reader.getc();
-    if char_code < 0 || (char_code as u8) != b'>' {
-        return Err(LoadError::Silent);
-    }
-
     // read name and description text
+    let mut char_code = reader.getc();
     let mut name = Vec::with_capacity(MAX_SEQ_NAME_LEN);
-    while name.len() < MAX_SEQ_NAME_LEN - 1 {
-        char_code = reader.getc();
-        if char_code == LF || char_code == CR {
-            break;
-        } else if char_code == EOF {
+    while name.len() < MAX_SEQ_NAME_LEN - 1 && char_code != LF && char_code != CR {
+        if char_code == EOF {
             return Err(LoadError::Message(
                 "FASTA input terminated too early".into(),
             ));
-        } else {
-            name.push(char_code as u8);
         }
+        name.push(char_code as u8);
+        char_code = reader.getc();
     }
     // if the line was not read completely, flush the rest
     if name.len() == MAX_SEQ_NAME_LEN - 1 {
-        char_code = 0;
         while char_code != CR && char_code != LF && char_code != EOF {
             char_code = reader.getc();
         }
@@ -198,4 +230,146 @@ pub fn load_sequence(reader: &mut ByteReader) -> Result<(FastaSequence, bool), L
         + seq.composition[base_index(b'T')];
 
     Ok((seq, next == 1))
+}
+
+/// The error reported when a FASTQ record ends before its quality strings.
+const FASTQ_TRUNCATED: &str = "FASTQ input terminated too early";
+
+/// Reads one FASTQ record; the leading `@` has already been consumed.
+///
+/// The layout is the usual four part record
+///
+/// ```text
+/// @name description
+/// SEQUENCE...
+/// +
+/// QUALITY...
+/// ```
+///
+/// where sequence and quality may be wrapped over several lines.  Only the
+/// sequence is used: the quality strings are counted (one per sequence
+/// character) and skipped.  Normalisation is the one of
+/// [`FastaSequence::from_bytes`], i.e. the same rules as for FASTA.
+fn load_fastq_sequence(reader: &mut ByteReader) -> Result<(FastaSequence, bool), LoadError> {
+    // header line: the text after '@', as in a FASTA header
+    let name = reader
+        .read_line()
+        .ok_or_else(|| LoadError::Message(FASTQ_TRUNCATED.into()))?;
+
+    // sequence lines, up to the '+' separator line
+    let mut raw: Vec<u8> = Vec::new();
+    loop {
+        let line = reader
+            .read_line()
+            .ok_or_else(|| LoadError::Message(FASTQ_TRUNCATED.into()))?;
+        if line.first() == Some(&b'+') {
+            break;
+        }
+        raw.extend_from_slice(&line);
+        raw.push(b'\n');
+    }
+
+    // one quality character per sequence character; wrapped lines are summed
+    let length = raw.iter().filter(|b| b.is_ascii_alphabetic()).count();
+    let mut remaining = length;
+    while remaining > 0 {
+        let line = reader
+            .read_line()
+            .ok_or_else(|| LoadError::Message(FASTQ_TRUNCATED.into()))?;
+        remaining = remaining.saturating_sub(line.len());
+    }
+
+    // is another record following?  Blank lines between records are tolerated.
+    let more = loop {
+        match reader.getc() {
+            EOF => break false,
+            LF | CR => continue,
+            c if (c as u8) == b'@' => {
+                reader.ungetc(b'@');
+                break true;
+            }
+            _ => return Err(LoadError::Silent),
+        }
+    };
+
+    Ok((FastaSequence::from_bytes(&name, &raw), more))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::io::Cursor;
+
+    fn reader(input: &[u8]) -> ByteReader {
+        ByteReader::new(Box::new(Cursor::new(input.to_vec())))
+    }
+
+    /// Four line record, CRLF line endings, lower case bases.
+    #[test]
+    fn fastq_record_is_normalized() {
+        let mut reader = reader(b"@name with description\r\nacgtACGT\r\n+\r\nIIIIIIII\r\n");
+        let (seq, more) = load_sequence(&mut reader).unwrap();
+        assert!(!more);
+        assert_eq!(seq.name, b"name with description");
+        assert_eq!(seq.sequence, b"ACGTACGT");
+        assert_eq!(seq.length, 8);
+        assert_eq!(seq.nucleotides, 8);
+    }
+
+    /// Wrapped sequence and quality lines, and a second record.
+    #[test]
+    fn fastq_wrapped_lines_and_multiple_records() {
+        let mut reader = reader(b"@a\nACGTACGT\nACGT\n+\nIIIIII\nIIIIII\n@b\nTTTT\n+\n!!!!\n");
+        let (first, more) = load_sequence(&mut reader).unwrap();
+        assert!(more);
+        assert_eq!(first.name, b"a");
+        assert_eq!(first.sequence, b"ACGTACGTACGT");
+
+        let (second, more) = load_sequence(&mut reader).unwrap();
+        assert!(!more);
+        assert_eq!(second.name, b"b");
+        assert_eq!(second.sequence, b"TTTT");
+    }
+
+    /// `@` and `+` are ordinary quality characters, so only the length of the
+    /// quality strings can be used to find the next record.
+    #[test]
+    fn fastq_quality_may_look_like_a_header() {
+        let input = b"@q\nACGT\n+\n@+@+\n@r\nTTTT\n+\nIIII\n";
+        let mut reader = reader(input);
+        let (first, more) = load_sequence(&mut reader).unwrap();
+        assert!(more);
+        assert_eq!(first.sequence, b"ACGT");
+        let (second, more) = load_sequence(&mut reader).unwrap();
+        assert!(!more);
+        assert_eq!(second.sequence, b"TTTT");
+    }
+
+    /// The last quality line may be unterminated.
+    #[test]
+    fn fastq_last_quality_line_without_newline() {
+        let (seq, more) = load_sequence(&mut reader(b"@q\nACGT\n+\nIIII")).unwrap();
+        assert!(!more);
+        assert_eq!(seq.sequence, b"ACGT");
+    }
+
+    /// A record that ends before its quality strings is reported.
+    #[test]
+    fn truncated_fastq_is_rejected() {
+        let err = load_sequence(&mut reader(b"@q\nACGT\n")).unwrap_err();
+        assert!(matches!(err, LoadError::Message(_)));
+    }
+
+    /// FASTA remains the default and is still detected by its `>` header.
+    #[test]
+    fn fasta_records_still_load() {
+        let mut reader = reader(b">n\nACGT\n>m\nTTTT\n");
+        let (first, more) = load_sequence(&mut reader).unwrap();
+        assert!(more);
+        assert_eq!(first.name, b"n");
+        assert_eq!(first.sequence, b"ACGT");
+        let (second, more) = load_sequence(&mut reader).unwrap();
+        assert!(!more);
+        assert_eq!(second.sequence, b"TTTT");
+    }
 }
