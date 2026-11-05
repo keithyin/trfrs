@@ -166,10 +166,7 @@ fn help_and_usage() {
         .expect("run trf");
     assert_eq!(output.status.code(), Some(0));
     let stdout = String::from_utf8_lossy(&output.stdout);
-    assert!(
-        stdout.contains("Usage:"),
-        "help text missing: {stdout}"
-    );
+    assert!(stdout.contains("Usage:"), "help text missing: {stdout}");
     assert!(
         stdout.contains("Search parameters:"),
         "option groups missing: {stdout}"
@@ -194,8 +191,7 @@ fn version_flag() {
         .output()
         .expect("run trf");
     assert_eq!(output.status.code(), Some(0));
-    assert!(String::from_utf8_lossy(&output.stdout)
-        .contains(env!("CARGO_PKG_VERSION")));
+    assert!(String::from_utf8_lossy(&output.stdout).contains(env!("CARGO_PKG_VERSION")));
 }
 
 /// The search parameters default to `2 5 7 80 10 50 2000`, so a run that
@@ -228,16 +224,15 @@ fn multi_dat_and_summary() {
     let (dir, output) = run_fixture("multi.fasta", &["-d", "--html"], "multidat");
     assert!(output.status.success(), "trf failed: {:?}", output.status);
 
-    let dat = std::fs::read_to_string(dir.join("multi.fasta.dat"))
-        .expect("read .dat output");
+    let dat = std::fs::read_to_string(dir.join("multi.fasta.dat")).expect("read .dat output");
     assert_eq!(
         dat,
         golden_with_program_version("multi.fasta.dat"),
         ".dat output differs"
     );
 
-    let summary = std::fs::read_to_string(dir.join("multi.fasta.summary.html"))
-        .expect("read summary output");
+    let summary =
+        std::fs::read_to_string(dir.join("multi.fasta.summary.html")).expect("read summary output");
     /* the golden file still uses the reference program's parameter string in
     the per-sequence table links; this port names the files without it */
     let expected = golden_with_program_version("multi.fasta.summary.html")
@@ -537,10 +532,7 @@ fn stdin_requires_ngs() {
         .expect("run trf");
     assert_eq!(output.status.code(), Some(2));
     let stderr = String::from_utf8_lossy(&output.stderr);
-    assert!(
-        stderr.contains("--ngs"),
-        "unexpected stderr: {stderr}"
-    );
+    assert!(stderr.contains("--ngs"), "unexpected stderr: {stderr}");
 }
 
 /// Progress messages are off by default and shown only with `--verbose`.

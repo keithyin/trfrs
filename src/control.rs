@@ -325,7 +325,10 @@ percent_c,percent_g,percent_t,entropy,repeat_unit,repeat_sequence\n";
 /// a line break (`RFC 4180`).  The sequence name is written as raw bytes, like
 /// every other output of the program.
 fn push_csv_field(out: &mut Vec<u8>, field: &[u8]) {
-    if !field.iter().any(|b| matches!(b, b',' | b'"' | b'\n' | b'\r')) {
+    if !field
+        .iter()
+        .any(|b| matches!(b, b',' | b'"' | b'\n' | b'\r'))
+    {
         out.extend_from_slice(field);
         return;
     }
@@ -813,15 +816,17 @@ mod tests {
     #[test]
     fn output_paths_use_the_output_directory() {
         let paths = OutputPaths::new(Path::new("out"), "seq.fasta");
+        /* the joined paths use the separator of the host platform */
+        let expected = |name: &str| Path::new("out").join(name).to_string_lossy().into_owned();
         assert_eq!(paths.prefix, "seq.fasta");
-        assert_eq!(paths.html, "out/seq.fasta.html");
-        assert_eq!(paths.txt, "out/seq.fasta.txt.html");
-        assert_eq!(paths.dat, "out/seq.fasta.dat");
-        assert_eq!(paths.csv, "out/seq.fasta.csv");
-        assert_eq!(paths.mask, "out/seq.fasta.mask");
-        assert_eq!(paths.summary, "out/seq.fasta.summary.html");
-        assert_eq!(paths.html_page(1), "out/seq.fasta.1.html");
-        assert_eq!(paths.txt_page(1), "out/seq.fasta.txt.1.html");
+        assert_eq!(paths.html, expected("seq.fasta.html"));
+        assert_eq!(paths.txt, expected("seq.fasta.txt.html"));
+        assert_eq!(paths.dat, expected("seq.fasta.dat"));
+        assert_eq!(paths.csv, expected("seq.fasta.csv"));
+        assert_eq!(paths.mask, expected("seq.fasta.mask"));
+        assert_eq!(paths.summary, expected("seq.fasta.summary.html"));
+        assert_eq!(paths.html_page(1), expected("seq.fasta.1.html"));
+        assert_eq!(paths.txt_page(1), expected("seq.fasta.txt.1.html"));
     }
 
     #[test]
