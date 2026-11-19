@@ -626,6 +626,13 @@ impl Trf {
         (2.3 * (self.indel_probability * distance as f64).sqrt()).floor() as i32
     }
 
+    /// Whether the alignment (`txt.html`) file is written at all: HTML output
+    /// must be enabled and SSR mode must be off, because the rewritten SSR
+    /// tracts have no alignment blocks of their own.
+    pub fn alignment_output_enabled(&self) -> bool {
+        !self.params.html_output_off && !self.params.ssr
+    }
+
     /// `trf_message()`: write to the alignment file unless HTML output is off.
     pub fn write_to_alignment_file(&mut self, text: &str) {
         self.write_bytes_to_alignment_file(text.as_bytes());
@@ -633,7 +640,7 @@ impl Trf {
 
     /// `trf_message()` for text that is not valid UTF-8 (the sequence name).
     pub fn write_bytes_to_alignment_file(&mut self, text: &[u8]) {
-        if !self.params.html_output_off {
+        if self.alignment_output_enabled() {
             if let Some(f) = self.alignment_file.as_mut() {
                 let _ = f.write_all(text);
             }

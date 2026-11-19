@@ -34,7 +34,9 @@ License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 //! The search parameters keep the meaning (and the defaults `2 5 7 80 10 50
 //! 2000`) of the reference program.  `--str` is a preset that only narrows the
 //! reported period range to 1–15 bp; explicit `--minperiod`/`--maxperiod`
-//! take precedence.
+//! take precedence.  `--ssr` keeps that period range and additionally rewrites
+//! every report into the clean `motif × repeats` tracts found inside the STR
+//! regions (see [`crate::ssr`]).
 
 use std::path::PathBuf;
 
@@ -170,6 +172,11 @@ struct Args {
     #[arg(long, help_heading = "Search parameters")]
     str: bool,
 
+    /// SSR mode: period 1-15 like --str, but only clean motif*repeats tracts
+    /// are reported (explicit --minperiod/--maxperiod win)
+    #[arg(long, help_heading = "Search parameters")]
+    ssr: bool,
+
     /// Output directory for the report and data files (created if missing)
     #[arg(
         short = 'o',
@@ -235,6 +242,8 @@ pub struct SearchParams {
     pub minscore: u32,
     pub min_period: u32,
     pub maxperiod: u32,
+    /// SSR mode (`--ssr`): report only clean motif*repeats tracts.
+    pub ssr: bool,
 }
 
 /// The output options.
@@ -280,12 +289,12 @@ pub struct Cli {
 pub fn parse() -> Result<Cli, i32> {
     let args = Args::parse();
 
-    /* Period range: an explicit option wins, then the `--str` preset, then
-    the built in default. */
+    /* Period range: an explicit option wins, then the `--str`/`--ssr` preset,
+    then the built in default.  `--ssr` implies the `--str` range. */
     let min_period = args.minperiod.unwrap_or(1);
     let maxperiod = match args.maxperiod {
         Some(value) => value,
-        None if args.str => STR_MAX_PERIOD,
+        None if args.str || args.ssr => STR_MAX_PERIOD,
         None => DEFAULT_MAXPERIOD,
     };
 
@@ -318,6 +327,7 @@ pub fn parse() -> Result<Cli, i32> {
             minscore: args.minscore,
             min_period,
             maxperiod,
+            ssr: args.ssr,
         },
         output: OutputOptions {
             directory: args.output,

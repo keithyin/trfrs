@@ -572,3 +572,103 @@ fn redundancy_removal_can_be_disabled() {
     assert!(kept.len() <= all.len());
     assert!(!all.is_empty());
 }
+
+#[test]
+fn ssr_preset_values() {
+    let preset = Params::ssr_preset();
+    assert_eq!(preset.min_period, 1);
+    assert_eq!(preset.maxperiod, 15);
+    assert_eq!(preset.minscore, 50);
+    assert!(preset.ssr_mode);
+    assert_eq!(
+        preset,
+        Params {
+            ssr_mode: true,
+            ..Params::str_preset()
+        }
+    );
+    assert!(TrfFinder::new(&preset).is_ok());
+}
+
+/// In SSR mode the `(GA)14` repeat inside the crafted sequence is reported as
+/// the clean tract: it starts at its first complete copy, the motif is the
+/// minimal-period rotation anchored there, and the tract is an exact
+/// `motif × copies` region.
+#[test]
+fn ssr_mode_reports_clean_tracts() {
+    let sequence = "CATGCCTAGGACATTGGAGAGAGAGAGAGAGAGAGAGAGAGAGATTCAGGCATCCAGG";
+    let repeats = TrfFinder::new(&Params::ssr_preset())
+        .unwrap()
+        .find(sequence)
+        .unwrap();
+    assert_eq!(repeats.len(), 1, "repeats: {:?}", repeats);
+
+    let repeat = &repeats[0];
+    assert_eq!(repeat.start, 16); /* first G of the GA run */
+    assert_eq!(repeat.end, 44); /* one past the last A */
+    assert_eq!(repeat.period, 2);
+    assert_eq!(repeat.consensus_size, 2);
+    assert_eq!(repeat.copies, 14.0);
+    assert_eq!(repeat.pattern, "GA");
+    assert_eq!(repeat.percent_matches, 100);
+    assert_eq!(repeat.percent_indels, 0);
+    assert_eq!(repeat.score, 52); /* (14 - 1) * 2 * 2 */
+    assert_eq!(repeat.entropy, 1.0);
+
+    let region = repeat.sequence(sequence.as_bytes()).unwrap();
+    assert_eq!(region, b"GAGAGAGAGAGAGAGAGAGAGAGAGAGA");
+}
+
+/// Every SSR record is a clean tract, and the command line `--ssr` reports
+/// exactly the records of the library preset (field by field, like the
+/// `--str` comparison above).
+#[test]
+fn ssr_preset_matches_command_line() {
+    let (_, sequence) = parse_fasta(&read_fixture("str_short.fasta"))
+        .into_iter()
+        .next()
+        .expect("fixture sequence");
+
+    let repeats = TrfFinder::new(&Params::ssr_preset())
+        .unwrap()
+        .find(&sequence)
+        .unwrap();
+    assert!(!repeats.is_empty(), "fixture should contain SSRs");
+    for repeat in &repeats {
+        /* clean tracts: exact repeats, minimal-period motif, integral copies */
+        assert_eq!(repeat.percent_matches, 100);
+        assert_eq!(repeat.percent_indels, 0);
+        assert_eq!(repeat.consensus_size, repeat.period);
+        assert_eq!(
+            (repeat.end - repeat.start) as f32,
+            repeat.copies * repeat.period as f32
+        );
+    }
+
+    let output = Command::new(env!("CARGO_BIN_EXE_trfrs"))
+        .arg(data_dir().join("str_short.fasta"))
+        .args(["--ssr", "--ngs"])
+        .output()
+        .expect("run trf");
+    assert!(
+        output.status.success(),
+        "trf failed: {:?}\nstderr: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8(output.stdout).expect("stdout is utf8");
+    let rows: Vec<&str> = stdout
+        .lines()
+        .filter(|line| !line.trim().is_empty() && !line.starts_with('@'))
+        .collect();
+
+    assert_eq!(rows.len(), repeats.len(), "number of records");
+    for (row, repeat) in rows.iter().zip(&repeats) {
+        let fields: Vec<&str> = row.split_whitespace().collect();
+        assert_eq!(fields[0].parse::<usize>().unwrap(), repeat.start + 1);
+        assert_eq!(fields[1].parse::<usize>().unwrap(), repeat.end);
+        assert_eq!(fields[2].parse::<usize>().unwrap(), repeat.period);
+        assert_eq!(fields[7].parse::<i32>().unwrap(), repeat.score);
+        assert_eq!(fields[13], repeat.pattern);
+    }
+}

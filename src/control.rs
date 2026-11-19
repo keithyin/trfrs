@@ -124,7 +124,7 @@ impl Trf {
 
     /// Starts the alignment (txt) file and writes the HTML header.
     fn open_alignment_output(&mut self, paths: &OutputPaths) {
-        if self.params.html_output_off {
+        if !self.alignment_output_enabled() {
             return;
         }
         match File::create(&paths.txt) {
@@ -174,7 +174,7 @@ impl Trf {
 
     /// Writes the sequence length and base composition to the alignment file.
     fn write_sequence_statistics(&mut self) {
-        if self.params.html_output_off {
+        if !self.alignment_output_enabled() {
             return;
         }
         let text = format!("\n\nLength: {}", self.length);
@@ -236,7 +236,7 @@ impl Trf {
 
     /// Writes the closing HTML tags and drops the alignment writer.
     fn close_alignment_output(&mut self) {
-        if !self.params.html_output_off {
+        if self.alignment_output_enabled() {
             self.write_to_alignment_file("Done.\n");
             self.write_to_alignment_file("</PRE>");
             self.write_to_alignment_file("</BODY>");

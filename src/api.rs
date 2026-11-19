@@ -112,6 +112,14 @@ pub struct Params {
     /// Remove repeats that are redundant with a higher scoring one.  The
     /// command line program does this unless `-r` is given.
     pub remove_redundancy: bool,
+    /// SSR mode (`--ssr`): rewrite the reported repeats into the clean
+    /// `motif × repeats` tracts found inside the STR regions.  The consensus
+    /// of each repeat is normalized to its minimal period (`TCTC` -> `TC`)
+    /// and re-anchored, so a tract is the leftmost window with the most
+    /// complete copies; a region can yield several tracts.  A tract needs at
+    /// least 3 complete copies, and the tracts are not subject to `minscore`
+    /// (the source regions are).
+    pub ssr_mode: bool,
 }
 
 impl Default for Params {
@@ -126,6 +134,7 @@ impl Default for Params {
             min_period: STR_MIN_PERIOD,
             maxperiod: 2000,
             remove_redundancy: true,
+            ssr_mode: false,
         }
     }
 }
@@ -143,6 +152,20 @@ impl Params {
             min_period: STR_MIN_PERIOD,
             maxperiod: STR_MAX_PERIOD,
             ..Params::default()
+        }
+    }
+
+    /// Parameters for a search restricted to clean SSR tracts.
+    ///
+    /// [`Params::str_preset`] plus [`Params::ssr_mode`]: the reported period
+    /// range stays 1–15 bp, but every report is rewritten into the clean
+    /// `motif × repeats` tracts found inside the STR regions.  The scoring
+    /// parameters are left untouched, so `minscore` still has to be lowered by
+    /// the caller when short or low copy number SSRs should be found.
+    pub fn ssr_preset() -> Self {
+        Params {
+            ssr_mode: true,
+            ..Params::str_preset()
         }
     }
 }
@@ -167,6 +190,11 @@ pub enum Error {
 ///
 /// `start..end` is a 0-based half open interval (`start` inclusive, `end`
 /// exclusive), so the repeated region is `&sequence[start..end]`.
+///
+/// With [`Params::ssr_mode`] the repeat is a clean SSR tract: the region is
+/// exactly `pattern` repeated `copies` times (an integral number of complete
+/// copies), `consensus_size` equals `period`, `percent_matches` is 100 and
+/// `pattern` is the minimal-period rotation anchored at `start`.
 ///
 /// The percentage fields are whole numbers between 0 and 100, computed exactly
 /// like the columns of the command line `.dat` output.
@@ -402,6 +430,7 @@ fn silent_paramset(params: &Params) -> ParamSet {
         maxperiod: params.maxperiod,
         match_probability_percent: params.match_probability_percent,
         indel_probability_percent: params.indel_probability_percent,
+        ssr: params.ssr_mode,
         data_file: false,
         masked_file: false,
         flanking_sequence: false,

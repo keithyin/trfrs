@@ -79,6 +79,7 @@ License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 //! | `trfclean.h`            | `clean.rs` (redundancy removal, HTML output)  |
 //! | FASTA input             | `fasta.rs`                                    |
 //! | generated tables        | `tables.rs`                                   |
+//! | SSR extraction (port extension) | `ssr.rs`                              |
 //!
 //! The C program keeps its state in file scope globals; here everything lives in
 //! `state::Trf`, which is created once per sequence, except the wraparound DP
@@ -93,6 +94,7 @@ mod driver;
 mod fasta;
 mod params;
 mod scan;
+mod ssr;
 mod state;
 mod tables;
 

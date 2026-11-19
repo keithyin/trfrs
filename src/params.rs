@@ -44,6 +44,9 @@ pub struct ParamSet {
     pub maxperiod: u32,
     pub match_probability_percent: u32,
     pub indel_probability_percent: u32,
+    /// SSR mode (`--ssr`): rewrite the reported repeats into the clean
+    /// `motif × repeats` tracts found inside the STR regions.
+    pub ssr: bool,
 
     pub data_file: bool,
     /// Extension of this port: write the repeats as a CSV table.
@@ -91,6 +94,7 @@ impl Default for ParamSet {
             maxperiod: 0,
             match_probability_percent: 0,
             indel_probability_percent: 0,
+            ssr: false,
             data_file: false,
             csv_file: false,
             masked_file: false,

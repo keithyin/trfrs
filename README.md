@@ -60,6 +60,7 @@ trfrs FILE [--match N] [--mismatch N] [--indel N] [--pm N] [--pi N] [--minscore 
 | `--minperiod` | 最小重复单元长度，1 到 maxperiod | `1` |
 | `--maxperiod` | 最大重复单元长度，1–2000 | `2000` |
 | `--str` | STR 模式：等价于 `--minperiod 1 --maxperiod 15`，显式区间参数优先 | — |
+| `--ssr` | SSR 模式：period 区间同 `--str`（1–15，显式区间参数优先），但只报告干净的 `motif × 重复次数` 区域 | — |
 
 默认值即常用的人类 DNA 参数组合 `2 5 7 80 10 50 2000`，因此只给文件名即可运行。
 
@@ -175,6 +176,49 @@ trfrs sample.fasta --str --maxperiod 2000 --ngs   # 仍按 1–2000 报告
   因此 `--str` 的耗时与 `--maxperiod 500` 相当；打分矩阵仍约为 604 B/碱基，
   百万碱基级序列需要数百 MB，大基因组请配合 `-l` 估算或分块处理。
 
+## SSR 模式（干净的 motif × 重复次数 区域）
+
+`--ssr` 在 `--str` 的基础上（period 1–15，显式 `--minperiod` / `--maxperiod` 优先）
+把每条报告改写为杂乱 STR 区域内部的**干净片段**：
+
+```bash
+trfrs sample.fasta --ssr --minscore 20 --ngs
+```
+
+过滤规则（`src/ssr.rs`）：
+
+- 直接复用 STR 记录给出的 motif，不重新发现：先做**归一化**——`TCTC` 折叠为最小
+  周期 `TC`（仅当 motif 是该周期的整倍重复；`ATATA` 这类 primitive motif 保持原长）；
+- 再做**相位重锚**——在记录区域内枚举 motif 的全部旋转，逐拷贝延伸，取完整拷贝数
+  最多的相位；拷贝数相同时取最左相位（`GAGAGAGAG` 即使被报成 `AG` 也会归一为
+  `GA*4`，尾部不完整的单碱基丢弃）；
+- 一个 STR 区域可以产出**多条** tract（如 `(GA)4 杂乱 (GA)3` → 两条）；
+- tract 要求至少 3 个完整拷贝；重叠时按"完整拷贝数多者优先、起点靠前者优先"消解；
+- 输出坐标收缩为干净片段，`percent_matches=100`、`percent_indels=0`、copies 为整数；
+  对齐文件（`.txt.html`）与 HTML 表格中的索引链接在 SSR 模式下省略。
+
+使用注意事项与 `--str` 相同：`--minscore` 仍作用于 STR 扫描阶段，检测短 SSR 需要
+调低阈值；SSR tract 本身不再套用 `--minscore`（精确重复无错配）。
+
+### SSR 结果的一致性校验
+
+`scripts/ssr_check.py` 内置一个独立的参考实现（全序列穷举精确扫描，不依赖 TRF 的
+任何启发式），并用三层比对验证 `--ssr` 输出：① 每条记录确实是 `motif × copies` 的
+精确区域；② 每条 tract 落在同周期参考 span 内；③ 每个参考 stretch 要么被报告、
+要么属于可解释类别（贪心重叠消解 / 区域 motif 不相关 / TRF 检测阶段未发现）：
+
+```bash
+cargo run --release -- sample.fasta --ssr --minscore 20 --csv -o /tmp/ssr_out
+cargo run --release -- sample.fasta --str  --minscore 20 --csv -o /tmp/str_out
+python3 scripts/ssr_check.py sample.fasta /tmp/ssr_out/sample.fasta.csv \
+    --str-regions /tmp/str_out/sample.fasta.csv
+```
+
+有违例时退出码非 0 并逐条打印差异。加 `--html ssr-report.html` 可把同一验证渲染成
+单文件 HTML 报告（每条 `--ssr` 记录展示前后侧翼序列、SSR 区域标红并按拷贝交替深浅
+说明 motif 平铺，同页对照展示参考实现的 stretch 及两者对应关系，`--flank N` 调整
+侧翼长度，默认 30）。
+
 ## 作为库使用
 
 同一 crate 同时产出 `lib` 与 `bin`，库与命令行共用同一套算法，结果与 `.dat` 记录逐字段一致。
@@ -211,9 +255,10 @@ fn main() -> Result<(), trfrs::Error> {
 
 `Params` 的字段与命令行一一对应（`match_weight`、`mismatch`、`indel`、
 `match_probability_percent`、`indel_probability_percent`、`minscore`、`min_period`、
-`maxperiod`），另加 `remove_redundancy`（默认 `true`，等价于命令行未加 `-r`）。
-只检测 STR 时用 `Params::str_preset()`，它等价于
-`Params { min_period: 1, maxperiod: 15, ..Params::default() }`，与命令行 `--str` 语义一致：
+`maxperiod`），另加 `remove_redundancy`（默认 `true`，等价于命令行未加 `-r`）与
+`ssr_mode`（默认 `false`，等价于命令行 `--ssr`）。只检测 STR 时用 `Params::str_preset()`，
+它等价于 `Params { min_period: 1, maxperiod: 15, ..Params::default() }`，与命令行
+`--str` 语义一致；`Params::ssr_preset()` 再叠加 `ssr_mode: true`，与 `--ssr` 一致：
 
 ```rust
 use trfrs::{Params, TrfFinder};
@@ -331,8 +376,9 @@ cargo test
 
 `tests/lib_api.rs` 校验库接口：把 `TrfFinder::find` 的结果与 `tests/data/*.out`
 （C 参考程序的 `-ngs` 输出）逐字段比对，并覆盖坐标换算、输入归一化、参数校验、
-空序列、finder 复用与冗余剔除开关。`Params::str_preset()` 的结果同时与
-命令行 `--str` 的记录逐字段比对，`min_period` 的过滤与校验也在其中。
+空序列、finder 复用与冗余剔除开关。`Params::str_preset()` 与 `Params::ssr_preset()`
+的结果同时与命令行 `--str` / `--ssr` 的记录逐字段比对，`min_period` 的过滤与校验也在其中。
+SSR 提取的单元测试在 `src/ssr.rs` 内（归一化、相位选择、多 tract、包含与重叠消解等）。
 
 ## 代码结构
 
@@ -343,6 +389,7 @@ cargo test
 | `tr30dat.h` / `tr30dat.c` | `src/state.rs`、`src/algo.rs`、`src/scan.rs` |
 | `trfclean.h` | `src/clean.rs`（冗余剔除、HTML 输出） |
 | FASTA / FASTQ 解析 | `src/fasta.rs` |
+| SSR 提取（本移植新增） | `src/ssr.rs`，校验脚本 `scripts/ssr_check.py` |
 | 生成表 | `src/tables.rs` |
 | `TRFPARAMSET` | `src/params.rs` |
 | 库入口 | `src/lib.rs`（模块组织、公共导出）、`src/api.rs`（`TrfFinder`/`Params`/`Repeat`）、`src/main.rs`（二进制入口） |

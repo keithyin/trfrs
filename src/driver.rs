@@ -65,6 +65,7 @@ pub fn run_cli() -> i32 {
         maxperiod: cli.search.maxperiod,
         match_probability_percent: cli.search.match_probability_percent,
         indel_probability_percent: cli.search.indel_probability_percent,
+        ssr: cli.search.ssr,
         data_file: cli.output.data_file,
         csv_file: cli.output.csv_file,
         masked_file: cli.output.masked_file,

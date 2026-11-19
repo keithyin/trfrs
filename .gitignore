@@ -8,8 +8,13 @@
 *.mask
 *[0-9].html
 
+# SSR 校验脚本的产物
+__pycache__/
+ssr-report.html
+
 # tests/data 下的 .dat / summary.html 是 C 参考程序生成的测试金标准，需要入库
 !tests/data/*.dat
 !tests/data/*.summary.html
 
 /.codebuddy
+/.zcode

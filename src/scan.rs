@@ -998,7 +998,7 @@ impl Trf {
         self.reverse();
         self.period = best_match_distance;
 
-        if !self.params.html_output_off {
+        if self.alignment_output_enabled() {
             let class_length = self.class_length;
             self.print_alignment_headings(class_length);
         }
@@ -1006,14 +1006,14 @@ impl Trf {
         /* save the starting position of consensus in EC */
         let consensus_start_pos = self.align_pair.pattern_index[1];
 
-        if !self.params.html_output_off {
+        if self.alignment_output_enabled() {
             let class_length = self.class_length;
             self.print_alignment(class_length);
         }
 
         self.reverse();
 
-        if !self.params.html_output_off {
+        if self.alignment_output_enabled() {
             let mut out = String::new();
             out.push_str("\nStatistics");
             out.push_str(&format!(
@@ -1088,12 +1088,12 @@ impl Trf {
             entropy = -entropy;
         }
 
-        if !self.params.html_output_off {
+        if self.alignment_output_enabled() {
             self.write_to_alignment_file("\n");
             self.write_to_alignment_file("\n");
         }
 
-        if !self.params.html_output_off {
+        if self.alignment_output_enabled() {
             self.print_consensus_to_alignment_file(consensus_start_pos, consensus_size);
 
             if self.print_flanking {

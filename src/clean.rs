@@ -379,7 +379,11 @@ impl Trf {
                 "\n\nThis is table  {}  of  {}  ( {} repeats found )\n</PRE>",
                 page_number, nfiles, alignments
             ));
-            out.push_str("<PRE>\nClick on indices to view alignment\n");
+            if self.params.ssr {
+                out.push_str("<PRE>\nIndices of the clean SSR tracts (no alignment report)\n");
+            } else {
+                out.push_str("<PRE>\nClick on indices to view alignment\n");
+            }
             out.push_str("</PRE><A HREF=\"http://tandem.bu.edu/trf/trf.definitions.html#table\" target = \"explanation\">Table Explanation</A><BR><BR>\n");
             out.push_str("<TABLE BORDER=1 CELLSPACING=0 CELLPADDING=0>\n");
 
@@ -389,12 +393,22 @@ impl Trf {
                     out.push_str(HEADER_ROW);
                 }
                 let record = &self.records[curr];
+                /* SSR mode has no alignment file, so the indices are plain
+                text instead of a link into it */
+                let indices_cell = if self.params.ssr {
+                    format!(
+                        "<TD><CENTER>{}--{}</CENTER></TD>",
+                        record.first, record.last
+                    )
+                } else {
+                    format!(
+                        "<TD><CENTER><A HREF=\"{}#{}\">{}--{}</A></CENTER></TD>",
+                        linkfile, record.reference, record.first, record.last
+                    )
+                };
                 out.push_str(&format!(
-                    "<TR><TD><CENTER><A HREF=\"{}#{}\">{}--{}</A></CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{:1.1}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{:1.2}</CENTER></TD></TR>\n",
-                    linkfile,
-                    record.reference,
-                    record.first,
-                    record.last,
+                    "<TR>{}<TD><CENTER>{}</CENTER></TD><TD><CENTER>{:1.1}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{}</CENTER></TD><TD><CENTER>{:1.2}</CENTER></TD></TR>\n",
+                    indices_cell,
                     record.period,
                     record.copies,
                     record.size,
@@ -502,11 +516,25 @@ impl Trf {
         if !self.params.redundancy_removal_off {
             self.remove_redundancy();
         }
+        if self.params.ssr {
+            /* rewrite the cleaned STR records into the clean `motif × repeats`
+            tracts found inside their regions; there are no alignment blocks
+            for the rewritten coordinates, so the alignment cleanup is skipped */
+            self.records = crate::ssr::replace_with_ssr_tracts(
+                &self.sequence,
+                &self.records,
+                self.params.min_period,
+                self.maxperiod as u32,
+                self.params.match_weight,
+            );
+        }
         self.sort_by_count();
 
         if !self.params.html_output_off {
-            self.clean_alignments(alignmentfile);
-            self.break_alignments(alignmentfile);
+            if self.alignment_output_enabled() {
+                self.clean_alignments(alignmentfile);
+                self.break_alignments(alignmentfile);
+            }
             self.output_html(tablefile, alignmentfile);
         }
 
