@@ -1,0 +1,892 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>候选消解 · trfrs resolve_candidates 详解</title>
+<style>
+:root{
+  --paper:#f6f7f5;
+  --card:#ffffff;
+  --ink:#1a2220;
+  --muted:#5d6b68;
+  --line:#d8dedb;
+  --line-soft:#e8ecea;
+  --teal:#0d6b63;
+  --teal-soft:#e5f1ee;
+  --amber:#8f5d10;
+  --amber-soft:#fbf2de;
+  --red:#9a3b2c;
+  --red-soft:#fbeae6;
+  --code-bg:#f1f3f1;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --serif:"Noto Serif SC","Source Han Serif SC","Songti SC",Georgia,serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--paper);color:var(--ink);
+  font:16px/1.8 -apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans SC","Source Han Sans SC","Microsoft YaHei",sans-serif;
+  -webkit-font-smoothing:antialiased;
+}
+.rail{position:sticky;top:0;z-index:20;background:rgba(246,247,245,.95);border-bottom:1px solid var(--line);backdrop-filter:blur(8px)}
+.rail-in{max-width:960px;margin:0 auto;padding:9px 26px;display:flex;gap:16px;align-items:center;overflow-x:auto;font-size:12.5px;white-space:nowrap}
+.rail-in b{font-family:var(--serif);font-size:13px;letter-spacing:.02em;color:var(--teal)}
+.rail-in a{color:var(--muted);text-decoration:none;padding:2px 0;border-bottom:1px solid transparent}
+.rail-in a:hover{color:var(--ink);border-bottom-color:var(--teal)}
+.page{max-width:960px;margin:0 auto;padding:0 26px 140px}
+
+/* cover */
+.hero{padding:66px 0 34px;border-bottom:3px double var(--line)}
+.kicker{font-size:11.5px;letter-spacing:.22em;color:var(--teal);margin:0 0 14px;font-weight:600}
+h1{font-family:var(--serif);font-size:42px;line-height:1.28;margin:0 0 14px;letter-spacing:-.01em;font-weight:700}
+.lede{font-size:17.5px;line-height:1.7;color:#3c4a47;max-width:44em;margin:0 0 22px}
+.hero-meta{display:flex;flex-wrap:wrap;gap:10px 26px;font-size:12.5px;color:var(--muted)}
+.hero-meta code{background:var(--code-bg)}
+
+/* headings */
+h2{font-family:var(--serif);font-size:27px;line-height:1.4;margin:64px 0 12px;padding-top:14px;border-top:1px solid var(--line);letter-spacing:-.01em}
+h2 .badge{display:inline-block;font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;color:#fff;background:var(--teal);border-radius:5px;padding:3px 8px;vertical-align:4px;margin-right:12px;font-weight:600}
+h3{font-family:var(--serif);font-size:19px;margin:34px 0 10px;letter-spacing:0}
+h4{font-size:15px;margin:22px 0 8px;color:#33403d;font-weight:700}
+p{margin:0 0 14px}
+ul,ol{margin:0 0 16px;padding-left:24px}
+li{margin:5px 0}
+li::marker{color:var(--teal)}
+strong{font-weight:700}
+em{font-style:normal;background:linear-gradient(transparent 62%,#d7ece6 62%);padding:0 1px}
+a{color:var(--teal)}
+code{font-family:var(--mono);font-size:.875em;background:var(--code-bg);border:1px solid var(--line-soft);border-radius:4px;padding:.06em .32em}
+
+/* components */
+.trio{display:grid;grid-template-columns:1fr 1fr 1fr;margin:20px 0 26px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--card)}
+.trio>div{padding:15px 17px 13px;border-right:1px solid var(--line);font-size:14.5px;line-height:1.72}
+.trio>div:last-child{border-right:0}
+.trio h4{margin:0 0 8px;font-size:11.5px;letter-spacing:.16em;color:var(--muted);font-weight:700}
+.trio p{margin:0 0 8px}
+.trio p:last-child{margin:0}
+.trio .t-problem{background:var(--teal-soft)}
+.trio .t-method{background:var(--card)}
+.trio .t-why{background:var(--amber-soft)}
+
+.key{border-left:3px solid var(--teal);background:var(--card);padding:13px 18px;margin:20px 0;border-radius:0 10px 10px 0}
+.key p:last-child{margin:0}
+.key .lbl{font-size:11.5px;letter-spacing:.16em;color:var(--teal);font-weight:700;display:block;margin-bottom:4px}
+.warn{border-left:3px solid var(--red);background:var(--red-soft);padding:13px 18px;margin:20px 0;border-radius:0 10px 10px 0;font-size:14.8px}
+.warn p:last-child{margin:0}
+.warn .lbl{font-size:11.5px;letter-spacing:.16em;color:var(--red);font-weight:700;display:block;margin-bottom:4px}
+.note{font-size:14px;color:var(--muted);border-top:1px dashed var(--line);padding-top:10px;margin:18px 0}
+
+pre{margin:0 0 18px;background:var(--code-bg);border:1px solid var(--line);border-radius:9px;padding:14px 16px;overflow-x:auto;font-family:var(--mono);font-size:13px;line-height:1.62}
+pre b{color:var(--teal);font-weight:600}
+pre i{color:var(--muted);font-style:normal}
+.file{font-family:var(--mono);font-size:11.5px;color:var(--muted);letter-spacing:.03em;margin:0 0 6px;display:block}
+.anchor{display:inline-block;font-family:var(--mono);font-size:11.5px;color:var(--teal);background:var(--teal-soft);border:1px solid #cfe4df;border-radius:4px;padding:0 5px;white-space:nowrap}
+
+.math{font-family:var(--mono);font-size:14px;background:var(--card);border:1px solid var(--line);border-radius:9px;padding:14px 18px;margin:16px 0;line-height:1.9;overflow-x:auto}
+.math .c{color:var(--muted)}
+
+table{border-collapse:collapse;width:100%;margin:16px 0 22px;font-size:14px;background:var(--card)}
+th,td{border:1px solid var(--line);padding:8px 11px;text-align:left;vertical-align:top}
+th{background:#eef1ef;font-weight:700;font-size:13px}
+td code{white-space:nowrap}
+.tbl-cap{font-size:12.5px;color:var(--muted);margin:-14px 0 22px}
+
+details{border:1px solid var(--line);border-radius:9px;background:var(--card);padding:12px 16px;margin:12px 0}
+details summary{cursor:pointer;font-weight:600;font-size:14.5px}
+details[open] summary{margin-bottom:10px;color:var(--teal)}
+details p:last-child{margin-bottom:0}
+
+figure{margin:22px 0 26px}
+figure svg{display:block;width:100%;height:auto;background:var(--card);border:1px solid var(--line);border-radius:10px}
+figcaption{font-size:12.5px;color:var(--muted);margin-top:8px;line-height:1.65}
+svg text{font-family:-apple-system,"Noto Sans SC",sans-serif;font-size:12px;fill:#33403d}
+svg .mono{font-family:var(--mono);font-size:11px}
+svg .box{fill:#fff;stroke:#c9d3cf;stroke-width:1.2}
+svg .box-a{fill:var(--teal-soft);stroke:#9dc9c0;stroke-width:1.2}
+svg .box-b{fill:var(--amber-soft);stroke:#dfc38c;stroke-width:1.2}
+svg .ln{stroke:#9aa8a4;stroke-width:1.2;fill:none}
+svg .dash{stroke:#9aa8a4;stroke-width:1.2;fill:none;stroke-dasharray:5 4}
+svg .hot{stroke:var(--teal);stroke-width:2;fill:none}
+svg .lbl{font-size:10.5px;fill:#6b7875}
+svg .bar-at{fill:var(--teal-soft);stroke:#7fb5ac;stroke-width:1.2}
+svg .bar-ta{fill:#f3f5f4;stroke:#b9c4c0;stroke-width:1;stroke-dasharray:4 3}
+svg .bar-nine{fill:var(--amber-soft);stroke:#d9b878;stroke-width:1.4}
+svg .bar-out{fill:#cfe8e2;stroke:#5d9b91;stroke-width:1.6}
+
+.steps{counter-reset:step;margin:22px 0}
+.step{border:1px solid var(--line);border-radius:12px;background:var(--card);padding:0 0 6px;margin:0 0 18px;overflow:hidden}
+.step-h{display:flex;align-items:baseline;gap:12px;padding:12px 18px 10px;background:#eef1ef;border-bottom:1px solid var(--line)}
+.step-h .no{font-family:var(--mono);font-size:12px;color:#fff;background:var(--teal);border-radius:5px;padding:2px 8px;font-weight:600}
+.step-h .ti{font-family:var(--serif);font-size:17px;font-weight:700}
+.step-h .io{margin-left:auto;font-family:var(--mono);font-size:11.5px;color:var(--muted)}
+.step .body{padding:14px 18px 6px}
+
+.qa{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:16px 18px;margin:16px 0}
+.qa .qno{font-family:var(--mono);font-size:11.5px;color:var(--teal);letter-spacing:.1em}
+.qa h4{margin:2px 0 6px}
+.qa p:last-child{margin-bottom:0}
+
+.tag{display:inline-block;font-family:var(--mono);font-size:11.5px;border-radius:4px;padding:0 6px;white-space:nowrap}
+.tag-at{background:var(--teal-soft);color:var(--teal);border:1px solid #cfe4df}
+.tag-nine{background:var(--amber-soft);color:var(--amber);border:1px solid #e7d2a6}
+.tag-ta{background:#f1f3f2;color:var(--muted);border:1px solid var(--line)}
+.tag-drop{background:var(--red-soft);color:var(--red);border:1px solid #ecc8c0}
+.tag-keep{background:var(--teal-soft);color:var(--teal);border:1px solid #cfe4df}
+
+footer{margin-top:80px;border-top:1px solid var(--line);padding-top:24px;font-size:13px;color:var(--muted)}
+
+@media (max-width:800px){
+  h1{font-size:32px}
+  h2{font-size:23px}
+  .trio{grid-template-columns:1fr}
+  .trio>div{border-right:0;border-bottom:1px solid var(--line)}
+  .page{padding:0 18px 100px}
+  .rail-in{padding:8px 18px}
+  .step-h .io{display:none}
+}
+@media print{
+  .rail{display:none}
+  body{background:#fff}
+  h2{break-after:avoid}
+  .trio,.qa,pre,table,figure,.step{break-inside:avoid}
+}
+</style>
+</head>
+<body>
+
+<nav class="rail"><div class="rail-in">
+  <b>候选消解</b>
+  <a href="#s0">0 问题</a>
+  <a href="#s1">1 数据</a>
+  <a href="#s2">2 去重</a>
+  <a href="#s3">3 嵌套</a>
+  <a href="#s4">4 贪心</a>
+  <a href="#s5">5 走查</a>
+  <a href="#s6">6 正确性</a>
+  <a href="#s7">7 复杂度</a>
+  <a href="#s8">8 测试</a>
+  <a href="#s9">9 速查</a>
+</div></nav>
+
+<div class="page">
+
+<header class="hero">
+  <p class="kicker">TRF RUST 移植版 · <code>--ssr</code> 过滤链 · 单函数详解</p>
+  <h1>候选消解<br><span style="font-size:.62em;font-family:var(--mono);letter-spacing:0">resolve_candidates</span> 的三步逻辑</h1>
+  <p class="lede">提取阶段会为每条 STR 记录、每个相位、每段连续 run 各产出一个候选 tract，它们彼此重复、嵌套、相交。候选消解只回答一个问题：从这一堆互相打架的区间里，确定性地挑出一组<em>去重、互不重叠、按位置排序</em>的干净 tract。本教程逐行拆解这三步，并用可复算的坐标走查每个设计选择。</p>
+  <div class="hero-meta">
+    <span>对象：<code>src/ssr.rs :: resolve_candidates</code>（190–220 行）</span>
+    <span>上游：<code>extract_record_tracts</code>（111–178 行）</span>
+    <span>相关：<code>docs/ssr-containment-resolution-bug.md</code></span>
+    <span>验证：<code>cargo test --lib ssr</code></span>
+  </div>
+</header>
+
+<h2 id="s0"><span class="badge">§0</span>它解决的问题：候选为什么会互相打架</h2>
+
+<div class="trio">
+  <div class="t-problem"><h4>在做什么</h4><p>把上游产出的全部候选 tract 收拢成一个最终集合：同一区间只留一条，同一重复的相位副本只留最完整的一条，互相重叠的按统一优先级裁决。</p></div>
+  <div class="t-method"><h4>怎么做</h4><p>三步流水：① 按坐标排序后去掉完全相同 span；② 按“先左后长”扫描，丢弃被<em>同一 cyclic word</em> 完全包含的相位副本；③ 按“完整拷贝数降序、起点升序”贪心接受互不重叠者。</p></div>
+  <div class="t-why"><h4>为什么需要它</h4><p>上游是“宁多勿漏”地生成候选；下游的 <code>--ssr</code> 输出契约要求每个碱基至多属于一个 tract。消解是生成与报告之间唯一的选择层。</p></div>
+</div>
+
+<p><code>resolve_candidates</code> 是一个纯函数：不做比对、不重新推断 motif、不重新打分。它只接收 <code>Vec&lt;Tract&gt;</code>，返回另一个 <code>Vec&lt;Tract&gt;</code>。输入允许任意顺序、重复、包含、相交；输出保证两两不重叠并按坐标升序排列。</p>
+
+<h3>0.1 候选从哪里来，又为什么会重复</h3>
+
+<p>上游 <code>extract_record_tracts</code>（<span class="anchor">src/ssr.rs:111</span>）对每条在常规清理后幸存的 STR 记录做两件事：把 consensus 归一化到最小周期，然后在记录区域内对单元的<em>每一个旋转</em>逐锚点扫描、逐拷贝延伸。这个“宁多勿漏”的策略会产生四类需要在消解层处理的现象：</p>
+
+<table>
+<tr><th style="width:20%">现象</th><th style="width:34%">产生原因</th><th>具体例子（本页统一用 1-based 闭区间）</th></tr>
+<tr><td><strong>完全相同</strong></td><td>多条源记录的区间互相覆盖，对同一段序列得出同一个 tract</td><td><code>(2,10,ATG,3)</code> 被记录 <code>GAT</code> 和记录 <code>ATG</code> 各生成一次</td></tr>
+<tr><td><strong>同词嵌套</strong></td><td>一条重复被 <code>period</code> 个旋转各扫一遍，长旋转产生完整 tract，短旋转产生它的相位子窗口</td><td><code>GA×5 [1,10]</code> 里面嵌着 <code>AG×4 [2,9]</code></td></tr>
+<tr><td><strong>跨词包含</strong></td><td>一个 period 较大的精确区域内部，恰好存在另一词族的更短精确重复</td><td><code>AT×4</code> 落在 <code>ATATATATC×3</code> 的区域内</td></tr>
+<tr><td><strong>部分重叠</strong></td><td>两条源记录窗口错开，或不同 motif 的 tract 在坐标上交叠</td><td><code>GA×5 [1,10]</code> 与 <code>GA×5 [3,12]</code>（同一串重复被报告了两次）</td></tr>
+</table>
+
+<p>前三类里有“冗余”（必须丢）也有“真实特征”（必须留），并且最终还要满足输出契约：任意两条输出 tract 不能共享碱基。于是消解必须分步做——先处理无争议的重复与同词嵌套，再把剩余的重叠交给一条明确的裁决规则。</p>
+
+<figure>
+<svg viewBox="0 0 900 300" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ar0" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#9aa8a4"/>
+    </marker>
+  </defs>
+  <rect class="box" x="16" y="36" width="130" height="56" rx="8"/>
+  <text x="81" y="59" text-anchor="middle" font-weight="600">TRF 扫描</text>
+  <text class="mono" x="81" y="77" text-anchor="middle">STR 记录</text>
+
+  <rect class="box" x="166" y="36" width="130" height="56" rx="8"/>
+  <text x="231" y="59" text-anchor="middle" font-weight="600">trf_clean</text>
+  <text class="mono" x="231" y="77" text-anchor="middle">常规冗余剔除</text>
+
+  <rect class="box" x="316" y="36" width="140" height="56" rx="8"/>
+  <text x="386" y="59" text-anchor="middle" font-weight="600">提取候选</text>
+  <text class="mono" x="386" y="77" text-anchor="middle">extract_record_tracts</text>
+
+  <rect class="box-a" x="476" y="28" width="160" height="72" rx="9" stroke-width="2.4"/>
+  <text x="556" y="55" text-anchor="middle" font-weight="700">候选消解</text>
+  <text class="mono" x="556" y="74" text-anchor="middle">resolve_candidates</text>
+  <text class="lbl" x="556" y="90" text-anchor="middle">本教程的对象</text>
+
+  <rect class="box" x="656" y="36" width="120" height="56" rx="8"/>
+  <text x="716" y="59" text-anchor="middle" font-weight="600">构造记录</text>
+  <text class="mono" x="716" y="77" text-anchor="middle">build_record</text>
+
+  <rect class="box" x="796" y="36" width="88" height="56" rx="8"/>
+  <text x="840" y="59" text-anchor="middle" font-weight="600">输出</text>
+  <text class="mono" x="840" y="77" text-anchor="middle">.dat/.csv</text>
+
+  <line class="ln" x1="146" y1="64" x2="164" y2="64" marker-end="url(#ar0)"/>
+  <line class="ln" x1="296" y1="64" x2="314" y2="64" marker-end="url(#ar0)"/>
+  <line class="ln" x1="456" y1="64" x2="474" y2="64" marker-end="url(#ar0)"/>
+  <line class="ln" x1="636" y1="64" x2="654" y2="64" marker-end="url(#ar0)"/>
+  <line class="ln" x1="776" y1="64" x2="794" y2="64" marker-end="url(#ar0)"/>
+
+  <rect x="476" y="150" width="160" height="58" rx="7" fill="#fff" stroke="#c9d3cf" stroke-dasharray="4 3"/>
+  <text class="mono" x="556" y="172" text-anchor="middle">Vec&lt;Tract&gt;</text>
+  <text class="lbl" x="556" y="190" text-anchor="middle">可有重复 / 嵌套 / 重叠，顺序任意</text>
+  <rect x="476" y="228" width="160" height="58" rx="7" fill="#fff" stroke="#9dc9c0"/>
+  <text class="mono" x="556" y="250" text-anchor="middle">Vec&lt;Tract&gt;</text>
+  <text class="lbl" x="556" y="268" text-anchor="middle">两两不相交，按 (first, last) 升序</text>
+  <line class="ln" x1="556" y1="208" x2="556" y2="226" marker-end="url(#ar0)"/>
+  <line class="dash" x1="556" y1="100" x2="556" y2="148" marker-end="url(#ar0)"/>
+
+  <text class="lbl" x="16" y="140">实线 = 一次序列处理的调用链；虚线 = resolve_candidates 的输入/输出契约</text>
+  <text class="lbl" x="16" y="162">注意：clean 阶段已做常规冗余剔除，本函数只处理“STR 记录 → 干净 SSR tract”这一步内部的多候选竞争。</text>
+</svg>
+<figcaption>图 1。resolve_candidates 在 <code>--ssr</code> 处理链中的位置。它是提取与报告之间唯一做“集合选择”的地方；输出契约由它单独保证。</figcaption>
+</figure>
+
+<h3>0.2 完整源码</h3>
+
+<p>先把整段代码放在一起。后文按三个编号步骤拆解，每一步都回到这里对应的行。</p>
+
+<pre><i>// src/ssr.rs:190</i>
+fn resolve_candidates(mut candidates: Vec&lt;Tract&gt;) -&gt; Vec&lt;Tract&gt; {
+    <b>// ① 去除完全相同的 span</b>
+    candidates.sort_by_key(|tract| (tract.first, tract.last));
+    candidates.dedup_by(|a, b| a.first == b.first &amp;&amp; a.last == b.last);
+
+    <b>// ② 丢弃“同一 cyclic word”内部被完全包含的相位副本</b>
+    candidates.sort_by_key(|tract| (tract.first, std::cmp::Reverse(tract.last)));
+    let mut outer: Vec&lt;Tract&gt; = Vec::with_capacity(candidates.len());
+    for tract in candidates {
+        let nested = outer.iter().any(|kept| {
+            kept.first &lt;= tract.first
+                &amp;&amp; tract.last &lt;= kept.last
+                &amp;&amp; same_motif(&amp;kept.pattern, &amp;tract.pattern)
+        });
+        if !nested {
+            outer.push(tract);
+        }
+    }
+
+    <b>// ③ 按“完整拷贝数多者优先、平局取最左”贪心消解重叠</b>
+    outer.sort_by_key(|tract| (std::cmp::Reverse(tract.copies), tract.first));
+    let mut accepted: Vec&lt;Tract&gt; = Vec::new();
+    for tract in outer {
+        let overlapping = accepted
+            .iter()
+            .any(|kept| tract.first &lt;= kept.last &amp;&amp; kept.first &lt;= tract.last);
+        if !overlapping {
+            accepted.push(tract);
+        }
+    }
+
+    <b>// ④ 恢复坐标序，交给 build_record</b>
+    accepted.sort_by_key(|tract| (tract.first, tract.last));
+    accepted
+}</pre>
+
+<p class="file">落点　<span class="anchor">src/ssr.rs:190-220</span>　调用方 <span class="anchor">src/ssr.rs:78</span></p>
+
+<h2 id="s1"><span class="badge">§1</span>输入的数据形状：Tract 与坐标约定</h2>
+
+<pre><i>// src/ssr.rs:53</i>
+struct Tract {
+    first: i32,     <i>// 1-based 闭区间起点</i>
+    last: i32,      <i>// 1-based 闭区间终点（含）</i>
+    period: i32,    <i>// 单元长度，单位：碱基</i>
+    copies: u32,    <i>// 完整拷贝数（末尾不完整的一份已被窗口算术排除）</i>
+    pattern: String,<i>// 归一化单元在该 tract 起点处的旋转</i>
+}</pre>
+
+<p>四个字段里，<code>first</code>/<code>last</code> 决定几何关系，<code>copies</code> 决定贪心优先级，<code>pattern</code> 只参与一件事：判断两个 tract 是不是<em>同一个 cyclic word</em>。后文会看到，<code>pattern</code> 不是用来“展示 motif”的，它是冲突分类的依据。</p>
+
+<div class="key"><span class="lbl">两条贯穿全文的恒等式</span>
+<p>① 每个 tract 的长度恰好是 <code>copies × period</code>：<code>last − first + 1 = copies × period</code>。提取阶段的窗口算术只按整份拷贝推进，所以区间端点一定落在拷贝边界上。</p>
+<p>② <code>pattern.len() == period</code>：归一化之后，单元就是长度为 <code>period</code> 的那一段。于是“等长的两个 pattern”等价于“同周期的两个 tract”。</p>
+</div>
+
+<p>这两条恒等式让后面的包含判断和优先级判断都可以只比较坐标或只比较长度，不需要再检查序列内容。</p>
+
+<h2 id="s2"><span class="badge">§2</span>第 ① 步：排序后去掉完全相同的 span</h2>
+
+<div class="step">
+  <div class="step-h"><span class="no">①</span><span class="ti">完全相同区间去重</span><span class="io">O(n log n) 排序 + O(n) 去重</span></div>
+  <div class="body">
+<pre>candidates.sort_by_key(|tract| (tract.first, tract.last));
+candidates.dedup_by(|a, b| a.first == b.first &amp;&amp; a.last == b.last);</pre>
+
+<p><code>Vec::dedup_by</code> 只删除<strong>相邻</strong>的重复元素。所以必须先按 <code>(first, last)</code> 排序，让同一 span 的条目在数组里挨在一起。谓词只比较坐标，不比较 <code>pattern</code> 或 <code>copies</code>——同一个区间在物理上只能对应同一条序列片段，重复报告没有额外信息。</p>
+
+<p>Rust 的 <code>dedup_by</code> 把参数按“后一个元素、前一个保留元素”的顺序传入，并在谓词为真时删除<em>后一个</em>。这里的谓词关于两个参数对称（只比较相等的两个字段），所以参数顺序不影响结果，阅读时不必关心。</p>
+
+<p>以同词嵌套的典型输入为例（对应 §8 的 <code>a_nested_tract_loses_against_its_container</code>），记录 <code>GAT</code> 和记录 <code>ATG</code> 对同一段序列都会扫出 <code>(2,10,ATG,3)</code>，排序后两条相邻，第二条被删除：</p>
+
+<table>
+<tr><th>输入顺序</th><th>排序后（first, last）</th><th>去重结果</th></tr>
+<tr><td><code>(1,12,GAT,4)</code>、<code>(2,10,ATG,3)</code>、<code>(3,11,TGA,3)</code>、<code>(2,10,ATG,3)</code></td><td><code>(1,12)</code>、<code>(2,10)</code>、<code>(2,10)</code>、<code>(3,11)</code></td><td><code>(1,12)</code>、<code>(2,10)</code>、<code>(3,11)</code></td></tr>
+</table>
+
+  </div>
+</div>
+
+<div class="note">完全相同 span 的条目即使 <code>pattern</code> 不同（理论上极少见），也会被合并成一条。这是“每个区间至多一条记录”的输出契约在消解层的第一道保证；由于此时还没有做 motif 判断，保留哪一条取决于稳定排序后的输入顺序。</div>
+
+<h2 id="s3"><span class="badge">§3</span>第 ② 步：丢弃同一 cyclic word 内部的相位副本</h2>
+
+<div class="step">
+  <div class="step-h"><span class="no">②</span><span class="ti">同词嵌套消解</span><span class="io">O(n²) 检查</span></div>
+  <div class="body">
+
+<pre>candidates.sort_by_key(|tract| (tract.first, std::cmp::Reverse(tract.last)));
+let mut outer: Vec&lt;Tract&gt; = Vec::with_capacity(candidates.len());
+for tract in candidates {
+    let nested = outer.iter().any(|kept| {
+        kept.first &lt;= tract.first
+            &amp;&amp; tract.last &lt;= kept.last
+            &amp;&amp; same_motif(&amp;kept.pattern, &amp;tract.pattern)
+    });
+    if !nested {
+        outer.push(tract);
+    }
+}</pre>
+  </div>
+</div>
+
+<h3>3.1 排序键保证“容器先于被包含者出现”</h3>
+
+<p>排序键是 <code>(first 升序, last 降序)</code>，也就是先按起点从左到右，起点相同时长者在前。设 <code>K</code> 包含 <code>T</code>（<code>K.first ≤ T.first</code> 且 <code>T.last ≤ K.last</code>）：</p>
+
+<ul>
+<li>若 <code>K.first &lt; T.first</code>，则 <code>K</code> 在按起点升序的队列里更靠前；</li>
+<li>若 <code>K.first == T.first</code>，则 <code>K.last ≥ T.last</code>；<code>Reverse(last)</code> 让 <code>last</code> 大的先出。相等的话两者就是同一个 span，已被第 ① 步去重。</li>
+</ul>
+
+<p>因此当处理到 <code>T</code> 时，所有包含它的候选要么已经进了 <code>outer</code>，要么已经被更外层的同词容器吸收。这就是为什么只需对“已保留列表”<code>outer</code> 做检查，而不必对全部候选做检查——见 §6 的传递性论证。</p>
+
+<figure>
+<svg viewBox="0 0 900 200" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ar1" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#9aa8a4"/>
+    </marker>
+  </defs>
+  <text class="lbl" x="20" y="30">排序后的扫描顺序（同一 first 时长者在前）</text>
+  <rect class="bar-out" x="40" y="48" width="420" height="26" rx="4"/>
+  <text class="mono" x="60" y="66">K：容器，first 小 / last 大</text>
+  <rect class="bar-at" x="120" y="90" width="240" height="24" rx="4"/>
+  <text class="mono" x="140" y="107">T：被包含，first 较大 / last 较小</text>
+  <line class="ln" x1="40" y1="118" x2="460" y2="118"/>
+  <line class="ln" x1="40" y1="112" x2="40" y2="124"/>
+  <line class="ln" x1="460" y1="112" x2="460" y2="124"/>
+  <text class="lbl" x="250" y="136" text-anchor="middle">同一坐标轴：K 完全覆盖 T</text>
+  <path class="dash" d="M480 90 C 560 90, 560 58, 620 58" marker-end="url(#ar1)"/>
+  <text class="lbl" x="640" y="52">扫描到 T 时，K 已在 outer 中</text>
+  <text class="lbl" x="640" y="70">same_motif 为真 → T 丢弃</text>
+  <text class="lbl" x="640" y="88">same_motif 为假 → T 保留，留给第 ③ 步</text>
+  <text class="lbl" x="40" y="176">关键：这一步只处理“同一 cyclic word 的相位子窗口”，不是所有包含关系。跨词包含是真实特征，不能在这里丢。</text>
+</svg>
+<figcaption>图 2。第 ② 步的扫描不变式。容器一定先被处理，因此对已保留列表做一次包含测试就足够。</figcaption>
+</figure>
+
+<h3>3.2 <code>same_motif</code>：怎样判断“同一个 cyclic word”</h3>
+
+<pre><i>// src/ssr.rs:103</i>
+fn same_motif(a: &amp;str, b: &amp;str) -&gt; bool {
+    a.len() == b.len() &amp;&amp; b.repeat(2).contains(a)
+}</pre>
+
+<ul>
+<li><strong>等长是前提。</strong>旋转关系只在同长度的词之间有定义。<code>GA</code> 出现在 <code>GAGA</code> 里，但它不是 <code>GAGA</code> 的旋转；长度检查就是挡住这种情况。也正因为 tract 的 <code>pattern</code> 已经归一化，等长同时意味着同周期。</li>
+<li><strong>复制一次再查子串。</strong>把 <code>b</code> 写成 <code>bb</code>，所有循环移位都会作为连续子串出现。因此 <code>bb.contains(a)</code> 当且仅当 <code>a</code> 是 <code>b</code> 的循环旋转。</li>
+</ul>
+
+<table>
+<tr><th style="width:18%">a</th><th style="width:18%">b</th><th style="width:14%">结果</th><th>原因</th></tr>
+<tr><td><code>GA</code></td><td><code>AG</code></td><td><span class="tag tag-keep">true</span></td><td><code>AGAG</code> 包含 <code>GA</code>；同一词，差一个相位。</td></tr>
+<tr><td><code>GAT</code></td><td><code>ATG</code></td><td><span class="tag tag-keep">true</span></td><td><code>ATGATG</code> 包含 <code>GAT</code>；旋转关系。</td></tr>
+<tr><td><code>GAT</code></td><td><code>TGA</code></td><td><span class="tag tag-keep">true</span></td><td><code>TGATGA</code> 包含 <code>GAT</code>；同一词。</td></tr>
+<tr><td><code>AT</code></td><td><code>ATATATATC</code></td><td><span class="tag tag-drop">false</span></td><td>长度 2 ≠ 9。虽然 <code>AT</code> 以子串形式出现，但不是旋转。</td></tr>
+<tr><td><code>AT</code></td><td><code>TA</code></td><td><span class="tag tag-keep">true</span></td><td>长度相同，<code>TATA</code> 包含 <code>AT</code>。</td></tr>
+<tr><td><code>A</code></td><td><code>A</code></td><td><span class="tag tag-keep">true</span></td><td>单碱基重复；所有旋转都等于自己。</td></tr>
+</table>
+
+<figure>
+<svg viewBox="0 0 900 250" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ar2" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#9aa8a4"/>
+    </marker>
+  </defs>
+  <text class="lbl" x="20" y="28">一个 cyclic word 的三种相位写法（长度都是 3）</text>
+  <rect class="box-a" x="120" y="48" width="110" height="44" rx="7"/>
+  <text class="mono" x="175" y="75" text-anchor="middle" font-size="14">GAT</text>
+  <rect class="box-a" x="330" y="48" width="110" height="44" rx="7"/>
+  <text class="mono" x="385" y="75" text-anchor="middle" font-size="14">ATG</text>
+  <rect class="box-a" x="540" y="48" width="110" height="44" rx="7"/>
+  <text class="mono" x="595" y="75" text-anchor="middle" font-size="14">TGA</text>
+  <line class="ln" x1="230" y1="70" x2="328" y2="70" marker-end="url(#ar2)"/>
+  <line class="ln" x1="440" y1="70" x2="538" y2="70" marker-end="url(#ar2)"/>
+  <text class="lbl" x="279" y="62" text-anchor="middle">左移 1</text>
+  <text class="lbl" x="489" y="62" text-anchor="middle">左移 1</text>
+  <path class="dash" d="M595 92 L595 130 L175 130 L175 94" marker-end="url(#ar2)"/>
+  <text class="lbl" x="385" y="148" text-anchor="middle">再移 1 回到 GAT：循环封闭</text>
+  <rect class="box-b" x="120" y="176" width="530" height="40" rx="7"/>
+  <text class="mono" x="140" y="201">ATATATATC（长度 9）</text>
+  <text class="lbl" x="330" y="201">与 GAT 不同长度 → 不在同一循环里 → same_motif = false</text>
+</svg>
+<figcaption>图 3。same_motif 的语义：等长且互为循环旋转。跨周期的“子串包含”不算同一个词。</figcaption>
+</figure>
+
+<h3>3.3 为什么同词包含可以安全丢弃</h3>
+
+<p>设 <code>K</code> 包含 <code>T</code> 且 <code>same_motif(K.pattern, T.pattern)</code>。由 §1 的恒等式：</p>
+
+<div class="math">
+len(K) = K.copies × p，len(T) = T.copies × p　　<span class="c">（p 为共同周期）</span><br>
+K 包含 T　⇒　len(K) ≥ len(T)　⇒　K.copies ≥ T.copies
+</div>
+
+<p>也就是说，容器在完整拷贝数上至少不弱于被包含者；<code>T</code> 只是同一段重复在另一个相位上的子窗口，报告它纯属冗余。最典型的就是提取阶段为每个旋转各扫一遍所产生的嵌套：</p>
+
+<pre>序列：G A G A G A G A G A
+      └──────────────┘
+旋转 k=0：GA×5  [1,10]   ← 保留（拷贝数 5）
+旋转 k=1：AG×4  [2,9]    ← 同词、被包含，丢弃（拷贝数 4）</pre>
+
+<h3>3.4 反例：跨词包含必须保留</h3>
+
+<p>如果把“包含”一律当作嵌套产物，就会丢掉真实特征。经典的例子来自 <code>ATATATATC</code>：这个 9-mer 的前 8 个碱基恰好是 AT 重复，因此它的精确区域里真实存在 <code>AT×4</code> 的精细重复。</p>
+
+<pre>1-based 坐标
+
+ 1  2  3  4  5  6  7  8  9  10 ...
+ A  T  A  T  A  T  A  T  C  A  T ...
+ └──────── AT×4 ────────┘
+ └──────────── ATATATATC×3 ──────────── ... ────────┘
+                ↑ 容器 period 9，只有 3 份完整拷贝
+</pre>
+
+<p>此时容器 <code>ATATATATC</code> 的 <code>copies</code>（3）反而<strong>小于</strong>被包含者 <code>AT</code> 的 <code>copies</code>（4）。“容器更强”的论证只对同一 cyclic word 成立（Fine–Wilf 周期定理保证同词包含的周期一致），跨词时没有任何定理背书。代码因此把跨词包含留给第 ③ 步，由统一的拷贝数优先级裁决，而不是在第 ② 步预先丢掉。</p>
+
+<div class="warn"><span class="lbl">历史教训</span>
+<p>早期实现没有 <code>same_motif</code> 条件，按“被更大 tract 包含就丢弃”处理，导致 seq 55 中 4 条 <code>AT×4</code> 被 <code>ATATATATC×3</code> 吞掉。完整的定位过程与回归数据见 <code>docs/ssr-containment-resolution-bug.md</code>。当前单元测试 <code>a_finer_period_tract_survives_a_different_motif_container</code> 锁定这一行为。</p>
+</div>
+
+<h2 id="s4"><span class="badge">§4</span>第 ③ 步：按拷贝数贪心消解剩余重叠</h2>
+
+<div class="step">
+  <div class="step-h"><span class="no">③</span><span class="ti">贪心接受互不重叠的 tract</span><span class="io">O(n²) 检查</span></div>
+  <div class="body">
+
+<pre>outer.sort_by_key(|tract| (std::cmp::Reverse(tract.copies), tract.first));
+let mut accepted: Vec&lt;Tract&gt; = Vec::new();
+for tract in outer {
+    let overlapping = accepted
+        .iter()
+        .any(|kept| tract.first &lt;= kept.last &amp;&amp; kept.first &lt;= tract.last);
+    if !overlapping {
+        accepted.push(tract);
+    }
+}</pre>
+
+<p>经过前两步，候选集合里已经没有完全重复、也没有同词嵌套，但仍可能有部分重叠（例如两条错开的源记录）和跨词包含。这一步是最后的裁决：</p>
+
+<ul>
+<li><strong>优先级：</strong>完整拷贝数多的先处理；拷贝数相同时起点靠左的先处理。翻译成人话：<em>挑每一段重叠里“最实在”的重复，平局取最左，保证确定性。</em></li>
+<li><strong>冲突条件：</strong><code>tract.first ≤ kept.last &amp;&amp; kept.first ≤ tract.last</code>。坐标是闭区间，所以只共享一个碱基也算重叠；恰好首尾相接（如 <code>[1,8]</code> 与 <code>[9,16]</code>）不算。</li>
+<li><strong>只与已接受者比较：</strong>被拒绝的 tract 不会阻塞后续候选，因此规则的结果只取决于处理顺序，而不是某条候选是否“曾经出现过”。</li>
+</ul>
+
+<p>拷贝数优先的直接效果，是 §3.4 里跨词包含的情形：<code>AT×4</code>（4 份）先于 <code>ATATATATC×3</code>（3 份）被接受，容器随后因重叠被丢弃，精细重复胜出。反过来，如果容器本身拷贝数更多，它也会合理地胜出——这不是定理，而是统一的用户可见规则：</p>
+
+<table>
+<tr><th style="width:33%">候选</th><th style="width:10%">拷贝数</th><th>结果</th></tr>
+<tr><td><code>AT×4</code> [1,8]、[10,17]、[19,26]</td><td>4 / 4 / 4</td><td>全部接受，互相不重叠。</td></tr>
+<tr><td><code>ATATATATC×3</code> [1,27]</td><td>3</td><td>与三条 AT 都重叠，丢弃。</td></tr>
+<tr><td><code>ATATATATC×5</code> 覆盖五个重复单元</td><td>5</td><td>先被接受，内部所有 <code>AT×4</code> 因重叠被丢弃——容器胜出。</td></tr>
+</table>
+
+<p>最后一行说明第 ③ 步的目标不是“保留所有精细重复”，而是“在给定优先级下产生一个确定、干净、互不重叠的集合”。规则本身写进了模块文档：<em>most copies first, leftmost start on ties</em>。</p>
+
+<h3>4.1 平局取最左：一个最小例子</h3>
+
+<pre>序列：A T A T A T A T A T A T
+候选：AT×4 [1,8]  和  AT×4 [5,12]（两条源记录窗口错开）
+两者拷贝数相同 → 排序后 [1,8] 在前 → 接受 [1,8]，[5,12] 因重叠被丢弃
+输出：AT×4 [1,8]</pre>
+
+<p>由于 <code>outer</code> 在进入第 ③ 步之前已经按 <code>(first 升序, last 降序)</code> 排好，而 <code>sort_by_key</code> 是<em>稳定排序</em>，所以“拷贝数与起点都相同”的残余平局仍会保持“长者在前”的顺序；最终仍然只有一个能被接受（它们必然共享起点、互相重叠），结果不依赖输入的原始顺序。</p>
+
+  </div>
+</div>
+
+<h3>4.2 为什么不是最优区间调度</h3>
+
+<p>如果目标是“最大化接受的总碱基数”或“最大化总拷贝数”，这是一个加权区间调度问题，贪心不一定最优。这里刻意没有这么做。消解层的目标有三个，按重要性排序：</p>
+
+<ol>
+<li><strong>输出合法：</strong>任意两条结果不共享碱基，这是 <code>--ssr</code> 的语义基础；</li>
+<li><strong>确定：</strong>同一输入无论候选到达顺序如何，输出一致；</li>
+<li><strong>可解释：</strong>用户能一句话说明为什么某条赢了——“它完整拷贝更多，平局取靠左的”。</li>
+</ol>
+
+<p>在候选规模很小（见 §7）的前提下，用一个可预期规则换掉最优性，是恰当的工程取舍。</p>
+
+<h2 id="s5"><span class="badge">§5</span>完整走查：一个跨词包含 + 多 run 的例子</h2>
+
+<p>下面用 §3.4 的序列把三步全部走一遍。这条序列（27 bp）是 <code>ATATATATC</code> 的 3 次精确重复，坐标均为 1-based 闭区间：</p>
+
+<div class="math">
+序列：A T A T A T A T C A T A T A T A T C A T A T A T A T C<br>
+坐标：1 2 3 4 5 6 7 8 9 10 ... 18 19 ... 27<br>
+　　　└─ 单元 1 ─┘ └─ 单元 2 ─┘ └─ 单元 3 ─┘
+</div>
+
+<p>TRF 在同一位置报告了两条记录（这是后续处理的前提，单元测试用合成记录模拟同样的输入）：</p>
+
+<table>
+<tr><th style="width:22%">源记录</th><th style="width:16%">归一化单元</th><th>提取候选</th></tr>
+<tr><td><code>(1,27)</code>，pattern <code>AT</code></td><td><code>AT</code>，period 2</td><td>每个单元内一段 <code>AT×4</code>：三条；旋转 <code>TA</code> 得到三条 <code>TA×3</code>（每条都嵌在对应的 <code>AT×4</code> 里）</td></tr>
+<tr><td><code>(1,27)</code>，pattern <code>ATATATATC</code></td><td>9-mer，period 9（最小周期 9 整除长度 9）</td><td>旋转 k=0 得到 <code>ATATATATC×3</code>；旋转 k=1 的 <code>TATATATCA</code> 只凑出 2 份完整拷贝（&lt; 3），不产生候选</td></tr>
+</table>
+
+<p>候选全集（顺序为提取产出的顺序，消解层不依赖它）：</p>
+
+<table>
+<tr><th>#</th><th>span</th><th>pattern</th><th>copies</th><th>来源</th></tr>
+<tr><td>1</td><td>[1,8]</td><td><span class="tag tag-at">AT</span></td><td>4</td><td>AT 记录，单元 1</td></tr>
+<tr><td>2</td><td>[10,17]</td><td><span class="tag tag-at">AT</span></td><td>4</td><td>AT 记录，单元 2</td></tr>
+<tr><td>3</td><td>[19,26]</td><td><span class="tag tag-at">AT</span></td><td>4</td><td>AT 记录，单元 3</td></tr>
+<tr><td>4</td><td>[2,7]</td><td><span class="tag tag-ta">TA</span></td><td>3</td><td>AT 记录的相位旋转，单元 1</td></tr>
+<tr><td>5</td><td>[11,16]</td><td><span class="tag tag-ta">TA</span></td><td>3</td><td>AT 记录的相位旋转，单元 2</td></tr>
+<tr><td>6</td><td>[20,25]</td><td><span class="tag tag-ta">TA</span></td><td>3</td><td>AT 记录的相位旋转，单元 3</td></tr>
+<tr><td>7</td><td>[1,27]</td><td><span class="tag tag-nine">ATATATATC</span></td><td>3</td><td>9-mer 记录</td></tr>
+</table>
+
+<figure>
+<svg viewBox="0 0 900 380" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <marker id="ar3" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#9aa8a4"/>
+    </marker>
+  </defs>
+  <text class="lbl" x="8" y="52">序列</text>
+  <rect x="60" y="36" width="252" height="30" rx="3" fill="#f1f3f1" stroke="#d8dedb"/>
+  <rect x="312" y="36" width="252" height="30" rx="3" fill="#f1f3f1" stroke="#d8dedb"/>
+  <rect x="564" y="36" width="252" height="30" rx="3" fill="#f1f3f1" stroke="#d8dedb"/>
+  <text class="mono" x="186" y="56" text-anchor="middle">ATATATATC</text>
+  <text class="mono" x="438" y="56" text-anchor="middle">ATATATATC</text>
+  <text class="mono" x="690" y="56" text-anchor="middle">ATATATATC</text>
+  <text class="lbl" x="8" y="100">候选</text>
+
+  <rect class="bar-nine" x="60" y="84" width="756" height="22" rx="4"/>
+  <text class="mono" x="68" y="100">ATATATATC ×3（period 9）</text>
+
+  <rect class="bar-at" x="60" y="120" width="224" height="18" rx="4"/>
+  <rect class="bar-at" x="312" y="120" width="224" height="18" rx="4"/>
+  <rect class="bar-at" x="564" y="120" width="224" height="18" rx="4"/>
+  <text class="mono" x="64" y="133">AT×4</text>
+  <text class="mono" x="316" y="133">AT×4</text>
+  <text class="mono" x="568" y="133">AT×4</text>
+
+  <rect class="bar-ta" x="88" y="150" width="168" height="16" rx="4"/>
+  <rect class="bar-ta" x="340" y="150" width="168" height="16" rx="4"/>
+  <rect class="bar-ta" x="592" y="150" width="168" height="16" rx="4"/>
+  <text class="mono" x="96" y="162">TA×3</text>
+  <text class="mono" x="348" y="162">TA×3</text>
+  <text class="mono" x="600" y="162">TA×3</text>
+
+  <text class="lbl" x="8" y="210">第 ② 步</text>
+  <text class="lbl" x="60" y="228">3 条 TA×3 与 AT×4 同词（长度 2，旋转等价）且被包含 → 丢弃</text>
+  <text class="lbl" x="60" y="246">9-mer 包含 AT×4，但长度 9 ≠ 2 → same_motif 为假 → 保留到第 ③ 步</text>
+
+  <text class="lbl" x="8" y="286">第 ③ 步</text>
+  <text class="lbl" x="60" y="304">AT×4 拷贝数 4 &gt; 9-mer 的 3 → 三条 AT 先被接受</text>
+  <text class="lbl" x="60" y="322">9-mer 与已接受的 AT 重叠 → 丢弃</text>
+
+  <text class="lbl" x="8" y="360">输出</text>
+  <rect class="bar-out" x="60" y="342" width="224" height="22" rx="4"/>
+  <rect class="bar-out" x="312" y="342" width="224" height="22" rx="4"/>
+  <rect class="bar-out" x="564" y="342" width="224" height="22" rx="4"/>
+  <text class="mono" x="68" y="357">AT×4 [1,8]</text>
+  <text class="mono" x="320" y="357">AT×4 [10,17]</text>
+  <text class="mono" x="572" y="357">AT×4 [19,26]</text>
+</svg>
+<figcaption>图 4。§5 的几何视图。第 ① 步没有删任何东西；第 ② 步删掉三条相位副本 <code>TA×3</code>，但放过了跨词容器；第 ③ 步按拷贝数让三条 <code>AT×4</code> 胜出。</figcaption>
+</figure>
+
+<h3>5.1 逐步跟踪</h3>
+
+<h4>第 ① 步：完全相同 span 去重</h4>
+<p>七条候选的 span 互不相同，排序后没有相邻重复，集合不变。</p>
+
+<h4>第 ② 步：同词嵌套</h4>
+<p>按 <code>(first 升序, last 降序)</code> 得到处理顺序：<code>[1,27] 9-mer</code> → <code>[1,8] AT</code> → <code>[2,7] TA</code> → <code>[10,17] AT</code> → <code>[11,16] TA</code> → <code>[19,26] AT</code> → <code>[20,25] TA</code>。逐条判定：</p>
+
+<table>
+<tr><th style="width:12%">顺序</th><th style="width:26%">当前 tract</th><th style="width:22%">是否被 outer 中同词 tract 包含</th><th>动作</th></tr>
+<tr><td>1</td><td><code>[1,27] ATATATATC ×3</code></td><td>—（outer 为空）</td><td><span class="tag tag-keep">保留</span></td></tr>
+<tr><td>2</td><td><code>[1,8] AT ×4</code></td><td><code>[1,27]</code> 包含，但 9 ≠ 2</td><td><span class="tag tag-keep">保留</span></td></tr>
+<tr><td>3</td><td><code>[2,7] TA ×3</code></td><td><code>[1,8]</code> 包含，且同词（<code>TA</code> 是 <code>AT</code> 的旋转）</td><td><span class="tag tag-drop">丢弃</span></td></tr>
+<tr><td>4</td><td><code>[10,17] AT ×4</code></td><td>没有同词容器（<code>[1,27]</code> 跨词，<code>[1,8]</code> 不相交）</td><td><span class="tag tag-keep">保留</span></td></tr>
+<tr><td>5</td><td><code>[11,16] TA ×3</code></td><td><code>[10,17]</code> 包含，且同词</td><td><span class="tag tag-drop">丢弃</span></td></tr>
+<tr><td>6</td><td><code>[19,26] AT ×4</code></td><td>没有同词容器</td><td><span class="tag tag-keep">保留</span></td></tr>
+<tr><td>7</td><td><code>[20,25] TA ×3</code></td><td><code>[19,26]</code> 包含，且同词</td><td><span class="tag tag-drop">丢弃</span></td></tr>
+</table>
+
+<p>离开第 ② 步时 <code>outer</code> 里有四条：9-mer、<code>AT [1,8]</code>、<code>AT [10,17]</code>、<code>AT [19,26]</code>。</p>
+
+<h4>第 ③ 步：贪心重叠消解</h4>
+<p>按 <code>(copies 降序, first 升序)</code> 排序后，三条 4 拷贝的 AT 在前，3 拷贝的 9-mer 在最后：</p>
+
+<table>
+<tr><th style="width:12%">顺序</th><th style="width:30%">当前 tract</th><th style="width:28%">与已接受者冲突？</th><th>动作</th></tr>
+<tr><td>1</td><td><code>[1,8] AT ×4</code></td><td>—</td><td><span class="tag tag-keep">接受</span></td></tr>
+<tr><td>2</td><td><code>[10,17] AT ×4</code></td><td>与 <code>[1,8]</code> 不相交（10 &gt; 8）</td><td><span class="tag tag-keep">接受</span></td></tr>
+<tr><td>3</td><td><code>[19,26] AT ×4</code></td><td>与已接受者均不相交</td><td><span class="tag tag-keep">接受</span></td></tr>
+<tr><td>4</td><td><code>[1,27] ATATATATC ×3</code></td><td>与 <code>[1,8]</code>（以及另外两条）重叠</td><td><span class="tag tag-drop">丢弃</span></td></tr>
+</table>
+
+<h4>第 ④ 步：恢复坐标序</h4>
+<p>接受列表本来就是位置序，最终输出三条：<code>[1,8] AT×4</code>、<code>[10,17] AT×4</code>、<code>[19,26] AT×4</code>。</p>
+
+<h3>5.2 输出记录长什么样</h3>
+
+<p>消解结果交给 <code>build_record</code>（<span class="anchor">src/ssr.rs:223</span>），逐条构造 <code>RepeatRecord</code>。以 <code>[1,8] AT×4</code> 为例：</p>
+
+<table>
+<tr><th style="width:26%">字段</th><th style="width:20%">值</th><th>来源</th></tr>
+<tr><td><code>first, last</code></td><td>1, 8</td><td>tract 坐标</td></tr>
+<tr><td><code>period, size</code></td><td>2, 2</td><td>tract.period</td></tr>
+<tr><td><code>copies</code></td><td>4.0</td><td>tract.copies</td></tr>
+<tr><td><code>pattern</code></td><td><code>AT</code></td><td>tract.pattern（起点处的旋转）</td></tr>
+<tr><td><code>matches / indels</code></td><td>100 / 0</td><td>精确重复按定义无错配</td></tr>
+<tr><td><code>score</code></td><td><code>(4−1) × 2 × match_weight</code></td><td>每多一份完整拷贝贡献 period 个匹配碱基</td></tr>
+<tr><td>A / T 占比</td><td>50% / 50%</td><td>区域碱基统计；熵 = 1.0 bit</td></tr>
+</table>
+
+<p class="file">落点　<span class="anchor">src/ssr.rs:272</span>（score）、<span class="anchor">src/ssr.rs:276-296</span>（记录字段）</p>
+
+<h3>5.3 补充：<code>ATATATATC×3</code> 候选的完整去向</h3>
+
+<p>上面走查的是“两条记录都在”的合并场景。这条 9-mer 候选很容易引起一个误解：最终输出里出现了三条 <code>AT×4</code>，看起来像是把 <code>ATATATATC×3</code> 切成了三份。实际上它在整条链路上只经历了<strong>生成 → 保留 → 淘汰</strong>，从未被切分或改写。</p>
+
+<div class="key"><span class="lbl">先记住结论</span>
+<p>消解层只做集合选择。三条 <code>AT×4</code> 来自另一条 period-2 记录的提取结果；9-mer 候选在第 ③ 步因“与已接受者重叠且拷贝数更少”被丢弃。若上游只报了 period-9 记录，输出就是 <code>ATATATATC×3</code>，不会凭空出现 <code>AT×4</code>。</p>
+</div>
+
+<h4>（1）生成：period-9 记录的 9 个旋转</h4>
+
+<p>源记录为 <code>first=1, last=27, pattern=ATATATATC</code>。提取函数先计算最小周期：<code>ATATATATC</code> 不存在任何长度 &lt; 9 的周期，因此 <code>minimal_period = 9</code>；长度 9 能被 9 整除，<code>unit = ATATATATC</code>、<code>period = 9</code>（<span class="anchor">src/ssr.rs:125-133</span>）。随后对 9 个旋转逐一锚定并延伸（<span class="anchor">src/ssr.rs:149-177</span>）：</p>
+
+<table>
+<tr><th style="width:9%">旋转 k</th><th style="width:22%">motif</th><th style="width:12%">锚点 s</th><th style="width:12%">完整拷贝</th><th>是否成为候选</th></tr>
+<tr><td>0</td><td><code>ATATATATC</code></td><td>0</td><td>3</td><td><span class="tag tag-keep">是</span>：<code>[1,27]</code>，正好 3 份</td></tr>
+<tr><td>1</td><td><code>TATATATCA</code></td><td>1</td><td>2</td><td><span class="tag tag-drop">否</span>：&lt; <code>SSR_MIN_COPIES</code> (3)</td></tr>
+<tr><td>2</td><td><code>ATATATCAT</code></td><td>2</td><td>2</td><td><span class="tag tag-drop">否</span></td></tr>
+<tr><td>3</td><td><code>TATATCATA</code></td><td>3</td><td>2</td><td><span class="tag tag-drop">否</span></td></tr>
+<tr><td>4</td><td><code>ATATCATAT</code></td><td>4</td><td>2</td><td><span class="tag tag-drop">否</span></td></tr>
+<tr><td>5</td><td><code>TATCATATA</code></td><td>5</td><td>2</td><td><span class="tag tag-drop">否</span></td></tr>
+<tr><td>6</td><td><code>ATCATATAT</code></td><td>6</td><td>2</td><td><span class="tag tag-drop">否</span></td></tr>
+<tr><td>7</td><td><code>TCATATATA</code></td><td>7</td><td>2</td><td><span class="tag tag-drop">否</span></td></tr>
+<tr><td>8</td><td><code>CATATATAT</code></td><td>8</td><td>2</td><td><span class="tag tag-drop">否</span></td></tr>
+</table>
+
+<p>为什么只有 <code>k=0</code> 凑满 3 份：整段区域恰好是 <code>ATATATATC</code> 的 3 次重复。旋转 <code>k</code> 的锚点在偏移 <code>s = k</code>，从这里到区域末尾只剩 <code>27 − k</code> 个碱基，<code>⌊(27 − k) / 9⌋ = 2</code>（<code>k = 1…8</code>），因此全部低于最小拷贝数。最终这条记录只贡献<strong>一条候选</strong>：</p>
+
+<pre>Tract { first: 1, last: 27, period: 9, copies: 3, pattern: "ATATATATC" }</pre>
+
+<p>注意这里没有任何“尝试更小周期”的步骤：提取只按本记录归一化单元（9-mer）的旋转去扫，不会去找 period 2 的 AT run。三条 <code>AT×4</code> 必须由另一条 period-2 记录独立产生。</p>
+
+<h4>（2）第 ① 步：去重不涉及它</h4>
+
+<p>这条记录只产生一条候选，合并场景中也没有第二条相同 span 的条目，因此第 ① 步对它没有影响。</p>
+
+<h4>（3）第 ② 步：保留，而且不会吞掉 AT</h4>
+
+<p>按 <code>(first 升序, last 降序)</code> 排序后，<code>[1,27]</code> 排在第一位，此时 <code>outer</code> 为空，直接保留（<span class="anchor">src/ssr.rs:196-204</span>）。更关键的是它后续也不会把三条 <code>AT×4</code> 判成嵌套：</p>
+
+<table>
+<tr><th style="width:46%">包含判定（<span class="anchor">src/ssr.rs:197-201</span>）</th><th style="width:14%">值</th><th>说明</th></tr>
+<tr><td><code>kept.first &lt;= tract.first</code></td><td><code>1 &lt;= 1</code> → true</td><td>9-mer 确实覆盖 <code>[1,8]</code> 的起点</td></tr>
+<tr><td><code>tract.last &lt;= kept.last</code></td><td><code>8 &lt;= 27</code> → true</td><td>9-mer 也确实覆盖它的终点</td></tr>
+<tr><td><code>same_motif("ATATATATC", "AT")</code></td><td><strong>false</strong></td><td>长度 9 ≠ 2，不是同一 cyclic word</td></tr>
+<tr><td colspan="2"><code>nested = true &amp;&amp; true &amp;&amp; false</code></td><td>整条判定为 false → <code>AT×4</code> 保留</td></tr>
+</table>
+
+<p>这正是跨词包含的处理原则：<strong>包含关系本身不足以丢弃</strong>，还必须同属一个 cyclic word。9-mer 在这里只被放进 <code>outer</code>，等待第 ③ 步裁决。</p>
+
+<h4>（4）第 ③ 步：因重叠且拷贝数少被淘汰</h4>
+
+<p>进入第 ③ 步时 <code>outer</code> 为 <code>[1,27] ATATATATC×3</code> 加三条 <code>AT×4</code>。排序键 <code>(Reverse(copies), first)</code> 把 4 拷贝的三条 AT 放在前面，9-mer 排在最后（<span class="anchor">src/ssr.rs:207</span>）：</p>
+
+<table>
+<tr><th style="width:20%">处理顺序</th><th style="width:28%">tract</th><th style="width:24%">accepted 当前内容</th><th>动作</th></tr>
+<tr><td>1</td><td><code>[1,8] AT ×4</code></td><td>空</td><td><span class="tag tag-keep">接受</span></td></tr>
+<tr><td>2</td><td><code>[10,17] AT ×4</code></td><td><code>[1,8]</code></td><td><span class="tag tag-keep">接受</span>（10 &gt; 8，不相交）</td></tr>
+<tr><td>3</td><td><code>[19,26] AT ×4</code></td><td><code>[1,8]</code>、<code>[10,17]</code></td><td><span class="tag tag-keep">接受</span>（19 &gt; 17）</td></tr>
+<tr><td>4</td><td><code>[1,27] ATATATATC ×3</code></td><td>三条 AT</td><td><span class="tag tag-drop">丢弃</span></td></tr>
+</table>
+
+<p>第 4 行的重叠判定（<span class="anchor">src/ssr.rs:210-212</span>）以 <code>accepted[0] = [1,8]</code> 为准：</p>
+
+<div class="math">
+tract.first ≤ kept.last　→　1 ≤ 8　→ true<br>
+kept.first ≤ tract.last　→　1 ≤ 27　→ true<br>
+⇒ overlapping = true　⇒　不执行 <code>accepted.push(tract)</code>
+</div>
+
+<p><code>any</code> 在第一条 AT 就短路返回，后面两条无需再比较。这条 9-mer 候选没有被压入 <code>accepted</code>，<code>outer</code> 在循环结束后被释放，它就永久消失了。</p>
+
+<h4>（5）三种输入情形下的最终输出</h4>
+
+<p>把“记录是否被上游报出”这个前提显式列出来，可以彻底区分“提取生成”和“消解选择”：</p>
+
+<table>
+<tr><th style="width:38%">上游记录</th><th style="width:34%">候选</th><th>最终输出</th></tr>
+<tr><td>只有 period-9 记录</td><td><code>[1,27] ATATATATC×3</code></td><td><code>[1,27] ATATATATC×3</code></td></tr>
+<tr><td>只有 period-2 记录</td><td>3 条 <code>AT×4</code> + 3 条 <code>TA×3</code></td><td>3 条 <code>AT×4</code>（<code>TA×3</code> 在第 ② 步被同词包含丢弃）</td></tr>
+<tr><td>两条记录都在（§5 主走查）</td><td>上述 7 条候选</td><td>3 条 <code>AT×4</code>（9-mer 在第 ③ 步被淘汰）</td></tr>
+</table>
+
+<div class="note">即使把 <code>SSR_MIN_COPIES</code> 降到 2，也不会改变合并场景的结果：旋转 <code>k=1…8</code> 产生的 2 拷贝 tract 都完整落在 <code>[1,27]</code> 内，且与容器等长同词，会在第 ② 步被当作相位副本丢弃；而 9-mer 本身仍会在第 ③ 步输给 4 拷贝的 AT。</div>
+
+<p class="file">落点　生成 <span class="anchor">src/ssr.rs:149-174</span>　同词保留判定 <span class="anchor">src/ssr.rs:197-201</span>　贪心淘汰 <span class="anchor">src/ssr.rs:207-215</span></p>
+
+<h2 id="s6"><span class="badge">§6</span>正确性与不变量</h2>
+
+<h3>6.1 输出不变量</h3>
+
+<table>
+<tr><th style="width:26%">不变量</th><th>由哪一步保证</th></tr>
+<tr><td>任意两条输出 tract 不共享碱基</td><td>第 ③ 步只接受与所有已接受者都不重叠的 tract；闭区间谓词覆盖共享端点。</td></tr>
+<tr><td>输出按 <code>(first, last)</code> 升序</td><td>第 ④ 步的最终排序。</td></tr>
+<tr><td>不再有相同 span</td><td>第 ① 步去重；后续步骤只会减少元素。</td></tr>
+<tr><td>不再有同词嵌套</td><td>第 ② 步丢弃所有被同词容器包含者；第 ③ 步只会再减少。</td></tr>
+<tr><td>结果与输入顺序无关</td><td>每一步都先排序；<code>sort_by_key</code> 稳定，剩余平局的相对顺序只由前一步的排序键决定，而该排序键只依赖 tract 字段。</td></tr>
+</table>
+
+<h3>6.2 为什么只检查 <code>outer</code> 就够了</h3>
+
+<p>第 ② 步的判定对象是“已保留列表”，不是“全部候选”。需要证明这两者等价。设 <code>T</code> 被某个候选 <code>K</code> 同词包含，而 <code>K</code> 自己已被丢弃。那么 <code>K</code> 一定被某个当时已保留的 <code>M</code> 同词包含。由包含关系的传递性：</p>
+
+<div class="math">
+M.first ≤ K.first ≤ T.first　且　T.last ≤ K.last ≤ M.last　⇒　M 包含 T<br>
+same_motif(M, K) 且 same_motif(K, T)　⇒　same_motif(M, T)
+</div>
+
+<p>并且同词关系保证三者长度相同，<code>M</code> 或它自己的容器一定还在 <code>outer</code> 里（或由归纳继续上溯）。所以任何被丢弃的容器，其被包含者也终将被同一个更外层的保留者丢弃。逐条检查保留列表与检查全体候选的结果相同，而前者只需一次扫描。</p>
+
+<h3>6.3 同词嵌套的“无损”与跨词裁决的“有损”</h3>
+
+<p>第 ② 步丢弃同词嵌套是无损的：容器的 <code>copies</code> 一定 ≥ 被包含者，且两者描述同一段周期序列。第 ③ 步丢弃重叠候选是有损的：被丢弃的 tract 可能覆盖一些别人没覆盖的碱基。这是有意为之——输出契约要求互不重叠，而“哪些重叠候选值得保留”本身没有唯一正确答案；代码把一个可解释的规则固定下来，并通过最终排序让结果稳定。</p>
+
+<div class="key"><span class="lbl">一句话总结规则</span>
+<p>先删“同一段序列被报了两次”，再删“同一段重复的相位影子”，最后按“完整拷贝更多者赢，平局最左者赢”挑出一组互不重叠的区域。</p>
+</div>
+
+<h2 id="s7"><span class="badge">§7</span>复杂度与实现细节</h2>
+
+<table>
+<tr><th style="width:24%">维度</th><th>成本</th><th>说明</th></tr>
+<tr><td>时间</td><td><code>O(n log n + n²)</code></td><td><code>n</code> 是一条序列上所有记录的候选总数。排序四次是 <code>O(n log n)</code>；第 ②、③ 步各做一次线性扫描，每次都可能遍历已保留列表，最坏 <code>O(n²)</code>。</td></tr>
+<tr><td>空间</td><td><code>O(n)</code></td><td><code>outer</code> 与 <code>accepted</code> 两个新向量；tract 本身有 <code>String</code>，按值移动，不复制。</td></tr>
+<tr><td>实际规模</td><td>很小</td><td>候选只来自已通过扫描与清理的 STR 记录；每条记录的区域有限，通常一条序列只有几十到几百条候选，平方项不构成瓶颈。</td></tr>
+<tr><td>分配热点</td><td><code>same_motif</code></td><td><code>b.repeat(2)</code> 每次调用分配一个长度为 <code>2 × period</code> 的字符串。周期上限是 <code>--maxperiod</code>（SSR 默认 15），开销可忽略；若未来需要优化，可改为逐字符比较的旋转判定。</td></tr>
+</table>
+
+<p>其他实现细节：</p>
+
+<ul>
+<li><code>std::cmp::Reverse</code> 只改变排序方向，不改变键类型；与元组组合后一次排序表达“第一关键字升序、第二关键字降序”。</li>
+<li><code>Vec::with_capacity(candidates.len())</code> 预分配上限容量，<code>outer</code> 不会中途扩容。</li>
+<li>所有坐标都是 <code>i32</code>，与 <code>RepeatRecord</code> 的输出字段一致，无需在消解层做类型转换。</li>
+<li>空候选输入直接返回空向量；没有任何索引访问，因此不存在越界风险。</li>
+</ul>
+
+<h2 id="s8"><span class="badge">§8</span>测试对照：每个设计点由谁锁定</h2>
+
+<p>模块测试在 <code>src/ssr.rs</code> 的 <code>mod test</code> 中（<span class="anchor">src/ssr.rs:299</span>）。运行：</p>
+
+<pre>cargo test --lib ssr</pre>
+
+<table>
+<tr><th style="width:38%">测试</th><th style="width:12%">对应步骤</th><th>锁定的行为</th></tr>
+<tr><td><code>overlapping_source_records_yield_one_tract</code></td><td>② + ③</td><td>同一段 <code>GA</code> 重复被两条交错记录各报一次，相位副本先被第 ② 步清掉，最终贪心只剩左端那条 <code>[1,10] GA×5</code>。</td></tr>
+<tr><td><code>a_nested_tract_loses_against_its_container</code></td><td>②</td><td><code>(ATG)3 ⊂ (GAT)4</code>，同词嵌套只报 <code>GAT×4</code>。</td></tr>
+<tr><td><code>a_finer_period_tract_survives_a_different_motif_container</code></td><td>② + ③</td><td>跨词包含时三条 <code>AT×4</code> 全部保留，9-mer 容器因拷贝数少在贪心阶段落败。</td></tr>
+<tr><td><code>reports_one_tract_per_run</code></td><td>② + ③</td><td>一个记录区域内的两个独立 run 各成一条，互不干扰。</td></tr>
+<tr><td><code>leftmost_rotation_wins_a_tie</code></td><td>③</td><td><code>GAGAGAGAG</code> 内 <code>GA×4</code> 与 <code>AG×4</code> 拷贝数相同但不互相包含，贪心按起点取最左那条，丢弃尾部游离碱基。</td></tr>
+<tr><td><code>prefers_the_rotation_with_more_complete_copies</code></td><td>②</td><td>完整拷贝数更多的旋转胜出。</td></tr>
+</table>
+
+<p>端到端的一致性校验由 <code>scripts/ssr_check.py</code> 提供（三层穷举参考），用于在真实数据集上确认消解结果没有丢失可达的精确 tract。用法见 README 的“SSR 结果的一致性校验”一节。</p>
+
+<h2 id="s9"><span class="badge">§9</span>速查：常见疑问</h2>
+
+<div class="qa">
+<p class="qno">Q1</p>
+<h4>为什么第 ① 步不比较 <code>pattern</code> 或 <code>copies</code>？</h4>
+<p>同一 <code>[first, last]</code> 对应同一段序列，物理上只有一条区域。重复条目来自多条源记录的重复报告，保留一条即可。此时还没有做 motif 判断，所以这一步刻意只看坐标。</p>
+</div>
+
+<div class="qa">
+<p class="qno">Q2</p>
+<h4>为什么包含判断要加 <code>same_motif</code>，不能直接丢被包含者？</h4>
+<p>同词包含时容器拷贝数必然 ≥ 被包含者，丢弃无损；跨词包含没有这个保证，被包含者可能是真实存在的另一类 SSR（<code>AT×4</code> 在 <code>ATATATATC×3</code> 内部）。不加条件就会漏报。详见 <code>docs/ssr-containment-resolution-bug.md</code>。</p>
+</div>
+
+<div class="qa">
+<p class="qno">Q3</p>
+<h4>为什么第 ③ 步先按 <code>copies</code> 而不是按长度或 period？</h4>
+<p>长度受 period 影响：一个 15 bp 的 5-mer 重复和一段 20 bp 的 10-mer 重复，长度不能直接比较“重复强度”。完整拷贝数直接衡量“这段重复重复了多少次”，也与 <code>--ssr</code> 报告语义一致。平局再用起点保证确定性。</p>
+</div>
+
+<div class="qa">
+<p class="qno">Q4</p>
+<h4>首尾恰好相邻的两个 tract 算重叠吗？</h4>
+<p>不算。<code>[1,8]</code> 与 <code>[9,16]</code> 满足 <code>9 &gt; 8</code>，谓词为假，两条都能被接受。共享一个碱基（如 <code>[1,8]</code> 与 <code>[8,16]</code>）才算重叠。</p>
+</div>
+
+<div class="qa">
+<p class="qno">Q5</p>
+<h4>跨词包含时，精细重复一定赢吗？</h4>
+<p>不一定。胜者由拷贝数决定：<code>AT×4</code> 对 <code>ATATATATC×3</code> 是精细重复赢；对 <code>ATATATATC×5</code> 则是容器赢。规则一致，结果随数据而变。</p>
+</div>
+
+<div class="qa">
+<p class="qno">Q6</p>
+<h4>如果两个 tract 的 <code>copies</code> 和 <code>first</code> 都相同怎么办？</h4>
+<p>它们必然共享起点并重叠，最多只有一个能进入 <code>accepted</code>。由于进入第 ③ 步前 <code>outer</code> 已按 <code>(first 升序, last 降序)</code> 排好，稳定排序会让长者先被考虑，结果确定。</p>
+</div>
+
+<div class="qa">
+<p class="qno">Q7</p>
+<h4>这一步会不会改变 motif 或重新计算坐标？</h4>
+<p>不会。它只筛选、排序、移动 <code>Tract</code>。motif 归一化与坐标生成都在上游 <code>extract_record_tracts</code>；字段构造在 <code>build_record</code>。消解层是纯粹的集合选择。</p>
+</div>
+
+<footer>
+<p>本教程对应 trfrs <code>src/ssr.rs</code>（<code>resolve_candidates</code>，190–220 行）。文中的坐标走查与候选清单均按代码逐行复算，可直接对照 <a href="ssr-containment-resolution-bug.md">SSR 包含消解 bug 记录</a> 与 <code>src/ssr.rs</code> 的单元测试阅读。</p>
+</footer>
+
+</div>
+
+</body>
+</html>
