@@ -193,7 +193,9 @@ trfrs sample.fasta --ssr --minscore 20 --ngs
   最多的相位；拷贝数相同时取最左相位（`GAGAGAGAG` 即使被报成 `AG` 也会归一为
   `GA*4`，尾部不完整的单碱基丢弃）；
 - 一个 STR 区域可以产出**多条** tract（如 `(GA)4 杂乱 (GA)3` → 两条）；
-- tract 要求至少 3 个完整拷贝；重叠时按"完整拷贝数多者优先、起点靠前者优先"消解；
+- tract 要求至少 3 个完整拷贝；重叠消解分两种：**实质重叠**（交集 ≥ 较小 tract
+  的一半）时保留“完整拷贝数多者优先、起点靠前者优先”的一条；仅**边界相接**时两条
+  都保留，后一条按整周期右移裁剪（拷贝数相应减少，不足 3 个完整拷贝则整条丢弃）；
 - 输出坐标收缩为干净片段，`percent_matches=100`、`percent_indels=0`、copies 为整数；
   对齐文件（`.txt.html`）与 HTML 表格中的索引链接在 SSR 模式下省略。
 
@@ -205,7 +207,7 @@ trfrs sample.fasta --ssr --minscore 20 --ngs
 `scripts/ssr_check.py` 内置一个独立的参考实现（全序列穷举精确扫描，不依赖 TRF 的
 任何启发式），并用三层比对验证 `--ssr` 输出：① 每条记录确实是 `motif × copies` 的
 精确区域；② 每条 tract 落在同周期参考 span 内；③ 每个参考 stretch 要么被报告、
-要么属于可解释类别（贪心重叠消解 / 区域 motif 不相关 / TRF 检测阶段未发现）：
+要么属于可解释类别（实质重叠消解 / 边界裁剪 / 区域 motif 不相关 / TRF 检测阶段未发现）：
 
 ```bash
 cargo run --release -- sample.fasta --ssr --minscore 20 --csv -o /tmp/ssr_out
@@ -378,7 +380,7 @@ cargo test
 （C 参考程序的 `-ngs` 输出）逐字段比对，并覆盖坐标换算、输入归一化、参数校验、
 空序列、finder 复用与冗余剔除开关。`Params::str_preset()` 与 `Params::ssr_preset()`
 的结果同时与命令行 `--str` / `--ssr` 的记录逐字段比对，`min_period` 的过滤与校验也在其中。
-SSR 提取的单元测试在 `src/ssr.rs` 内（归一化、相位选择、多 tract、包含与重叠消解等）。
+SSR 提取的单元测试在 `src/ssr.rs` 内（归一化、相位选择、多 tract、包含、实质重叠消解与边界裁剪等）。
 
 ## 代码结构
 

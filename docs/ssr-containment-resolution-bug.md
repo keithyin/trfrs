@@ -2,6 +2,11 @@
 
 > 适用版本：trfrs 5.2.0（`--ssr` 首次引入）。文中行号以该版本为准，后续改动可能使行号偏移，
 > 以函数名为准。
+>
+> **后续变更**：第 ③ 步已从"任何重叠都整条丢弃"改为"实质重叠（交集 ≥ 较小 span 的一半）
+> 淘汰高优先级落败者 + 仅边界相接时按整周期裁剪后一条"。本文保留的是当时修复的语义与回归
+> 数据；当前行为见 `docs/resolve-candidates-tutorial.html` 与 `src/ssr.rs` 中
+> `resolve_candidates` / `trim_boundary_overlaps` 的注释。
 
 ## 摘要
 

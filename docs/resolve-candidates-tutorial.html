@@ -161,7 +161,7 @@ footer{margin-top:80px;border-top:1px solid var(--line);padding-top:24px;font-si
   <a href="#s1">1 数据</a>
   <a href="#s2">2 去重</a>
   <a href="#s3">3 嵌套</a>
-  <a href="#s4">4 贪心</a>
+  <a href="#s4">4 消解</a>
   <a href="#s5">5 走查</a>
   <a href="#s6">6 正确性</a>
   <a href="#s7">7 复杂度</a>
@@ -173,11 +173,11 @@ footer{margin-top:80px;border-top:1px solid var(--line);padding-top:24px;font-si
 
 <header class="hero">
   <p class="kicker">TRF RUST 移植版 · <code>--ssr</code> 过滤链 · 单函数详解</p>
-  <h1>候选消解<br><span style="font-size:.62em;font-family:var(--mono);letter-spacing:0">resolve_candidates</span> 的三步逻辑</h1>
-  <p class="lede">提取阶段会为每条 STR 记录、每个相位、每段连续 run 各产出一个候选 tract，它们彼此重复、嵌套、相交。候选消解只回答一个问题：从这一堆互相打架的区间里，确定性地挑出一组<em>去重、互不重叠、按位置排序</em>的干净 tract。本教程逐行拆解这三步，并用可复算的坐标走查每个设计选择。</p>
+  <h1>候选消解<br><span style="font-size:.62em;font-family:var(--mono);letter-spacing:0">resolve_candidates</span> 的四步逻辑</h1>
+  <p class="lede">提取阶段会为每条 STR 记录、每个相位、每段连续 run 各产出一个候选 tract，它们彼此重复、嵌套、相交。候选消解只回答一个问题：从这一堆互相打架的区间里，确定性地挑出一组<em>去重、互不重叠、按位置排序</em>的干净 tract。本教程逐行拆解这四步，并用可复算的坐标走查每个设计选择。</p>
   <div class="hero-meta">
-    <span>对象：<code>src/ssr.rs :: resolve_candidates</code>（190–220 行）</span>
-    <span>上游：<code>extract_record_tracts</code>（111–178 行）</span>
+    <span>对象：<code>src/ssr.rs :: resolve_candidates</code>（275–313 行）</span>
+    <span>上游：<code>extract_record_tracts</code>（117–184 行）</span>
     <span>相关：<code>docs/ssr-containment-resolution-bug.md</code></span>
     <span>验证：<code>cargo test --lib ssr</code></span>
   </div>
@@ -187,7 +187,7 @@ footer{margin-top:80px;border-top:1px solid var(--line);padding-top:24px;font-si
 
 <div class="trio">
   <div class="t-problem"><h4>在做什么</h4><p>把上游产出的全部候选 tract 收拢成一个最终集合：同一区间只留一条，同一重复的相位副本只留最完整的一条，互相重叠的按统一优先级裁决。</p></div>
-  <div class="t-method"><h4>怎么做</h4><p>三步流水：① 按坐标排序后去掉完全相同 span；② 按“先左后长”扫描，丢弃被<em>同一 cyclic word</em> 完全包含的相位副本；③ 按“完整拷贝数降序、起点升序”贪心接受互不重叠者。</p></div>
+  <div class="t-method"><h4>怎么做</h4><p>四步流水：① 按坐标排序后去掉完全相同 span；② 按“先左后长”扫描，丢弃被<em>同一 cyclic word</em> 完全包含的相位副本；③a 按“完整拷贝数降序、起点升序”淘汰<em>实质重叠</em>（交集 ≥ 较小 span 的一半）的低优先级者；③b 仅边界相接的两条都保留，后一条按整周期右移裁剪。</p></div>
   <div class="t-why"><h4>为什么需要它</h4><p>上游是“宁多勿漏”地生成候选；下游的 <code>--ssr</code> 输出契约要求每个碱基至多属于一个 tract。消解是生成与报告之间唯一的选择层。</p></div>
 </div>
 
@@ -195,7 +195,7 @@ footer{margin-top:80px;border-top:1px solid var(--line);padding-top:24px;font-si
 
 <h3>0.1 候选从哪里来，又为什么会重复</h3>
 
-<p>上游 <code>extract_record_tracts</code>（<span class="anchor">src/ssr.rs:111</span>）对每条在常规清理后幸存的 STR 记录做两件事：把 consensus 归一化到最小周期，然后在记录区域内对单元的<em>每一个旋转</em>逐锚点扫描、逐拷贝延伸。这个“宁多勿漏”的策略会产生四类需要在消解层处理的现象：</p>
+<p>上游 <code>extract_record_tracts</code>（<span class="anchor">src/ssr.rs:117</span>）对每条在常规清理后幸存的 STR 记录做两件事：把 consensus 归一化到最小周期，然后在记录区域内对单元的<em>每一个旋转</em>逐锚点扫描、逐拷贝延伸。这个“宁多勿漏”的策略会产生四类需要在消解层处理的现象：</p>
 
 <table>
 <tr><th style="width:20%">现象</th><th style="width:34%">产生原因</th><th>具体例子（本页统一用 1-based 闭区间）</th></tr>
@@ -262,15 +262,15 @@ footer{margin-top:80px;border-top:1px solid var(--line);padding-top:24px;font-si
 
 <h3>0.2 完整源码</h3>
 
-<p>先把整段代码放在一起。后文按三个编号步骤拆解，每一步都回到这里对应的行。</p>
+<p>先把整段代码放在一起。后文按四步（③a / ③b）拆解，每一步都回到这里对应的行。</p>
 
-<pre><i>// src/ssr.rs:190</i>
+<pre><i>// src/ssr.rs:275</i>
 fn resolve_candidates(mut candidates: Vec&lt;Tract&gt;) -&gt; Vec&lt;Tract&gt; {
     <b>// ① 去除完全相同的 span</b>
     candidates.sort_by_key(|tract| (tract.first, tract.last));
     candidates.dedup_by(|a, b| a.first == b.first &amp;&amp; a.last == b.last);
 
-    <b>// ② 丢弃“同一 cyclic word”内部被完全包含的相位副本</b>
+    <b>// ② 丢弃“同一 cyclic word”内部被完全包含的相位副本（语义不变）</b>
     candidates.sort_by_key(|tract| (tract.first, std::cmp::Reverse(tract.last)));
     let mut outer: Vec&lt;Tract&gt; = Vec::with_capacity(candidates.len());
     for tract in candidates {
@@ -284,28 +284,42 @@ fn resolve_candidates(mut candidates: Vec&lt;Tract&gt;) -&gt; Vec&lt;Tract&gt; {
         }
     }
 
-    <b>// ③ 按“完整拷贝数多者优先、平局取最左”贪心消解重叠</b>
-    outer.sort_by_key(|tract| (std::cmp::Reverse(tract.copies), tract.first));
-    let mut accepted: Vec&lt;Tract&gt; = Vec::new();
-    for tract in outer {
-        let overlapping = accepted
-            .iter()
-            .any(|kept| tract.first &lt;= kept.last &amp;&amp; kept.first &lt;= tract.last);
-        if !overlapping {
-            accepted.push(tract);
-        }
-    }
+    <b>// ③a 实质重叠（交集 ≥ 较小 span 的一半）：只留高优先级者
+    // ③b 边界相接（交集小于一半）：后一条按整周期右移裁剪，不足 3 拷贝则丢弃</b>
+    let mut accepted = trim_boundary_overlaps(drop_substantially_overlapping(outer));
 
     <b>// ④ 恢复坐标序，交给 build_record</b>
     accepted.sort_by_key(|tract| (tract.first, tract.last));
     accepted
 }</pre>
 
-<p class="file">落点　<span class="anchor">src/ssr.rs:190-220</span>　调用方 <span class="anchor">src/ssr.rs:78</span></p>
+<p>③a / ③b 的实现（<span class="anchor">src/ssr.rs:195-273</span>，节选）：</p>
+
+<pre><i>// src/ssr.rs:206</i>
+fn regions_substantially_overlap(a: &amp;Tract, b: &amp;Tract) -&gt; bool {
+    let overlap = overlap_bases(a, b);
+    ...
+    overlap * 2 &gt;= a.span().min(b.span())   <i>// 交集 ≥ 50% × 较小 span</i>
+}
+
+<i>// src/ssr.rs:220</i>
+fn drop_substantially_overlapping(mut tracts: Vec&lt;Tract&gt;) -&gt; Vec&lt;Tract&gt; {
+    tracts.sort_by_key(|t| (std::cmp::Reverse(t.copies), t.first));
+    <i>// 只与“实质重叠”的已接受者冲突才丢弃；边界相接留给 ③b</i>
+}
+
+<i>// src/ssr.rs:242</i>
+fn trim_boundary_overlaps(mut tracts: Vec&lt;Tract&gt;) -&gt; Vec&lt;Tract&gt; {
+    <i>// units = ceil((prev.last - tract.first + 1) / period)</i>
+    <i>// tract.first += units * period; tract.copies -= units</i>
+    <i>// 剩余 copies &lt; SSR_MIN_COPIES 则丢弃；last/period/pattern 不变</i>
+}</pre>
+
+<p class="file">落点　<span class="anchor">src/ssr.rs:275-313</span>　helper <span class="anchor">src/ssr.rs:195-273</span>　调用方 <span class="anchor">src/ssr.rs:84</span></p>
 
 <h2 id="s1"><span class="badge">§1</span>输入的数据形状：Tract 与坐标约定</h2>
 
-<pre><i>// src/ssr.rs:53</i>
+<pre><i>// src/ssr.rs:59</i>
 struct Tract {
     first: i32,     <i>// 1-based 闭区间起点</i>
     last: i32,      <i>// 1-based 闭区间终点（含）</i>
@@ -314,7 +328,7 @@ struct Tract {
     pattern: String,<i>// 归一化单元在该 tract 起点处的旋转</i>
 }</pre>
 
-<p>四个字段里，<code>first</code>/<code>last</code> 决定几何关系，<code>copies</code> 决定贪心优先级，<code>pattern</code> 只参与一件事：判断两个 tract 是不是<em>同一个 cyclic word</em>。后文会看到，<code>pattern</code> 不是用来“展示 motif”的，它是冲突分类的依据。</p>
+<p>四个字段里，<code>first</code>/<code>last</code> 决定几何关系与裁剪方向，<code>copies</code> 决定实质冲突的优先级，<code>period</code> 决定边界裁剪的步长（必须是整周期的倍数），<code>pattern</code> 只参与一件事：判断两个 tract 是不是<em>同一个 cyclic word</em>。后文会看到，<code>pattern</code> 不是用来“展示 motif”的，它是冲突分类的依据。</p>
 
 <div class="key"><span class="lbl">两条贯穿全文的恒等式</span>
 <p>① 每个 tract 的长度恰好是 <code>copies × period</code>：<code>last − first + 1 = copies × period</code>。提取阶段的窗口算术只按整份拷贝推进，所以区间端点一定落在拷贝边界上。</p>
@@ -398,7 +412,7 @@ for tract in candidates {
   <path class="dash" d="M480 90 C 560 90, 560 58, 620 58" marker-end="url(#ar1)"/>
   <text class="lbl" x="640" y="52">扫描到 T 时，K 已在 outer 中</text>
   <text class="lbl" x="640" y="70">same_motif 为真 → T 丢弃</text>
-  <text class="lbl" x="640" y="88">same_motif 为假 → T 保留，留给第 ③ 步</text>
+  <text class="lbl" x="640" y="88">same_motif 为假 → T 保留，留给第 ③a 步</text>
   <text class="lbl" x="40" y="176">关键：这一步只处理“同一 cyclic word 的相位子窗口”，不是所有包含关系。跨词包含是真实特征，不能在这里丢。</text>
 </svg>
 <figcaption>图 2。第 ② 步的扫描不变式。容器一定先被处理，因此对已保留列表做一次包含测试就足够。</figcaption>
@@ -406,7 +420,7 @@ for tract in candidates {
 
 <h3>3.2 <code>same_motif</code>：怎样判断“同一个 cyclic word”</h3>
 
-<pre><i>// src/ssr.rs:103</i>
+<pre><i>// src/ssr.rs:109</i>
 fn same_motif(a: &amp;str, b: &amp;str) -&gt; bool {
     a.len() == b.len() &amp;&amp; b.repeat(2).contains(a)
 }</pre>
@@ -482,75 +496,115 @@ K 包含 T　⇒　len(K) ≥ len(T)　⇒　K.copies ≥ T.copies
                 ↑ 容器 period 9，只有 3 份完整拷贝
 </pre>
 
-<p>此时容器 <code>ATATATATC</code> 的 <code>copies</code>（3）反而<strong>小于</strong>被包含者 <code>AT</code> 的 <code>copies</code>（4）。“容器更强”的论证只对同一 cyclic word 成立（Fine–Wilf 周期定理保证同词包含的周期一致），跨词时没有任何定理背书。代码因此把跨词包含留给第 ③ 步，由统一的拷贝数优先级裁决，而不是在第 ② 步预先丢掉。</p>
+<p>此时容器 <code>ATATATATC</code> 的 <code>copies</code>（3）反而<strong>小于</strong>被包含者 <code>AT</code> 的 <code>copies</code>（4）。“容器更强”的论证只对同一 cyclic word 成立（Fine–Wilf 周期定理保证同词包含的周期一致），跨词时没有任何定理背书。代码因此把跨词包含留给第 ③a 步，由统一的拷贝数优先级裁决，而不是在第 ② 步预先丢掉。</p>
 
 <div class="warn"><span class="lbl">历史教训</span>
 <p>早期实现没有 <code>same_motif</code> 条件，按“被更大 tract 包含就丢弃”处理，导致 seq 55 中 4 条 <code>AT×4</code> 被 <code>ATATATATC×3</code> 吞掉。完整的定位过程与回归数据见 <code>docs/ssr-containment-resolution-bug.md</code>。当前单元测试 <code>a_finer_period_tract_survives_a_different_motif_container</code> 锁定这一行为。</p>
 </div>
 
-<h2 id="s4"><span class="badge">§4</span>第 ③ 步：按拷贝数贪心消解剩余重叠</h2>
+<h2 id="s4"><span class="badge">§4</span>第 ③ 步：实质重叠淘汰 + 边界裁剪</h2>
+
+<p>第 ③ 步拆成两个子步骤。这个划分迁移自 smicing <code>str_polish::detector</code>：只有<em>实质重叠</em>才算冗余；TRF 常见的 1–2 bp 边界漂移不应该让一条真实 tract 整条消失。</p>
 
 <div class="step">
-  <div class="step-h"><span class="no">③</span><span class="ti">贪心接受互不重叠的 tract</span><span class="io">O(n²) 检查</span></div>
+  <div class="step-h"><span class="no">③a</span><span class="ti">实质重叠：保留高优先级者</span><span class="io">O(n²) 检查</span></div>
   <div class="body">
 
-<pre>outer.sort_by_key(|tract| (std::cmp::Reverse(tract.copies), tract.first));
-let mut accepted: Vec&lt;Tract&gt; = Vec::new();
-for tract in outer {
-    let overlapping = accepted
-        .iter()
-        .any(|kept| tract.first &lt;= kept.last &amp;&amp; kept.first &lt;= tract.last);
-    if !overlapping {
-        accepted.push(tract);
+<pre>tracts.sort_by_key(|t| (std::cmp::Reverse(t.copies), t.first));
+let mut kept: Vec&lt;Tract&gt; = Vec::new();
+for tract in tracts {
+    if kept.iter().any(|k| regions_substantially_overlap(k, &amp;tract)) {
+        continue;   // 丢弃低优先级者
     }
+    kept.push(tract);
 }</pre>
 
-<p>经过前两步，候选集合里已经没有完全重复、也没有同词嵌套，但仍可能有部分重叠（例如两条错开的源记录）和跨词包含。这一步是最后的裁决：</p>
-
 <ul>
-<li><strong>优先级：</strong>完整拷贝数多的先处理；拷贝数相同时起点靠左的先处理。翻译成人话：<em>挑每一段重叠里“最实在”的重复，平局取最左，保证确定性。</em></li>
-<li><strong>冲突条件：</strong><code>tract.first ≤ kept.last &amp;&amp; kept.first ≤ tract.last</code>。坐标是闭区间，所以只共享一个碱基也算重叠；恰好首尾相接（如 <code>[1,8]</code> 与 <code>[9,16]</code>）不算。</li>
-<li><strong>只与已接受者比较：</strong>被拒绝的 tract 不会阻塞后续候选，因此规则的结果只取决于处理顺序，而不是某条候选是否“曾经出现过”。</li>
+<li><strong>优先级：</strong>完整拷贝数多的先处理；拷贝数相同时起点靠左的先处理。规则与历史实现一致。</li>
+<li><strong>实质重叠：</strong><code>overlap × 2 ≥ min(span_a, span_b)</code>，即交集覆盖较小 tract 的至少一半；<em>恰好 50% 也算</em>。</li>
+<li><strong>只与已接受者比较：</strong>被拒绝的 tract 不会阻塞后续候选。</li>
 </ul>
 
-<p>拷贝数优先的直接效果，是 §3.4 里跨词包含的情形：<code>AT×4</code>（4 份）先于 <code>ATATATATC×3</code>（3 份）被接受，容器随后因重叠被丢弃，精细重复胜出。反过来，如果容器本身拷贝数更多，它也会合理地胜出——这不是定理，而是统一的用户可见规则：</p>
+<p>拷贝数优先的直接效果仍是 §3.4 的跨词包含：<code>AT×4</code>（4 份）先于 <code>ATATATATC×3</code>（3 份）被接受，容器因 100% 覆盖较小 span 被丢弃，精细重复胜出；反过来，<code>ATATATATC×5</code> 会合理地胜出。这不是定理，而是统一的用户可见规则：</p>
 
 <table>
 <tr><th style="width:33%">候选</th><th style="width:10%">拷贝数</th><th>结果</th></tr>
 <tr><td><code>AT×4</code> [1,8]、[10,17]、[19,26]</td><td>4 / 4 / 4</td><td>全部接受，互相不重叠。</td></tr>
-<tr><td><code>ATATATATC×3</code> [1,27]</td><td>3</td><td>与三条 AT 都重叠，丢弃。</td></tr>
-<tr><td><code>ATATATATC×5</code> 覆盖五个重复单元</td><td>5</td><td>先被接受，内部所有 <code>AT×4</code> 因重叠被丢弃——容器胜出。</td></tr>
+<tr><td><code>ATATATATC×3</code> [1,27]</td><td>3</td><td>与三条 AT 都重叠且 100% 覆盖较小 span，丢弃。</td></tr>
+<tr><td><code>ATATATATC×5</code> 覆盖五个重复单元</td><td>5</td><td>先被接受，内部所有 <code>AT×4</code> 因实质重叠被丢弃——容器胜出。</td></tr>
 </table>
-
-<p>最后一行说明第 ③ 步的目标不是“保留所有精细重复”，而是“在给定优先级下产生一个确定、干净、互不重叠的集合”。规则本身写进了模块文档：<em>most copies first, leftmost start on ties</em>。</p>
-
-<h3>4.1 平局取最左：一个最小例子</h3>
-
-<pre>序列：A T A T A T A T A T A T
-候选：AT×4 [1,8]  和  AT×4 [5,12]（两条源记录窗口错开）
-两者拷贝数相同 → 排序后 [1,8] 在前 → 接受 [1,8]，[5,12] 因重叠被丢弃
-输出：AT×4 [1,8]</pre>
-
-<p>由于 <code>outer</code> 在进入第 ③ 步之前已经按 <code>(first 升序, last 降序)</code> 排好，而 <code>sort_by_key</code> 是<em>稳定排序</em>，所以“拷贝数与起点都相同”的残余平局仍会保持“长者在前”的顺序；最终仍然只有一个能被接受（它们必然共享起点、互相重叠），结果不依赖输入的原始顺序。</p>
 
   </div>
 </div>
 
-<h3>4.2 为什么不是最优区间调度</h3>
+<div class="step">
+  <div class="step-h"><span class="no">③b</span><span class="ti">边界相接：整周期裁剪后一条</span><span class="io">O(n) 扫描</span></div>
+  <div class="body">
+
+<pre>tracts.sort_by_key(|t| (t.first, t.last));
+for mut tract in tracts {
+    if let Some(prev) = kept.last() {
+        if tract.first &lt;= prev.last {
+            let overlap = prev.last - tract.first + 1;
+            let units = (overlap + tract.period - 1) / tract.period;  // ceil
+            if units &gt;= tract.copies || tract.copies - units &lt; SSR_MIN_COPIES {
+                continue;                        // 吃掉太多，整条丢弃
+            }
+            tract.first += units * tract.period; // 整周期右移，相位不变
+            tract.copies -= units;               // last / period / pattern 不变
+        }
+    }
+    kept.push(tract);
+}</pre>
+
+<p>经过 ③a，剩下的重叠都小于较小 span 的一半，属于“一条 tract 的尾巴压住了另一条的头”。这时两条都保留信息：后一条让出重叠部分，按<strong>整周期</strong>右移，拷贝数相应减少。规则的具体表现：</p>
+
+<table>
+<tr><th style="width:20%">前一条</th><th style="width:20%">后一条</th><th style="width:22%">交集 / 较小 span</th><th>结果</th></tr>
+<tr><td><code>[1,8] AT×4</code></td><td><code>[10,17] AT×4</code></td><td>0</td><td>不相交，两条都保留。</td></tr>
+<tr><td><code>[1,8] AT×4</code></td><td><code>[5,12] AT×4</code></td><td>4 / 8 = 50%</td><td>实质重叠（③a）→ 后者被丢弃。</td></tr>
+<tr><td><code>[1,8] A×8</code></td><td><code>[5,16] A×12</code></td><td>4 / 8 = 50%</td><td>实质重叠（③a）→ 拷贝数多的后者保留。</td></tr>
+<tr><td><code>[1,8] AT×4</code></td><td><code>[7,14] AT×4</code></td><td>2 / 8 = 25%</td><td>边界重叠（③b）→ 后者裁剪为 <code>[9,14] AT×3</code>。</td></tr>
+<tr><td><code>[1,8] AT×4</code></td><td><code>[9,14] AT×3</code></td><td>0（相邻）</td><td>相邻不算重叠，原样保留。</td></tr>
+</table>
+
+<p>如果裁剪后不足 <code>SSR_MIN_COPIES</code>（3）个完整拷贝，就整条丢弃，而不是报告一条残废的重复。例如 <code>[7,12] AT×3</code> 与 <code>[1,8]</code> 重叠 2 bp，裁掉 1 个周期后只剩 2 拷贝，直接被丢弃。</p>
+
+  </div>
+</div>
+
+<h3>4.1 边界裁剪：一个最小例子</h3>
+
+<pre>序列：(AT)×7，坐标 1..14
+候选：AT×4 [1,8] 与 AT×4 [7,14]
+交集：{7,8}，2 bp = [7,14] span 的 25% &lt; 50% → 不淘汰
+裁剪：units = ceil(2 / 2) = 1
+      [7,14] → first 7 + 2 = 9，copies 4 − 1 = 3
+输出：AT×4 [1,8] 与 AT×3 [9,14]</pre>
+
+<p>裁剪后两条不共享碱基；<code>last=14</code>、<code>period=2</code>、<code>pattern="AT"</code> 都没变，所以 <code>(AT)^3</code> 仍然精确铺满 <code>[9,14]</code>，<code>last − first + 1 = copies × period</code> 的恒等式继续成立。</p>
+
+<h3>4.2 为什么必须按整周期裁剪</h3>
+
+<p>如果只把 <code>first</code> 挪到 <code>prev_last + 1</code>，起点会落在 motif 中间，<code>pattern</code> 就不再等于区域开头的 <code>period</code> 个碱基，输出也不再是“从起点重新平铺 motif”的形式。把位移取成 <code>period</code> 的整数倍，平移后的区域仍是同一个 cyclic word 的平铺，因此不需要重新提取 motif，也不破坏任何输出不变量。</p>
+
+<p>代价是可能多让出最多 <code>period − 1</code> 个碱基（例如 1 bp 重叠、period 2 时，后一条从 <code>prev_last + 2</code> 开始，而不是 <code>prev_last + 1</code>）。这是保持“每条输出都是精确 <code>motif × copies</code>”所必需的最小代价。</p>
+
+<h3>4.3 为什么不是最优区间调度</h3>
 
 <p>如果目标是“最大化接受的总碱基数”或“最大化总拷贝数”，这是一个加权区间调度问题，贪心不一定最优。这里刻意没有这么做。消解层的目标有三个，按重要性排序：</p>
 
 <ol>
 <li><strong>输出合法：</strong>任意两条结果不共享碱基，这是 <code>--ssr</code> 的语义基础；</li>
 <li><strong>确定：</strong>同一输入无论候选到达顺序如何，输出一致；</li>
-<li><strong>可解释：</strong>用户能一句话说明为什么某条赢了——“它完整拷贝更多，平局取靠左的”。</li>
+<li><strong>可解释：</strong>用户能一句话说明为什么某条赢了或少了几个拷贝——“实质重叠时拷贝更多者赢；只是边界相接时后一条按整周期让位”。</li>
 </ol>
 
 <p>在候选规模很小（见 §7）的前提下，用一个可预期规则换掉最优性，是恰当的工程取舍。</p>
 
 <h2 id="s5"><span class="badge">§5</span>完整走查：一个跨词包含 + 多 run 的例子</h2>
 
-<p>下面用 §3.4 的序列把三步全部走一遍。这条序列（27 bp）是 <code>ATATATATC</code> 的 3 次精确重复，坐标均为 1-based 闭区间：</p>
+<p>下面用 §3.4 的序列把四步（③a / ③b）全部走一遍。这条序列（27 bp）是 <code>ATATATATC</code> 的 3 次精确重复，坐标均为 1-based 闭区间：</p>
 
 <div class="math">
 序列：A T A T A T A T C A T A T A T A T C A T A T A T A T C<br>
@@ -614,11 +668,11 @@ for tract in outer {
 
   <text class="lbl" x="8" y="210">第 ② 步</text>
   <text class="lbl" x="60" y="228">3 条 TA×3 与 AT×4 同词（长度 2，旋转等价）且被包含 → 丢弃</text>
-  <text class="lbl" x="60" y="246">9-mer 包含 AT×4，但长度 9 ≠ 2 → same_motif 为假 → 保留到第 ③ 步</text>
+  <text class="lbl" x="60" y="246">9-mer 包含 AT×4，但长度 9 ≠ 2 → same_motif 为假 → 保留到第 ③a 步</text>
 
-  <text class="lbl" x="8" y="286">第 ③ 步</text>
+  <text class="lbl" x="8" y="286">第 ③a 步</text>
   <text class="lbl" x="60" y="304">AT×4 拷贝数 4 &gt; 9-mer 的 3 → 三条 AT 先被接受</text>
-  <text class="lbl" x="60" y="322">9-mer 与已接受的 AT 重叠 → 丢弃</text>
+  <text class="lbl" x="60" y="322">9-mer 100% 覆盖较小的 AT → 实质重叠 → 丢弃（本图无 ③b 边界裁剪）</text>
 
   <text class="lbl" x="8" y="360">输出</text>
   <rect class="bar-out" x="60" y="342" width="224" height="22" rx="4"/>
@@ -628,7 +682,7 @@ for tract in outer {
   <text class="mono" x="320" y="357">AT×4 [10,17]</text>
   <text class="mono" x="572" y="357">AT×4 [19,26]</text>
 </svg>
-<figcaption>图 4。§5 的几何视图。第 ① 步没有删任何东西；第 ② 步删掉三条相位副本 <code>TA×3</code>，但放过了跨词容器；第 ③ 步按拷贝数让三条 <code>AT×4</code> 胜出。</figcaption>
+<figcaption>图 4。§5 的几何视图。第 ① 步没有删任何东西；第 ② 步删掉三条相位副本 <code>TA×3</code>，但放过了跨词容器；第 ③a 步按拷贝数让三条 <code>AT×4</code> 胜出（容器 100% 覆盖较小的 AT，属实质重叠）。</figcaption>
 </figure>
 
 <h3>5.1 逐步跟踪</h3>
@@ -652,23 +706,26 @@ for tract in outer {
 
 <p>离开第 ② 步时 <code>outer</code> 里有四条：9-mer、<code>AT [1,8]</code>、<code>AT [10,17]</code>、<code>AT [19,26]</code>。</p>
 
-<h4>第 ③ 步：贪心重叠消解</h4>
+<h4>第 ③a 步：实质重叠淘汰</h4>
 <p>按 <code>(copies 降序, first 升序)</code> 排序后，三条 4 拷贝的 AT 在前，3 拷贝的 9-mer 在最后：</p>
 
 <table>
-<tr><th style="width:12%">顺序</th><th style="width:30%">当前 tract</th><th style="width:28%">与已接受者冲突？</th><th>动作</th></tr>
+<tr><th style="width:12%">顺序</th><th style="width:30%">当前 tract</th><th style="width:28%">与已接受者实质重叠？</th><th>动作</th></tr>
 <tr><td>1</td><td><code>[1,8] AT ×4</code></td><td>—</td><td><span class="tag tag-keep">接受</span></td></tr>
 <tr><td>2</td><td><code>[10,17] AT ×4</code></td><td>与 <code>[1,8]</code> 不相交（10 &gt; 8）</td><td><span class="tag tag-keep">接受</span></td></tr>
 <tr><td>3</td><td><code>[19,26] AT ×4</code></td><td>与已接受者均不相交</td><td><span class="tag tag-keep">接受</span></td></tr>
-<tr><td>4</td><td><code>[1,27] ATATATATC ×3</code></td><td>与 <code>[1,8]</code>（以及另外两条）重叠</td><td><span class="tag tag-drop">丢弃</span></td></tr>
+<tr><td>4</td><td><code>[1,27] ATATATATC ×3</code></td><td>与 <code>[1,8]</code> 交集 8 bp，覆盖较小 span 的 100%</td><td><span class="tag tag-drop">丢弃</span></td></tr>
 </table>
+
+<h4>第 ③b 步：边界裁剪</h4>
+<p>本例的三条 AT 互不相交，9-mer 又已在 ③a 被淘汰，因此没有剩余重叠，③b 不做任何修改。</p>
 
 <h4>第 ④ 步：恢复坐标序</h4>
 <p>接受列表本来就是位置序，最终输出三条：<code>[1,8] AT×4</code>、<code>[10,17] AT×4</code>、<code>[19,26] AT×4</code>。</p>
 
 <h3>5.2 输出记录长什么样</h3>
 
-<p>消解结果交给 <code>build_record</code>（<span class="anchor">src/ssr.rs:223</span>），逐条构造 <code>RepeatRecord</code>。以 <code>[1,8] AT×4</code> 为例：</p>
+<p>消解结果交给 <code>build_record</code>（<span class="anchor">src/ssr.rs:316</span>），逐条构造 <code>RepeatRecord</code>。以 <code>[1,8] AT×4</code> 为例：</p>
 
 <table>
 <tr><th style="width:26%">字段</th><th style="width:20%">值</th><th>来源</th></tr>
@@ -681,19 +738,19 @@ for tract in outer {
 <tr><td>A / T 占比</td><td>50% / 50%</td><td>区域碱基统计；熵 = 1.0 bit</td></tr>
 </table>
 
-<p class="file">落点　<span class="anchor">src/ssr.rs:272</span>（score）、<span class="anchor">src/ssr.rs:276-296</span>（记录字段）</p>
+<p class="file">落点　<span class="anchor">src/ssr.rs:365</span>（score）、<span class="anchor">src/ssr.rs:369-389</span>（记录字段）</p>
 
 <h3>5.3 补充：<code>ATATATATC×3</code> 候选的完整去向</h3>
 
 <p>上面走查的是“两条记录都在”的合并场景。这条 9-mer 候选很容易引起一个误解：最终输出里出现了三条 <code>AT×4</code>，看起来像是把 <code>ATATATATC×3</code> 切成了三份。实际上它在整条链路上只经历了<strong>生成 → 保留 → 淘汰</strong>，从未被切分或改写。</p>
 
 <div class="key"><span class="lbl">先记住结论</span>
-<p>消解层只做集合选择。三条 <code>AT×4</code> 来自另一条 period-2 记录的提取结果；9-mer 候选在第 ③ 步因“与已接受者重叠且拷贝数更少”被丢弃。若上游只报了 period-9 记录，输出就是 <code>ATATATATC×3</code>，不会凭空出现 <code>AT×4</code>。</p>
+<p>消解层只做集合选择。三条 <code>AT×4</code> 来自另一条 period-2 记录的提取结果；9-mer 候选在第 ③a 步因“实质重叠且拷贝数更少”被丢弃。若上游只报了 period-9 记录，输出就是 <code>ATATATATC×3</code>，不会凭空出现 <code>AT×4</code>。</p>
 </div>
 
 <h4>（1）生成：period-9 记录的 9 个旋转</h4>
 
-<p>源记录为 <code>first=1, last=27, pattern=ATATATATC</code>。提取函数先计算最小周期：<code>ATATATATC</code> 不存在任何长度 &lt; 9 的周期，因此 <code>minimal_period = 9</code>；长度 9 能被 9 整除，<code>unit = ATATATATC</code>、<code>period = 9</code>（<span class="anchor">src/ssr.rs:125-133</span>）。随后对 9 个旋转逐一锚定并延伸（<span class="anchor">src/ssr.rs:149-177</span>）：</p>
+<p>源记录为 <code>first=1, last=27, pattern=ATATATATC</code>。提取函数先计算最小周期：<code>ATATATATC</code> 不存在任何长度 &lt; 9 的周期，因此 <code>minimal_period = 9</code>；长度 9 能被 9 整除，<code>unit = ATATATATC</code>、<code>period = 9</code>（<span class="anchor">src/ssr.rs:131-139</span>）。随后对 9 个旋转逐一锚定并延伸（<span class="anchor">src/ssr.rs:155-183</span>）：</p>
 
 <table>
 <tr><th style="width:9%">旋转 k</th><th style="width:22%">motif</th><th style="width:12%">锚点 s</th><th style="width:12%">完整拷贝</th><th>是否成为候选</th></tr>
@@ -720,39 +777,39 @@ for tract in outer {
 
 <h4>（3）第 ② 步：保留，而且不会吞掉 AT</h4>
 
-<p>按 <code>(first 升序, last 降序)</code> 排序后，<code>[1,27]</code> 排在第一位，此时 <code>outer</code> 为空，直接保留（<span class="anchor">src/ssr.rs:196-204</span>）。更关键的是它后续也不会把三条 <code>AT×4</code> 判成嵌套：</p>
+<p>按 <code>(first 升序, last 降序)</code> 排序后，<code>[1,27]</code> 排在第一位，此时 <code>outer</code> 为空，直接保留（<span class="anchor">src/ssr.rs:296-306</span>）。更关键的是它后续也不会把三条 <code>AT×4</code> 判成嵌套：</p>
 
 <table>
-<tr><th style="width:46%">包含判定（<span class="anchor">src/ssr.rs:197-201</span>）</th><th style="width:14%">值</th><th>说明</th></tr>
+<tr><th style="width:46%">包含判定（<span class="anchor">src/ssr.rs:299-303</span>）</th><th style="width:14%">值</th><th>说明</th></tr>
 <tr><td><code>kept.first &lt;= tract.first</code></td><td><code>1 &lt;= 1</code> → true</td><td>9-mer 确实覆盖 <code>[1,8]</code> 的起点</td></tr>
 <tr><td><code>tract.last &lt;= kept.last</code></td><td><code>8 &lt;= 27</code> → true</td><td>9-mer 也确实覆盖它的终点</td></tr>
 <tr><td><code>same_motif("ATATATATC", "AT")</code></td><td><strong>false</strong></td><td>长度 9 ≠ 2，不是同一 cyclic word</td></tr>
 <tr><td colspan="2"><code>nested = true &amp;&amp; true &amp;&amp; false</code></td><td>整条判定为 false → <code>AT×4</code> 保留</td></tr>
 </table>
 
-<p>这正是跨词包含的处理原则：<strong>包含关系本身不足以丢弃</strong>，还必须同属一个 cyclic word。9-mer 在这里只被放进 <code>outer</code>，等待第 ③ 步裁决。</p>
+<p>这正是跨词包含的处理原则：<strong>包含关系本身不足以丢弃</strong>，还必须同属一个 cyclic word。9-mer 在这里只被放进 <code>outer</code>，等待第 ③a 步裁决。</p>
 
-<h4>（4）第 ③ 步：因重叠且拷贝数少被淘汰</h4>
+<h4>（4）第 ③a 步：因实质重叠且拷贝数少被淘汰</h4>
 
-<p>进入第 ③ 步时 <code>outer</code> 为 <code>[1,27] ATATATATC×3</code> 加三条 <code>AT×4</code>。排序键 <code>(Reverse(copies), first)</code> 把 4 拷贝的三条 AT 放在前面，9-mer 排在最后（<span class="anchor">src/ssr.rs:207</span>）：</p>
+<p>进入第 ③a 步时 <code>outer</code> 为 <code>[1,27] ATATATATC×3</code> 加三条 <code>AT×4</code>。排序键 <code>(Reverse(copies), first)</code> 把 4 拷贝的三条 AT 放在前面，9-mer 排在最后（<span class="anchor">src/ssr.rs:221</span>）：</p>
 
 <table>
-<tr><th style="width:20%">处理顺序</th><th style="width:28%">tract</th><th style="width:24%">accepted 当前内容</th><th>动作</th></tr>
+<tr><th style="width:20%">处理顺序</th><th style="width:28%">tract</th><th style="width:24%">kept 当前内容</th><th>动作</th></tr>
 <tr><td>1</td><td><code>[1,8] AT ×4</code></td><td>空</td><td><span class="tag tag-keep">接受</span></td></tr>
 <tr><td>2</td><td><code>[10,17] AT ×4</code></td><td><code>[1,8]</code></td><td><span class="tag tag-keep">接受</span>（10 &gt; 8，不相交）</td></tr>
 <tr><td>3</td><td><code>[19,26] AT ×4</code></td><td><code>[1,8]</code>、<code>[10,17]</code></td><td><span class="tag tag-keep">接受</span>（19 &gt; 17）</td></tr>
 <tr><td>4</td><td><code>[1,27] ATATATATC ×3</code></td><td>三条 AT</td><td><span class="tag tag-drop">丢弃</span></td></tr>
 </table>
 
-<p>第 4 行的重叠判定（<span class="anchor">src/ssr.rs:210-212</span>）以 <code>accepted[0] = [1,8]</code> 为准：</p>
+<p>第 4 行的实质重叠判定（<span class="anchor">src/ssr.rs:206-215</span>）以 <code>kept[0] = [1,8]</code> 为准：</p>
 
 <div class="math">
-tract.first ≤ kept.last　→　1 ≤ 8　→ true<br>
-kept.first ≤ tract.last　→　1 ≤ 27　→ true<br>
-⇒ overlapping = true　⇒　不执行 <code>accepted.push(tract)</code>
+overlap = min(8, 27) − max(1, 1) + 1 = 8<br>
+较小 span = min(8, 27) = 8　→　8 × 2 ≥ 8　→ true<br>
+⇒ 实质重叠　⇒　不执行 <code>kept.push(tract)</code>
 </div>
 
-<p><code>any</code> 在第一条 AT 就短路返回，后面两条无需再比较。这条 9-mer 候选没有被压入 <code>accepted</code>，<code>outer</code> 在循环结束后被释放，它就永久消失了。</p>
+<p><code>any</code> 在第一条 AT 就短路返回，后面两条无需再比较。这条 9-mer 候选没有被压入 <code>kept</code>，<code>outer</code> 在循环结束后被释放，它就永久消失了。</p>
 
 <h4>（5）三种输入情形下的最终输出</h4>
 
@@ -762,12 +819,12 @@ kept.first ≤ tract.last　→　1 ≤ 27　→ true<br>
 <tr><th style="width:38%">上游记录</th><th style="width:34%">候选</th><th>最终输出</th></tr>
 <tr><td>只有 period-9 记录</td><td><code>[1,27] ATATATATC×3</code></td><td><code>[1,27] ATATATATC×3</code></td></tr>
 <tr><td>只有 period-2 记录</td><td>3 条 <code>AT×4</code> + 3 条 <code>TA×3</code></td><td>3 条 <code>AT×4</code>（<code>TA×3</code> 在第 ② 步被同词包含丢弃）</td></tr>
-<tr><td>两条记录都在（§5 主走查）</td><td>上述 7 条候选</td><td>3 条 <code>AT×4</code>（9-mer 在第 ③ 步被淘汰）</td></tr>
+<tr><td>两条记录都在（§5 主走查）</td><td>上述 7 条候选</td><td>3 条 <code>AT×4</code>（9-mer 在第 ③a 步被淘汰）</td></tr>
 </table>
 
-<div class="note">即使把 <code>SSR_MIN_COPIES</code> 降到 2，也不会改变合并场景的结果：旋转 <code>k=1…8</code> 产生的 2 拷贝 tract 都完整落在 <code>[1,27]</code> 内，且与容器等长同词，会在第 ② 步被当作相位副本丢弃；而 9-mer 本身仍会在第 ③ 步输给 4 拷贝的 AT。</div>
+<div class="note">即使把 <code>SSR_MIN_COPIES</code> 降到 2，也不会改变合并场景的结果：旋转 <code>k=1…8</code> 产生的 2 拷贝 tract 都完整落在 <code>[1,27]</code> 内，且与容器等长同词，会在第 ② 步被当作相位副本丢弃；而 9-mer 本身仍会在第 ③a 步输给 4 拷贝的 AT。</div>
 
-<p class="file">落点　生成 <span class="anchor">src/ssr.rs:149-174</span>　同词保留判定 <span class="anchor">src/ssr.rs:197-201</span>　贪心淘汰 <span class="anchor">src/ssr.rs:207-215</span></p>
+<p class="file">落点　生成 <span class="anchor">src/ssr.rs:155-183</span>　同词保留判定 <span class="anchor">src/ssr.rs:299-303</span>　实质重叠淘汰 <span class="anchor">src/ssr.rs:220-233</span></p>
 
 <h2 id="s6"><span class="badge">§6</span>正确性与不变量</h2>
 
@@ -775,10 +832,12 @@ kept.first ≤ tract.last　→　1 ≤ 27　→ true<br>
 
 <table>
 <tr><th style="width:26%">不变量</th><th>由哪一步保证</th></tr>
-<tr><td>任意两条输出 tract 不共享碱基</td><td>第 ③ 步只接受与所有已接受者都不重叠的 tract；闭区间谓词覆盖共享端点。</td></tr>
+<tr><td>任意两条输出 tract 不共享碱基</td><td>③a 淘汰实质重叠；③b 把剩余的边界重叠按整周期右移到前一条终点之后。</td></tr>
 <tr><td>输出按 <code>(first, last)</code> 升序</td><td>第 ④ 步的最终排序。</td></tr>
-<tr><td>不再有相同 span</td><td>第 ① 步去重；后续步骤只会减少元素。</td></tr>
-<tr><td>不再有同词嵌套</td><td>第 ② 步丢弃所有被同词容器包含者；第 ③ 步只会再减少。</td></tr>
+<tr><td>不再有相同 span</td><td>第 ① 步去重；后续步骤只会减少或缩短元素。</td></tr>
+<tr><td>不再有同词嵌套</td><td>第 ② 步丢弃所有被同词容器包含者；③a / ③b 只会再减少或缩短。</td></tr>
+<tr><td>每条输出仍是精确的 <code>pattern × copies</code></td><td>③b 只按整周期移动 <code>first</code> 并同步减少 <code>copies</code>；<code>last</code>、<code>period</code>、<code>pattern</code> 不变，<code>last − first + 1 = copies × period</code> 恒成立。</td></tr>
+<tr><td>每条输出至少 <code>SSR_MIN_COPIES</code> 个完整拷贝</td><td>③b 在裁剪后不足 3 拷贝时整条丢弃。</td></tr>
 <tr><td>结果与输入顺序无关</td><td>每一步都先排序；<code>sort_by_key</code> 稳定，剩余平局的相对顺序只由前一步的排序键决定，而该排序键只依赖 tract 字段。</td></tr>
 </table>
 
@@ -793,20 +852,20 @@ same_motif(M, K) 且 same_motif(K, T)　⇒　same_motif(M, T)
 
 <p>并且同词关系保证三者长度相同，<code>M</code> 或它自己的容器一定还在 <code>outer</code> 里（或由归纳继续上溯）。所以任何被丢弃的容器，其被包含者也终将被同一个更外层的保留者丢弃。逐条检查保留列表与检查全体候选的结果相同，而前者只需一次扫描。</p>
 
-<h3>6.3 同词嵌套的“无损”与跨词裁决的“有损”</h3>
+<h3>6.3 同词嵌套的“无损”与两种重叠的有损程度</h3>
 
-<p>第 ② 步丢弃同词嵌套是无损的：容器的 <code>copies</code> 一定 ≥ 被包含者，且两者描述同一段周期序列。第 ③ 步丢弃重叠候选是有损的：被丢弃的 tract 可能覆盖一些别人没覆盖的碱基。这是有意为之——输出契约要求互不重叠，而“哪些重叠候选值得保留”本身没有唯一正确答案；代码把一个可解释的规则固定下来，并通过最终排序让结果稳定。</p>
+<p>第 ② 步丢弃同词嵌套是无损的：容器的 <code>copies</code> 一定 ≥ 被包含者，且两者描述同一段周期序列。③a 丢弃实质重叠是有损的：被丢弃的 tract 可能覆盖一些别人没覆盖的碱基，但两条区域大部分重合，保留其一的代价有限；这是输出契约要求互不重叠时的必要取舍。③b 不丢弃任何位点，只让后一条让出重叠的整周期前缀——损失的是 <code>units</code> 份拷贝，而不是整条 tract。</p>
 
 <div class="key"><span class="lbl">一句话总结规则</span>
-<p>先删“同一段序列被报了两次”，再删“同一段重复的相位影子”，最后按“完整拷贝更多者赢，平局最左者赢”挑出一组互不重叠的区域。</p>
+<p>先删“同一段序列被报了两次”，再删“同一段重复的相位影子”，然后按“完整拷贝更多者赢，平局最左者赢”淘汰实质重叠，最后让仅边界相接的后一条按整周期让位。</p>
 </div>
 
 <h2 id="s7"><span class="badge">§7</span>复杂度与实现细节</h2>
 
 <table>
 <tr><th style="width:24%">维度</th><th>成本</th><th>说明</th></tr>
-<tr><td>时间</td><td><code>O(n log n + n²)</code></td><td><code>n</code> 是一条序列上所有记录的候选总数。排序四次是 <code>O(n log n)</code>；第 ②、③ 步各做一次线性扫描，每次都可能遍历已保留列表，最坏 <code>O(n²)</code>。</td></tr>
-<tr><td>空间</td><td><code>O(n)</code></td><td><code>outer</code> 与 <code>accepted</code> 两个新向量；tract 本身有 <code>String</code>，按值移动，不复制。</td></tr>
+<tr><td>时间</td><td><code>O(n log n + n²)</code></td><td><code>n</code> 是一条序列上所有记录的候选总数。排序五次是 <code>O(n log n)</code>；第 ②、③a 步各做一次线性扫描，每次都可能遍历已保留列表，最坏 <code>O(n²)</code>；③b 只与上一条 kept 比较，是 <code>O(n)</code>。</td></tr>
+<tr><td>空间</td><td><code>O(n)</code></td><td><code>outer</code>、③a 的 <code>kept</code> 与 ③b 的 <code>kept</code> 三个新向量；tract 本身有 <code>String</code>，按值移动，不复制。</td></tr>
 <tr><td>实际规模</td><td>很小</td><td>候选只来自已通过扫描与清理的 STR 记录；每条记录的区域有限，通常一条序列只有几十到几百条候选，平方项不构成瓶颈。</td></tr>
 <tr><td>分配热点</td><td><code>same_motif</code></td><td><code>b.repeat(2)</code> 每次调用分配一个长度为 <code>2 × period</code> 的字符串。周期上限是 <code>--maxperiod</code>（SSR 默认 15），开销可忽略；若未来需要优化，可改为逐字符比较的旋转判定。</td></tr>
 </table>
@@ -816,24 +875,31 @@ same_motif(M, K) 且 same_motif(K, T)　⇒　same_motif(M, T)
 <ul>
 <li><code>std::cmp::Reverse</code> 只改变排序方向，不改变键类型；与元组组合后一次排序表达“第一关键字升序、第二关键字降序”。</li>
 <li><code>Vec::with_capacity(candidates.len())</code> 预分配上限容量，<code>outer</code> 不会中途扩容。</li>
-<li>所有坐标都是 <code>i32</code>，与 <code>RepeatRecord</code> 的输出字段一致，无需在消解层做类型转换。</li>
+<li>坐标字段是 <code>i32</code>，与 <code>RepeatRecord</code> 的输出字段一致；裁剪与重叠计算内部先提升到 <code>i64</code>/<code>u64</code>，避免边界运算溢出，最后再转回。</li>
 <li>空候选输入直接返回空向量；没有任何索引访问，因此不存在越界风险。</li>
 </ul>
 
 <h2 id="s8"><span class="badge">§8</span>测试对照：每个设计点由谁锁定</h2>
 
-<p>模块测试在 <code>src/ssr.rs</code> 的 <code>mod test</code> 中（<span class="anchor">src/ssr.rs:299</span>）。运行：</p>
+<p>模块测试在 <code>src/ssr.rs</code> 的 <code>mod test</code> 中（<span class="anchor">src/ssr.rs:393</span>）。运行：</p>
 
 <pre>cargo test --lib ssr</pre>
 
 <table>
 <tr><th style="width:38%">测试</th><th style="width:12%">对应步骤</th><th>锁定的行为</th></tr>
-<tr><td><code>overlapping_source_records_yield_one_tract</code></td><td>② + ③</td><td>同一段 <code>GA</code> 重复被两条交错记录各报一次，相位副本先被第 ② 步清掉，最终贪心只剩左端那条 <code>[1,10] GA×5</code>。</td></tr>
+<tr><td><code>overlapping_source_records_yield_one_tract</code></td><td>② + ③a</td><td>同一段 <code>GA</code> 重复被两条交错记录各报一次，相位副本先被第 ② 步清掉，剩余 80% 重叠属实质冲突，③a 只留左端那条 <code>[1,10] GA×5</code>。</td></tr>
 <tr><td><code>a_nested_tract_loses_against_its_container</code></td><td>②</td><td><code>(ATG)3 ⊂ (GAT)4</code>，同词嵌套只报 <code>GAT×4</code>。</td></tr>
-<tr><td><code>a_finer_period_tract_survives_a_different_motif_container</code></td><td>② + ③</td><td>跨词包含时三条 <code>AT×4</code> 全部保留，9-mer 容器因拷贝数少在贪心阶段落败。</td></tr>
-<tr><td><code>reports_one_tract_per_run</code></td><td>② + ③</td><td>一个记录区域内的两个独立 run 各成一条，互不干扰。</td></tr>
-<tr><td><code>leftmost_rotation_wins_a_tie</code></td><td>③</td><td><code>GAGAGAGAG</code> 内 <code>GA×4</code> 与 <code>AG×4</code> 拷贝数相同但不互相包含，贪心按起点取最左那条，丢弃尾部游离碱基。</td></tr>
+<tr><td><code>a_finer_period_tract_survives_a_different_motif_container</code></td><td>② + ③a</td><td>跨词包含时三条 <code>AT×4</code> 全部保留，9-mer 容器因拷贝数少在实质重叠阶段落败。</td></tr>
+<tr><td><code>reports_one_tract_per_run</code></td><td>② + ③a</td><td>一个记录区域内的两个独立 run 各成一条，互不干扰。</td></tr>
+<tr><td><code>leftmost_rotation_wins_a_tie</code></td><td>③a</td><td><code>GAGAGAGAG</code> 内 <code>GA×4</code> 与 <code>AG×4</code> 拷贝数相同但不互相包含，按起点取最左那条，丢弃尾部游离碱基。</td></tr>
 <tr><td><code>prefers_the_rotation_with_more_complete_copies</code></td><td>②</td><td>完整拷贝数更多的旋转胜出。</td></tr>
+<tr><td><code>a_minor_boundary_overlap_trims_the_later_tract</code></td><td>③b</td><td>25% 边界重叠不淘汰，后一条 <code>[7,14] AT×4</code> 整周期右移为 <code>[9,14] AT×3</code>；<code>last</code>/<code>pattern</code> 不变。</td></tr>
+<tr><td><code>a_trim_that_leaves_fewer_than_three_copies_drops_the_tract</code></td><td>③b</td><td>裁剪后只剩 2 拷贝时整条丢弃，不输出残废重复。</td></tr>
+<tr><td><code>an_exact_half_overlap_is_substantial</code></td><td>③a</td><td>恰好 50% 仍判为实质重叠，后一条被丢弃而不是裁剪。</td></tr>
+<tr><td><code>a_substantial_conflict_uses_priority_not_position</code></td><td>③a</td><td>实质冲突由拷贝数决定胜者，起点更晚的 12 拷贝 tract 胜出。</td></tr>
+<tr><td><code>a_minor_overlap_trims_the_later_tract_even_when_it_has_more_copies</code></td><td>③b</td><td>边界冲突由位置决定：即使后一条拷贝更多，也由它让出重叠的整周期。</td></tr>
+<tr><td><code>successive_boundary_trims_use_the_unchanged_end</code></td><td>③b</td><td>连续裁剪始终以前一条未变的 <code>last</code> 为准，输出保持坐标序。</td></tr>
+<tr><td><code>touching_tracts_are_not_trimmed</code></td><td>③b</td><td><code>prev_last + 1 == first</code> 是相邻而非重叠，不做裁剪。</td></tr>
 </table>
 
 <p>端到端的一致性校验由 <code>scripts/ssr_check.py</code> 提供（三层穷举参考），用于在真实数据集上确认消解结果没有丢失可达的精确 tract。用法见 README 的“SSR 结果的一致性校验”一节。</p>
@@ -854,36 +920,42 @@ same_motif(M, K) 且 same_motif(K, T)　⇒　same_motif(M, T)
 
 <div class="qa">
 <p class="qno">Q3</p>
-<h4>为什么第 ③ 步先按 <code>copies</code> 而不是按长度或 period？</h4>
-<p>长度受 period 影响：一个 15 bp 的 5-mer 重复和一段 20 bp 的 10-mer 重复，长度不能直接比较“重复强度”。完整拷贝数直接衡量“这段重复重复了多少次”，也与 <code>--ssr</code> 报告语义一致。平局再用起点保证确定性。</p>
+<h4>为什么 ③a 先按 <code>copies</code>，而 ③b 按位置？</h4>
+<p>实质冲突必须选出一个胜者，<code>copies</code> 直接衡量“这段重复重复了多少次”，也与 <code>--ssr</code> 的报告语义一致；长度受 period 影响，不能直接比较“重复强度”，所以不用长度。边界冲突两条都保留、没有胜者，只能由位置决定谁让位——后一条让出重叠的整周期；<code>period</code> 在这里只决定让位的步长，不是优先级。</p>
 </div>
 
 <div class="qa">
 <p class="qno">Q4</p>
 <h4>首尾恰好相邻的两个 tract 算重叠吗？</h4>
-<p>不算。<code>[1,8]</code> 与 <code>[9,16]</code> 满足 <code>9 &gt; 8</code>，谓词为假，两条都能被接受。共享一个碱基（如 <code>[1,8]</code> 与 <code>[8,16]</code>）才算重叠。</p>
+<p>不算。<code>[1,8]</code> 与 <code>[9,16]</code> 满足 <code>9 &gt; 8</code>，交集为 0，两条都原样保留，③b 也不会裁剪。共享一个碱基（如 <code>[1,8]</code> 与 <code>[8,16]</code>）才算重叠。</p>
 </div>
 
 <div class="qa">
 <p class="qno">Q5</p>
 <h4>跨词包含时，精细重复一定赢吗？</h4>
-<p>不一定。胜者由拷贝数决定：<code>AT×4</code> 对 <code>ATATATATC×3</code> 是精细重复赢；对 <code>ATATATATC×5</code> 则是容器赢。规则一致，结果随数据而变。</p>
+<p>不一定。胜者由 ③a 的拷贝数决定：<code>AT×4</code> 对 <code>ATATATATC×3</code> 是精细重复赢；对 <code>ATATATATC×5</code> 则是容器赢。前提是两者实质重叠（交集 ≥ 较小 span 的一半）；若只是边界相接，③a 不淘汰任何一方，后一条按整周期裁剪。</p>
 </div>
 
 <div class="qa">
 <p class="qno">Q6</p>
 <h4>如果两个 tract 的 <code>copies</code> 和 <code>first</code> 都相同怎么办？</h4>
-<p>它们必然共享起点并重叠，最多只有一个能进入 <code>accepted</code>。由于进入第 ③ 步前 <code>outer</code> 已按 <code>(first 升序, last 降序)</code> 排好，稳定排序会让长者先被考虑，结果确定。</p>
+<p>它们必然共享起点并重叠；如果 span 也相同，第 ① 步已去重。否则一条包含另一条，交集覆盖较小 span 的 100%，属于实质重叠，最多只有一个能进入 ③a 的 <code>kept</code>。进入 ③a 前 <code>outer</code> 已按 <code>(first 升序, last 降序)</code> 排好，而 <code>sort_by_key</code> 稳定，所以长者先被考虑，结果确定。</p>
 </div>
 
 <div class="qa">
 <p class="qno">Q7</p>
 <h4>这一步会不会改变 motif 或重新计算坐标？</h4>
-<p>不会。它只筛选、排序、移动 <code>Tract</code>。motif 归一化与坐标生成都在上游 <code>extract_record_tracts</code>；字段构造在 <code>build_record</code>。消解层是纯粹的集合选择。</p>
+<p>③a 不会，它只筛选与排序 <code>Tract</code>。③b 会改变坐标：<code>first</code> 右移整周期、<code>copies</code> 相应减少；但 <code>last</code>、<code>period</code>、<code>pattern</code> 都不变，因此 motif 不需要重新提取，区域仍然是精确的 <code>pattern × copies</code>。motif 归一化与初始坐标生成都在上游 <code>extract_record_tracts</code>，字段构造在 <code>build_record</code>。</p>
+</div>
+
+<div class="qa">
+<p class="qno">Q8</p>
+<h4>为什么用 “交集 ≥ 较小 span 的一半” 作为分界？</h4>
+<p>TRF 经常把一条重复的边界多延伸 1–2 bp 到邻居里；把这种边界相接也当成冗余，会整条丢掉一个真实位点。50% 是“两条区域大部分重合”的经验分界（迁移自 smicing 的 <code>IOI_MIN_OVERLAP_FRACTION</code>），恰好 50% 归入实质重叠。阈值只用于分类，不参与坐标计算。</p>
 </div>
 
 <footer>
-<p>本教程对应 trfrs <code>src/ssr.rs</code>（<code>resolve_candidates</code>，190–220 行）。文中的坐标走查与候选清单均按代码逐行复算，可直接对照 <a href="ssr-containment-resolution-bug.md">SSR 包含消解 bug 记录</a> 与 <code>src/ssr.rs</code> 的单元测试阅读。</p>
+<p>本教程对应 trfrs <code>src/ssr.rs</code>（<code>resolve_candidates</code>，275–313 行）。文中的坐标走查与候选清单均按代码逐行复算，可直接对照 <a href="ssr-containment-resolution-bug.md">SSR 包含消解 bug 记录</a> 与 <code>src/ssr.rs</code> 的单元测试阅读。</p>
 </footer>
 
 </div>

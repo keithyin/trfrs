@@ -43,6 +43,12 @@ License along with TRF.  If not, see <https://www.gnu.org/licenses/>.
 //! copies; there is no per-tract score threshold because exact repeats have
 //! no mismatches by construction (the source regions were still subject to
 //! `--minscore` during the scan).
+//!
+//! Tracts that overlap substantially (at least half of the smaller span) are
+//! resolved by the extraction priority (most complete copies, leftmost on
+//! ties); a mere boundary touch is resolved by trimming the later tract by
+//! whole motif periods, so neighbouring loci are not lost to TRF's boundary
+//! drift.  See [`resolve_candidates`].
 
 use crate::clean::RepeatRecord;
 
@@ -177,16 +183,112 @@ fn extract_record_tracts(
     }
 }
 
+impl Tract {
+    /// span in bases of the 1-based inclusive interval
+    fn span(&self) -> i64 {
+        self.last as i64 - self.first as i64 + 1
+    }
+}
+
+/// shared bases of two 1-based inclusive spans; 0 when disjoint (adjacent
+/// intervals do not overlap)
+fn overlap_bases(a: &Tract, b: &Tract) -> i64 {
+    let first = a.first.max(b.first) as i64;
+    let last = a.last.min(b.last) as i64;
+    (last - first + 1).max(0)
+}
+
+/// true when the overlap covers at least half of the smaller tract, the
+/// threshold of smicing's `str_polish::detector` (`IOI_MIN_OVERLAP_FRACTION`).
+/// a boundary touch (trfrs routinely extends a repeat 1-2 bp into its
+/// neighbour) is not a conflict and is trimmed by
+/// [`trim_boundary_overlaps`] instead.
+fn regions_substantially_overlap(a: &Tract, b: &Tract) -> bool {
+    let overlap = overlap_bases(a, b);
+    if overlap == 0 {
+        return false;
+    }
+    let smaller_span = a.span().min(b.span());
+    /* overlap >= 0.5 * smaller_span, in exact integer arithmetic */
+    overlap * 2 >= smaller_span
+}
+
+/// Keep the higher-priority tract of every substantial conflict; priority is
+/// unchanged from the historical greedy step (most complete copies first,
+/// leftmost start on ties).  Boundary touches survive and are trimmed by
+/// [`trim_boundary_overlaps`].
+fn drop_substantially_overlapping(mut tracts: Vec<Tract>) -> Vec<Tract> {
+    tracts.sort_by_key(|tract| (std::cmp::Reverse(tract.copies), tract.first));
+    let mut kept: Vec<Tract> = Vec::with_capacity(tracts.len());
+    for tract in tracts {
+        if kept
+            .iter()
+            .any(|kept| regions_substantially_overlap(kept, &tract))
+        {
+            continue;
+        }
+        kept.push(tract);
+    }
+    kept
+}
+
+/// Make the surviving tracts disjoint by trimming the LATER one (by start)
+/// instead of dropping it: `first` moves right by `units = ceil(overlap /
+/// period)` whole periods and `copies` shrinks by `units`.  The shift is a
+/// multiple of the period, so the phase-aligned `pattern` still rebuilds the
+/// tract exactly; `last`, `period` and `pattern` are untouched.  A tract left
+/// with fewer than [`SSR_MIN_COPIES`] copies is dropped rather than reported
+/// as a truncated repeat.  Ported from smicing's `trim_boundary_overlaps`.
+fn trim_boundary_overlaps(mut tracts: Vec<Tract>) -> Vec<Tract> {
+    tracts.sort_by_key(|tract| (tract.first, tract.last));
+    let mut kept: Vec<Tract> = Vec::with_capacity(tracts.len());
+    for mut tract in tracts {
+        let Some(prev) = kept.last() else {
+            kept.push(tract);
+            continue;
+        };
+        /* substantial conflicts were resolved above, so containment is gone:
+        each kept tract ends after the previous one and the last kept tract
+        carries the maximum end (trimming only moves `first` right) */
+        let prev_last = prev.last;
+        if tract.first <= prev_last {
+            let overlap = prev_last as i64 - tract.first as i64 + 1;
+            let period = tract.period as i64;
+            /* overlap > 0 and period > 0, so ceiling division is exact */
+            let units = ((overlap + period - 1) / period) as u64;
+            let copies = tract.copies as u64;
+            if units >= copies || copies - units < SSR_MIN_COPIES as u64 {
+                continue;
+            }
+            tract.first = (tract.first as i64 + units as i64 * period) as i32;
+            tract.copies = (copies - units) as u32;
+            debug_assert_eq!(
+                tract.first as i64 + tract.copies as i64 * period - 1,
+                tract.last as i64
+            );
+        }
+        kept.push(tract);
+    }
+    kept
+}
+
 /// Deduplicates and resolves the candidates of all records.
 ///
 /// Identical spans (they can arise from overlapping source records) collapse;
 /// a tract fully contained in a *same cyclic word* tract is a phase-shifted
 /// nested artifact and is dropped, while containment by a different motif
 /// (for example an `AT*4` window inside an exact `ATATATATC*3` region) is a
-/// genuine finer repeat and is kept.  Remaining overlaps are resolved
-/// greedily by most copies first, leftmost start on ties -- so in the
-/// different-motif case the finer tract usually wins by copy number and its
-/// container is dropped (the container is not reported alongside it).
+/// genuine finer repeat and is kept.  Remaining overlaps are resolved in two
+/// steps, ported from smicing's `str_polish::detector`:
+///
+/// * a **substantial** conflict (the overlap covers at least half of the
+///   smaller tract) keeps the higher-priority tract -- most copies first,
+///   leftmost start on ties -- so in the different-motif case the finer tract
+///   usually wins by copy number and its container is dropped;
+/// * a mere **boundary touch** is not a conflict: the later tract is trimmed
+///   by whole motif periods (see [`trim_boundary_overlaps`]), so trfrs
+///   extending a repeat 1-2 bp into its neighbour no longer loses a genuine
+///   locus.
 fn resolve_candidates(mut candidates: Vec<Tract>) -> Vec<Tract> {
     candidates.sort_by_key(|tract| (tract.first, tract.last));
     candidates.dedup_by(|a, b| a.first == b.first && a.last == b.last);
@@ -204,16 +306,7 @@ fn resolve_candidates(mut candidates: Vec<Tract>) -> Vec<Tract> {
         }
     }
 
-    outer.sort_by_key(|tract| (std::cmp::Reverse(tract.copies), tract.first));
-    let mut accepted: Vec<Tract> = Vec::new();
-    for tract in outer {
-        let overlapping = accepted
-            .iter()
-            .any(|kept| tract.first <= kept.last && kept.first <= tract.last);
-        if !overlapping {
-            accepted.push(tract);
-        }
-    }
+    let mut accepted = trim_boundary_overlaps(drop_substantially_overlapping(outer));
 
     accepted.sort_by_key(|tract| (tract.first, tract.last));
     accepted
@@ -487,6 +580,115 @@ mod test {
                 (1, 8, 2, "AT".to_string(), 4),
                 (10, 17, 2, "AT".to_string(), 4),
                 (19, 26, 2, "AT".to_string(), 4)
+            ]
+        );
+    }
+
+    #[test]
+    fn a_minor_boundary_overlap_trims_the_later_tract() {
+        /* (AT)^7; the [7,14] record shares two bases with [1,8] (25% of the
+        smaller span): not redundant, the later tract loses one whole period */
+        let sequence = seq("ATATATATATATAT");
+        assert_eq!(
+            tracts(
+                &sequence,
+                &[str_record(1, 8, "AT"), str_record(7, 14, "AT")]
+            ),
+            vec![
+                (1, 8, 2, "AT".to_string(), 4),
+                /* first moved 7 -> 9, copies 4 -> 3, last and pattern intact */
+                (9, 14, 2, "AT".to_string(), 3),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_trim_that_leaves_fewer_than_three_copies_drops_the_tract() {
+        /* (AT)^6: the [7,12] tract only has three copies and loses one to the
+        boundary overlap, so it is dropped instead of reported truncated */
+        let sequence = seq("ATATATATATAT");
+        assert_eq!(
+            tracts(
+                &sequence,
+                &[str_record(1, 8, "AT"), str_record(7, 12, "AT")]
+            ),
+            vec![(1, 8, 2, "AT".to_string(), 4)]
+        );
+    }
+
+    #[test]
+    fn an_exact_half_overlap_is_substantial() {
+        /* 4 of the 8 bases overlap: exactly 50%, which is still a substantial
+        conflict, so the later tract is dropped rather than trimmed */
+        let sequence = seq("ATATATATATAT");
+        assert_eq!(
+            tracts(
+                &sequence,
+                &[str_record(1, 8, "AT"), str_record(5, 12, "AT")]
+            ),
+            vec![(1, 8, 2, "AT".to_string(), 4)]
+        );
+    }
+
+    #[test]
+    fn a_substantial_conflict_uses_priority_not_position() {
+        /* exactly 50% overlap again: the 12-copy tract wins although it starts
+        later, so priority (copies desc) still decides substantial conflicts */
+        let sequence = seq("AAAAAAAAAAAAAAAA");
+        assert_eq!(
+            tracts(&sequence, &[str_record(1, 8, "A"), str_record(5, 16, "A")]),
+            vec![(5, 16, 1, "A".to_string(), 12)]
+        );
+    }
+
+    #[test]
+    fn a_minor_overlap_trims_the_later_tract_even_when_it_has_more_copies() {
+        /* 3/8 = 37.5% overlap: position decides (the later tract is trimmed),
+        not priority, so the smaller tract keeps its full span */
+        let sequence = seq("AAAAAAAAAAAAAAAA");
+        assert_eq!(
+            tracts(&sequence, &[str_record(1, 8, "A"), str_record(6, 16, "A")]),
+            vec![
+                (1, 8, 1, "A".to_string(), 8),
+                (9, 16, 1, "A".to_string(), 8),
+            ]
+        );
+    }
+
+    #[test]
+    fn successive_boundary_trims_use_the_unchanged_end() {
+        /* (AT)^10; the third trim is computed from the second tract's
+        unchanged `last`, not from its shifted `first` */
+        let sequence = seq("ATATATATATATATATATAT");
+        assert_eq!(
+            tracts(
+                &sequence,
+                &[
+                    str_record(1, 8, "AT"),
+                    str_record(7, 14, "AT"),
+                    str_record(13, 20, "AT"),
+                ]
+            ),
+            vec![
+                (1, 8, 2, "AT".to_string(), 4),
+                (9, 14, 2, "AT".to_string(), 3),
+                (15, 20, 2, "AT".to_string(), 3),
+            ]
+        );
+    }
+
+    #[test]
+    fn touching_tracts_are_not_trimmed() {
+        /* `prev_last + 1 == first` is adjacency, not an overlap */
+        let sequence = seq("ATATATATATATAT");
+        assert_eq!(
+            tracts(
+                &sequence,
+                &[str_record(1, 8, "AT"), str_record(9, 14, "AT")]
+            ),
+            vec![
+                (1, 8, 2, "AT".to_string(), 4),
+                (9, 14, 2, "AT".to_string(), 3),
             ]
         );
     }

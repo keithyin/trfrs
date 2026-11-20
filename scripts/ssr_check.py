@@ -22,8 +22,13 @@ The checker verifies three levels:
    - when an STR region with a rotation-equivalent motif fully covers the
      stretch span and no larger tract interferes, the `--ssr` output must
      contain exactly the reference tract (a violation is a filter bug);
-   - when a larger (or equal-copies leftmost) tract overlaps the span, the
-     greedy overlap resolution may consume it (expected);
+   - when a larger (or equal-copies leftmost) tract overlaps the span
+     substantially (at least half of the smaller span), that tract may
+     consume it (expected);
+   - when only a boundary touch (< half of the smaller span) remains, both
+     tracts are kept and the later one is trimmed by whole motif periods;
+     a trim that would leave fewer than MIN_COPIES complete copies drops the
+     tract (both expected);
    - when the covering regions leave room for MIN_COPIES copies of the
      stretch but nothing is reported, that is a filter bug as well;
    - otherwise (unrelated region motifs / partial overlaps / no region at
@@ -64,7 +69,9 @@ MAX_LISTED = 20
 
 STATUS_CN = {
     "accounted": "已报告",
-    "resolved": "被更大 tract 消解",
+    "resolved": "被实质重叠的更高优先级 tract 消解",
+    "trimmed": "边界裁剪（整周期右移）",
+    "trimmed-away": "边界裁剪后不足 3 拷贝（整条丢弃）",
     "mismatch": "区域 motif 不相关 / 部分重叠",
     "outside": "STR 区域外",
     "bug": "未报告（filter bug）",
@@ -151,6 +158,66 @@ def same_motif(a, b):
 def overlap(a_start, a_end, b_start, b_end):
     """Length of the intersection of two half-open intervals."""
     return max(0, min(a_end, b_end) - max(a_start, b_start))
+
+
+def spans_substantially_overlap(a_start, a_end, b_start, b_end):
+    """True when the intersection covers at least half of the smaller span.
+
+    This is the classification `resolve_candidates` uses: only a substantial
+    overlap is a redundancy conflict (the lower-priority tract is dropped); a
+    smaller boundary touch is resolved by trimming the later tract instead.
+    """
+    ov = overlap(a_start, a_end, b_start, b_end)
+    if ov <= 0:
+        return False
+    smaller = min(a_end - a_start, b_end - b_start)
+    return ov * 2 >= smaller
+
+
+def boundary_trim(stretch, seq_tracts):
+    """Explain a reference tract that is missing because of a boundary trim.
+
+    Returns ``"trimmed"`` when a reported tract is the same-motif suffix of the
+    reference tract (same end, start moved right by whole periods), or
+    ``"trimmed-away"`` when the modelled trim would leave fewer than
+    ``MIN_COPIES`` copies (the Rust filter drops such a tract).  Returns
+    ``None`` when no boundary trim applies.
+
+    This mirrors `trim_boundary_overlaps`: only a *non-substantial* overlap
+    from an earlier tract triggers a trim; substantial conflicts are already
+    classified as ``resolved`` by the interference check.
+    """
+    period = stretch["period"]
+    start, end = stretch["tract_start"], stretch["tract_end"]
+
+    # (a) a kept suffix: same motif, same end, shifted by whole periods
+    for tract in seq_tracts:
+        if (
+            tract["motif_period"] == period
+            and same_motif(tract["motif"], stretch["unit"])
+            and tract["end"] == end
+            and tract["start"] > start
+            and (tract["start"] - start) % period == 0
+        ):
+            return "trimmed"
+
+    # (b) trimmed away: an earlier reported tract only grazes the left edge,
+    # and the whole-period shift would leave too few complete copies.
+    boundary = None
+    for tract in seq_tracts:
+        if not (tract["start"] < start < tract["end"]):
+            continue
+        if spans_substantially_overlap(
+            tract["start"], tract["end"],
+            stretch["span_start"], stretch["span_end"],
+        ):
+            continue  # a substantial conflict is `resolved`, not a trim
+        boundary = tract["end"] if boundary is None else max(boundary, tract["end"])
+    if boundary is not None:
+        units = -(-(boundary - start) // period)  # ceil
+        if stretch["copies"] - units < MIN_COPIES:
+            return "trimmed-away"
+    return None
 
 
 def reference_stretches(seq):
@@ -324,7 +391,7 @@ def main():
     errors += len(level2)
 
     # Level 3: every reference stretch is accounted for.
-    accounted, bug, resolved, mismatch, outside = [], [], [], [], []
+    accounted, bug, resolved, trimmed, mismatch, outside = [], [], [], [], [], []
     for index in sorted(reference):
         seq_tracts = ssr_tracts.get(index, [])
         regions = str_regions.get(index, []) if str_regions else None
@@ -333,7 +400,10 @@ def main():
             period, unit = stretch["period"], stretch["unit"]
 
             interference = any(
-                overlap(tract["start"], tract["end"], span_start, span_end) > 0
+                spans_substantially_overlap(
+                    tract["start"], tract["end"],
+                    stretch["tract_start"], stretch["tract_end"],
+                )
                 and (
                     tract["copies"] > stretch["copies"]
                     or (
@@ -349,6 +419,7 @@ def main():
                 and same_motif(unit, region["motif"])
                 for region in regions
             )
+            trim = boundary_trim(stretch, seq_tracts)
 
             if fully_covered and not interference:
                 exact = any(
@@ -360,6 +431,9 @@ def main():
                 if exact:
                     stretch["status"] = "accounted"
                     accounted.append((index, stretch))
+                elif trim:
+                    stretch["status"] = trim
+                    trimmed.append((index, stretch))
                 else:
                     stretch["status"] = "bug"
                     stretch["status_note"] = "canonical tract missing"
@@ -374,7 +448,10 @@ def main():
                     and overlap(tract["start"], tract["end"], span_start, span_end) > 0
                     for tract in seq_tracts
                 )
-                if same_motif_overlap:
+                if trim:
+                    stretch["status"] = trim
+                    trimmed.append((index, stretch))
+                elif same_motif_overlap:
                     stretch["status"] = "accounted"
                     accounted.append((index, stretch))
                 elif interference:
@@ -438,11 +515,18 @@ def main():
             f"tract [{stretch['tract_start']}, {stretch['tract_end']}) period={stretch['period']} "
             f"unit={stretch['unit']!r}: {why}"
         )
-    print(f"level 3 resolved by a larger tract (greedy overlap resolution): {len(resolved)}")
+    print(f"level 3 resolved by a substantially overlapping higher-priority tract: {len(resolved)}")
     for index, stretch in resolved[:MAX_LISTED]:
         print(
             f"  seq {index} [{stretch['span_start']}, {stretch['span_end']}) "
             f"period={stretch['period']} unit={stretch['unit']!r}"
+        )
+    print(f"level 3 boundary-trimmed by whole periods (expected): {len(trimmed)}")
+    for index, stretch in trimmed[:MAX_LISTED]:
+        print(
+            f"  seq {index} [{stretch['span_start']}, {stretch['span_end']}) "
+            f"period={stretch['period']} unit={stretch['unit']!r} "
+            f"({STATUS_CN.get(stretch['status'], stretch['status'])})"
         )
     print(f"level 3 motif mismatch / partial region overlap (expected): {len(mismatch)}")
     for index, stretch in mismatch[:MAX_LISTED]:
@@ -471,6 +555,7 @@ def main():
             bug,
             len(accounted),
             len(resolved),
+            len(trimmed),
             len(mismatch),
             len(outside),
         )
@@ -716,7 +801,7 @@ def _render_sequence_section(seq_no, name, seq, tracts, stretches, flank, has_re
     else:
         tracts_html = '<p class="note">该序列没有 --ssr 记录。</p>'
 
-    main_table = _render_stretch_table(stretches, {"accounted", "resolved", "bug"})
+    main_table = _render_stretch_table(stretches, {"accounted", "trimmed", "resolved", "bug"})
     other_table = _render_stretch_table(stretches, {"mismatch", "outside"})
     bug_count = sum(1 for st in stretches if st.get("status") == "bug")
 
@@ -758,6 +843,7 @@ def render_html(
     bug,
     accounted_count,
     resolved_count,
+    trimmed_count,
     mismatch_count,
     outside_count,
 ):
@@ -790,8 +876,8 @@ def render_html(
         f"参考 stretch {total_ref} 个</td></tr>",
         f"<tr><td>三层比对</td><td>level 1 违例 {level1_count} · level 2 违例 {level2_count} · "
         f"filter bug {len(bug)} · <a href=\"#legend\">参考 stretch 分类</a>：已报告 "
-        f"{accounted_count} · 被更大 tract 消解 {resolved_count} · 区域 motif 不相关 "
-        f"{mismatch_count} · STR 区域外 {outside_count}</td></tr>",
+        f"{accounted_count} · 被实质重叠消解 {resolved_count} · 边界裁剪 {trimmed_count} · "
+        f"区域 motif 不相关 {mismatch_count} · STR 区域外 {outside_count}</td></tr>",
         "</table>",
         '<div class="legend" id="legend"><b>图例：</b>'
         "trfrs 行中<b>红色</b>为检测到的 SSR 区域 = motif × 完整拷贝数（深浅交替 = motif 的逐拷贝平铺），"
@@ -801,7 +887,8 @@ def render_html(
         "<span class=\"badge ok\">✓ 与参考完全一致</span>"
         "<span class=\"badge warn\">≈ 位于参考 span 内</span>"
         "<span class=\"badge err\">✗ 违例</span>。"
-        "参考 stretch 状态：已报告 / 被更大 tract 消解（贪心重叠消解，属预期）/ "
+        "参考 stretch 状态：已报告 / 被实质重叠的更高优先级 tract 消解（属预期）/ "
+        "边界裁剪（整周期右移，或裁剪后不足 3 拷贝整条丢弃，属预期）/ "
         "区域 motif 不相关或部分重叠（过滤器不可达，属预期）/ STR 区域外（TRF 检测阶段未发现，属预期）。"
         "</div>",
     ]
