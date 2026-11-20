@@ -228,7 +228,7 @@ python3 scripts/ssr_check.py sample.fasta /tmp/ssr_out/sample.fasta.csv \
 
 ```toml
 [dependencies]
-trfrs = "5.1"
+trfrs = "5.3"
 ```
 
 ```rust
